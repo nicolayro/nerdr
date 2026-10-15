@@ -1,5 +1,6 @@
 //! Lista over paner til venstre og den valgte panen til høyre.
 
+use nerdr_kjerne::register::Tilstand;
 use nerdr_kjerne::sgr::{Farge, Stil};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -11,6 +12,8 @@ use crate::{App, Fokus};
 /// Bredden på lista, med skillelinja.
 pub const LISTE: u16 = 36;
 
+const ORANSJE: Color = Color::Rgb(217, 119, 87);
+const GRØNN: Color = Color::Indexed(108);
 const HVIT: Color = Color::Indexed(255);
 const LYS: Color = Color::Indexed(252);
 const GRÅ: Color = Color::Indexed(245);
@@ -46,8 +49,15 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
             buf.set_style(Rect::new(0, y, bredde, 1), Style::new().bg(MARKERT));
         }
         let (peker, farge) = if valgt { ("▎", HVIT) } else { (" ", LYS) };
+        let (glyf, glyffarge) = match app.tilstander.get(&pane.id) {
+            Some(Tilstand::Venter) => ("●", ORANSJE),
+            Some(Tilstand::Jobber) => ("◐", GRØNN),
+            Some(Tilstand::Klar) => ("○", LYS),
+            None => (" ", DIM),
+        };
         let navn = format!("{}:{} ", pane.sesjon, pane.vindu);
         let x = buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT)).0;
+        let x = buf.set_stringn(x, y, format!("{glyf} "), 2, Style::new().fg(glyffarge)).0;
         let x = buf.set_stringn(x, y, &navn, (bredde - x) as usize, Style::new().fg(farge)).0;
         buf.set_stringn(x, y, &pane.tittel, bredde.saturating_sub(x + 1) as usize, Style::new().fg(DIM));
     }
@@ -69,7 +79,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
         return;
     }
     if app.valgt.is_none() {
-        buf.set_stringn(v.x + 2, v.y + 1, "Ingen tmux-paner.", v.width as usize, Style::new().fg(GRÅ));
+        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux.", v.width as usize, Style::new().fg(GRÅ));
         return;
     }
     for (y, linje) in app.bilde.iter().enumerate().take(v.height as usize) {
