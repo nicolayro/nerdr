@@ -47,15 +47,6 @@ pub fn send_keys(k: &KeyEvent) -> Option<String> {
     Some(format!("{}{navn}", prefiks(ctrl, alt, shift)))
 }
 
-/// Innlimt tekst, pakket i bracketed paste så Claude ikke sender inn ved
-/// første linjeskift. Delt opp så ingen kommandolinje til tmux blir for lang.
-pub fn lim_inn(tekst: &str) -> Vec<String> {
-    let mut bytes = b"\x1b[200~".to_vec();
-    bytes.extend(tekst.replace("\r\n", "\r").replace('\n', "\r").bytes());
-    bytes.extend(b"\x1b[201~");
-    bytes.chunks(256).map(|del| format!("-H {}", hex(del))).collect()
-}
-
 fn prefiks(ctrl: bool, alt: bool, shift: bool) -> String {
     [(ctrl, "C-"), (alt, "M-"), (shift, "S-")]
         .into_iter()
@@ -101,12 +92,5 @@ mod tester {
         assert_eq!(tast(KeyCode::Up, KeyModifiers::NONE).as_deref(), Some("Up"));
         assert_eq!(tast(KeyCode::Enter, KeyModifiers::SHIFT).as_deref(), Some("S-Enter"));
         assert_eq!(tast(KeyCode::Left, KeyModifiers::ALT).as_deref(), Some("M-Left"));
-    }
-
-    #[test]
-    fn innliming_pakkes_og_deles() {
-        let deler = lim_inn("a\nb");
-        assert_eq!(deler, vec!["-H 1b 5b 32 30 30 7e 61 0d 62 1b 5b 32 30 31 7e"]);
-        assert_eq!(lim_inn(&"x".repeat(600)).len(), 3);
     }
 }
