@@ -1,0 +1,9 @@
+[package]
+name = "nerdr"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+nerdr-kjerne = { path = "../kjerne" }
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
