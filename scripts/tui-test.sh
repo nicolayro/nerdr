@@ -39,10 +39,26 @@ tmux -L nerdr-vert send-keys -t vert Enter
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t alfa | grep -n 'hei'
 
+echo "=== innliming av to linjer, pakket i ^[[200~ … ^[[201~ ==="
+tmux -L nerdr-vert set-buffer -b test "$(printf 'linje én\n$HOME "to"')"
+tmux -L nerdr-vert paste-buffer -p -d -b test -t vert
+sleep 0.8
+tmux -L nerdr-maal capture-pane -p -t alfa | grep -n -e 'linje' -e 'HOME'
+
+echo "=== musehjul i kolonne 41, rad 4 (skal komme fram som ^[[<64;5;4M) ==="
+tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;41;4M')"
+sleep 0.8
+tmux -L nerdr-maal capture-pane -p -t alfa | grep -n '<64'
+
 echo "=== C-] tilbake, j ned til gamma ==="
 tmux -L nerdr-vert send-keys -t vert C-]
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert j
+sleep 1
+tmux -L nerdr-vert capture-pane -p -t vert | head -3
+
+echo "=== klikk på første rad velger alfa igjen ==="
+tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;1M\033[<0;5;1m')"
 sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | head -3
 

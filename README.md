@@ -25,5 +25,8 @@ Kjør den i en vanlig terminalfane, utenfor tmux.
 | `C-]` | Tilbake til lista |
 | `q` | Avslutt, fra lista |
 
+Du kan også bruke musen. Klikk i lista velger en Claude, og klikk og musehjul i
+sesjonen går videre til Claude.
+
 Foran hver Claude står `●` når den venter på deg, `◐` når den jobber og `○` når
 den er klar.

@@ -166,6 +166,28 @@ pub fn sitat(arg: &str) -> String {
     format!("'{}'", arg.replace('\'', r"'\''"))
 }
 
+/// Setter et argument i doble anførselstegn, for tekst som kan ha linjeskift.
+/// I control mode er hver linje en kommando, og bare doble anførselstegn tar
+/// escapes som `\n`. Der utvider tmux også `$` og `~`, så de escapes.
+pub fn dobbelt_sitat(arg: &str) -> String {
+    let mut ut = String::from('"');
+    for c in arg.chars() {
+        match c {
+            '\\' | '"' | '$' | '~' => {
+                ut.push('\\');
+                ut.push(c);
+            }
+            '\n' => ut.push_str(r"\n"),
+            '\r' => ut.push_str(r"\r"),
+            '\t' => ut.push_str(r"\t"),
+            c if c.is_ascii_control() => ut.push_str(&format!("\\{:03o}", c as u32)),
+            c => ut.push(c),
+        }
+    }
+    ut.push('"');
+    ut
+}
+
 #[cfg(test)]
 mod tester {
     use super::*;
@@ -219,5 +241,12 @@ mod tester {
     #[test]
     fn sitat_tåler_apostrof() {
         assert_eq!(sitat("it's"), r"'it'\''s'");
+    }
+
+    #[test]
+    fn dobbelt_sitat_escaper_det_tmux_utvider() {
+        assert_eq!(dobbelt_sitat("a\tb\nc"), r#""a\tb\nc""#);
+        assert_eq!(dobbelt_sitat(r#"~ $HOME "q" \"#), r#""\~ \$HOME \"q\" \\""#);
+        assert_eq!(dobbelt_sitat("æ\x01\x7f"), r#""æ\001\177""#);
     }
 }

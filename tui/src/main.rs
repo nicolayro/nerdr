@@ -7,12 +7,15 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 use std::{env, io, thread};
 
-use nerdr_kjerne::kontroll::{Kontroll, Melding, sitat, synkronisert_etter};
+use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{FELT, Pane};
 use nerdr_kjerne::register::{self, Tilstand};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
 use ratatui::layout::Rect;
@@ -60,6 +63,8 @@ struct App {
     valgt: Option<Pane>,
     bilde: Vec<Linje>,
     markør: Option<(u16, u16)>,
+    /// Panen har slått på mus med SGR-koding, slik Claude Code gjør i fullskjerm.
+    pane_mus: bool,
     utdatert: bool,
     henter: bool,
     sist_hentet: Instant,
@@ -107,8 +112,10 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
     });
 
     let mut terminal = ratatui::init();
+    execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste)?;
     let mut app = App::ny(kontroll);
     let res = app.løkke(&mut terminal, &rx);
+    let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste);
     ratatui::restore();
 
     res?;
@@ -139,6 +146,7 @@ impl App {
             valgt: None,
             bilde: Vec::new(),
             markør: None,
+            pane_mus: false,
             utdatert: false,
             henter: false,
             sist_hentet: Instant::now(),
@@ -221,6 +229,11 @@ impl App {
                 false
             }
             Hendelse::Term(Event::Key(k)) if k.kind == KeyEventKind::Press => self.tast(k),
+            Hendelse::Term(Event::Mouse(m)) => self.mus(m),
+            Hendelse::Term(Event::Paste(tekst)) => {
+                self.lim_inn(&tekst);
+                false
+            }
             Hendelse::Term(Event::Resize(..)) => true,
             Hendelse::Term(_) => false,
         }
@@ -276,9 +289,10 @@ impl App {
                 self.henter = false;
                 let felt: Vec<&str> = linjer.first().map_or("", |l| l.as_str()).split('\t').collect();
                 self.markør = match felt.as_slice() {
-                    [x, y, "1"] => x.parse().ok().zip(y.parse().ok()),
+                    [x, y, "1", ..] => x.parse().ok().zip(y.parse().ok()),
                     _ => None,
                 };
+                self.pane_mus = felt.get(3) == Some(&"1");
                 true
             }
             Venter::Ingenting => false,
@@ -302,6 +316,7 @@ impl App {
         self.valgt = Some(pane);
         self.bilde.clear();
         self.markør = None;
+        self.pane_mus = false;
         self.størrelse_for = None;
         self.utdatert = true;
         self.synk = false;
@@ -311,7 +326,7 @@ impl App {
     fn hent(&mut self) {
         let Some(id) = self.valgt.as_ref().map(|p| sitat(&p.id)) else { return };
         self.send(&format!("capture-pane -p -e -N -t {id}"), Venter::Bilde);
-        let felt = sitat("#{cursor_x}\t#{cursor_y}\t#{cursor_flag}");
+        let felt = sitat("#{cursor_x}\t#{cursor_y}\t#{cursor_flag}\t#{&&:#{mouse_any_flag},#{mouse_sgr_flag}}");
         self.send(&format!("display-message -p -t {id} {felt}"), Venter::Markør);
         self.utdatert = false;
         self.henter = true;
@@ -362,6 +377,48 @@ impl App {
             _ => return false,
         }
         true
+    }
+
+    /// `paste-buffer -p` legger på markørene for bracketed paste bare når panen
+    /// har bedt om dem, og uten dem sender Claude inn ved første linjeskift.
+    fn lim_inn(&mut self, tekst: &str) {
+        let Some(pane) = self.valgt.as_ref().filter(|_| self.fokus == Fokus::Pane) else { return };
+        let id = sitat(&pane.id);
+        // paste-buffer gjør LF om til CR, så CRLF ville blitt to linjeskift.
+        let tekst = tekst.replace("\r\n", "\n");
+        self.send(&format!("set-buffer -b nerdr {}", dobbelt_sitat(&tekst)), Venter::Ingenting);
+        self.send(&format!("paste-buffer -p -d -b nerdr -t {id}"), Venter::Ingenting);
+    }
+
+    fn mus(&mut self, m: MouseEvent) -> bool {
+        let v = self.visning;
+        if m.column < v.x {
+            let rad = (m.row + 1 < v.height).then(|| self.paner.get(m.row as usize)).flatten();
+            let Some(pane) = rad.cloned() else { return false };
+            if m.kind != MouseEventKind::Down(MouseButton::Left) {
+                return false;
+            }
+            if self.valgt.as_ref().map(|p| &p.id) != Some(&pane.id) {
+                self.velg(pane);
+            }
+            self.fokus = Fokus::Liste;
+            return true;
+        }
+
+        let byttet = matches!(m.kind, MouseEventKind::Down(_)) && self.fokus != Fokus::Pane;
+        if byttet {
+            self.fokus = Fokus::Pane;
+        }
+        let (x, y) = (m.column - v.x, m.row - v.y);
+        if self.pane_mus
+            && x < v.width
+            && y < v.height
+            && let (Some(pane), Some(args)) = (&self.valgt, taster::mus(&m, x, y))
+        {
+            let kommando = format!("send-keys -t {} {args}", sitat(&pane.id));
+            self.send(&kommando, Venter::Ingenting);
+        }
+        byttet
     }
 
     fn flytt(&mut self, steg: isize) {
