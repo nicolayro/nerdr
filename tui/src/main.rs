@@ -1,13 +1,15 @@
 mod taster;
 mod tegn;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 use std::{env, io, thread};
 
 use nerdr_kjerne::kontroll::{Kontroll, Melding, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{FELT, Pane};
+use nerdr_kjerne::register::{self, Tilstand};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -49,6 +51,10 @@ struct App {
     paner: Vec<Pane>,
     lister: bool,
     sist_listet: Option<Instant>,
+    /// Sesjonsregisteret til Claude Code.
+    register: PathBuf,
+    /// Pane-id → tilstand, for panene der en Claude kjører.
+    tilstander: HashMap<String, Tilstand>,
 
     /// Panen som er valgt i lista og vises til høyre.
     valgt: Option<Pane>,
@@ -112,6 +118,14 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
     }
 }
 
+/// Samme katalog som Claude Code bruker: `$CLAUDE_CONFIG_DIR`, ellers `~/.claude`.
+fn registerkatalog() -> PathBuf {
+    let konfig = env::var("CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(env::var("HOME").unwrap_or_default()).join(".claude"));
+    konfig.join("sessions")
+}
+
 impl App {
     fn ny(kontroll: Kontroll) -> App {
         App {
@@ -120,6 +134,8 @@ impl App {
             paner: Vec::new(),
             lister: false,
             sist_listet: None,
+            register: registerkatalog(),
+            tilstander: HashMap::new(),
             valgt: None,
             bilde: Vec::new(),
             markør: None,
@@ -230,10 +246,11 @@ impl App {
             Venter::Paner => {
                 self.lister = false;
                 self.sist_listet = Some(Instant::now());
+                self.tilstander = register::les(&self.register);
                 self.paner = linjer
                     .iter()
                     .filter_map(|l| Pane::fra_linje(l))
-                    .filter(|p| ok && !p.er_sidebar)
+                    .filter(|p| ok && self.tilstander.contains_key(&p.id))
                     .collect();
                 let valgt = self.valgt.as_ref().and_then(|v| self.paner.iter().find(|p| p.id == v.id));
                 match valgt.cloned() {
