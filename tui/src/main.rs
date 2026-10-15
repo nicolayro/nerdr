@@ -11,6 +11,8 @@ use nerdr_kjerne::paner::{FELT, Pane};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::execute;
+use ratatui::crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
 use ratatui::layout::Rect;
 
 const LISTE_INTERVALL: Duration = Duration::from_secs(2);
@@ -60,8 +62,8 @@ struct App {
     synk_siden: Instant,
     /// Slutten av forrige `%output`, i tilfelle en synkmarkør er delt over to.
     output_hale: String,
-    /// Størrelsen sist sendt med `refresh-client -C`.
-    størrelse: Option<(u16, u16)>,
+    /// Visningen klientstørrelsen sist ble sendt for.
+    størrelse_for: Option<Rect>,
 
     fokus: Fokus,
     visning: Rect,
@@ -127,7 +129,7 @@ impl App {
             synk: false,
             synk_siden: Instant::now(),
             output_hale: String::new(),
-            størrelse: None,
+            størrelse_for: None,
             fokus: Fokus::Liste,
             visning: Rect::default(),
             ferdig: None,
@@ -140,7 +142,11 @@ impl App {
         while self.ferdig.is_none() {
             if tegne {
                 self.visning = tegn::visning(terminal.size()?);
+                // Når teksten i panen ruller, skrives nesten hver celle på nytt.
+                // Uten synkronisert oppdatering kan terminalen vise den halvveis.
+                execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
                 terminal.draw(|f| tegn::alt(f, self))?;
+                execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
                 self.synk_størrelse();
                 tegne = false;
             }
@@ -279,7 +285,7 @@ impl App {
         self.valgt = Some(pane);
         self.bilde.clear();
         self.markør = None;
-        self.størrelse = None;
+        self.størrelse_for = None;
         self.utdatert = true;
         self.synk = false;
         self.output_hale.clear();
@@ -297,17 +303,20 @@ impl App {
 
     /// Klienten får størrelsen som gjør at den valgte panen fyller visningen.
     /// Resten av vinduet, som sidebar-kolonnene fra tmux-oppsettet, legges til.
+    ///
+    /// Sendes bare når visningen endres eller en ny pane velges, aldri fordi
+    /// panene i tmux har endret størrelse. `client-resized`-hooken i
+    /// sidebar-repoet endrer panene som svar, og da ble det en løkke.
     fn synk_størrelse(&mut self) {
         let Some(pane) = &self.valgt else { return };
-        let ønsket = (
-            self.visning.width + pane.vindu_bredde.saturating_sub(pane.bredde),
-            self.visning.height + pane.vindu_høyde.saturating_sub(pane.høyde),
-        );
-        if self.størrelse != Some(ønsket) && self.visning.width > 0 {
-            self.send(&format!("refresh-client -C {}x{}", ønsket.0, ønsket.1), Venter::Ingenting);
-            self.størrelse = Some(ønsket);
-            self.utdatert = true;
+        if self.størrelse_for == Some(self.visning) || self.visning.width == 0 {
+            return;
         }
+        let bredde = self.visning.width + pane.vindu_bredde.saturating_sub(pane.bredde);
+        let høyde = self.visning.height + pane.vindu_høyde.saturating_sub(pane.høyde);
+        self.send(&format!("refresh-client -C {bredde}x{høyde}"), Venter::Ingenting);
+        self.størrelse_for = Some(self.visning);
+        self.utdatert = true;
     }
 
     fn tast(&mut self, k: KeyEvent) -> bool {
