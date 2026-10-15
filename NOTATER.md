@@ -54,8 +54,11 @@ en falsk Claude på to egne tmux-servere.
 
 - nerdr velger vinduet den viser. Andre klienter i samme sesjon bytter vindu
   samtidig, og vinduet får størrelsen til nerdr.
-- Innliming kommer fram som enkelttaster, så et linjeskift sender inn.
-- Ingen scrollback, bare det som er på skjermen.
+- Scrolling skjer ved at musehjulet sendes til panen. Claude Code i fullskjerm
+  ber om mus og scroller selv. En pane som ikke ber om mus, kan ikke scrolles,
+  og tmux-historikken (`copy-mode`, `capture-pane -M`) er ikke tatt i bruk.
+- nerdr tar musen, så for å markere tekst med terminalen selv må du holde
+  Option (iTerm2) eller Shift (de fleste andre).
 - Registeret sier ikke hvilken tmux-server en sesjon kjører på. Med `-L` kan en
   pane få tilstanden til panen med samme id på standardserveren.
 
