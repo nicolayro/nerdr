@@ -41,7 +41,7 @@ den er satt. Bare paner som står der, vises. `status` er `waiting`, `busy` elle
 Formatet er internt og ikke dokumentert, så ukjente verdier gir ingen tilstand.
 
 Skjermbildet hentes med `capture-pane -e` når tmux melder `%output` for panen
-som vises, høyst 30 ganger i sekundet. Claude Code tømmer og tegner hele
+som vises, høyst 60 ganger i sekundet. Claude Code tømmer og tegner hele
 skjermen i hver oppdatering, pakket i en synkronisert oppdatering
 (`\033[?2026h` … `\033[?2026l`), så nerdr venter til den er ferdig før den
 henter. nerdr pakker også sine egne tegninger på samme måte.

@@ -21,8 +21,8 @@ use ratatui::crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdat
 use ratatui::layout::Rect;
 
 const LISTE_INTERVALL: Duration = Duration::from_secs(2);
-/// Øvre grense for hvor ofte panen hentes på nytt, omtrent 30 bilder i sekundet.
-const HENTE_INTERVALL: Duration = Duration::from_millis(33);
+/// Øvre grense for hvor ofte panen hentes på nytt, omtrent 60 bilder i sekundet.
+const HENTE_INTERVALL: Duration = Duration::from_millis(16);
 /// Så lenge venter vi på at en synkronisert oppdatering blir ferdig, i tilfelle
 /// avslutningen aldri kommer.
 const SYNK_MAKS: Duration = Duration::from_millis(200);
@@ -175,7 +175,8 @@ impl App {
                 tegne = false;
             }
 
-            let første = match rx.recv_timeout(HENTE_INTERVALL) {
+            let vent = self.tid_til_henting().unwrap_or(HENTE_INTERVALL);
+            let første = match rx.recv_timeout(vent) {
                 Ok(h) => Some(h),
                 Err(RecvTimeoutError::Timeout) => None,
                 Err(RecvTimeoutError::Disconnected) => break,
@@ -189,16 +190,22 @@ impl App {
             if self.sist_listet.is_some_and(|t| t.elapsed() >= LISTE_INTERVALL) {
                 self.list_paner();
             }
-            let ferdig_tegnet = !self.synk || self.synk_siden.elapsed() >= SYNK_MAKS;
-            if self.utdatert
-                && ferdig_tegnet
-                && !self.henter
-                && self.sist_hentet.elapsed() >= HENTE_INTERVALL
-            {
+            if self.tid_til_henting() == Some(Duration::ZERO) {
                 self.hent();
             }
         }
         Ok(())
+    }
+
+    /// Hvor lenge det er til panen kan hentes på nytt, eller `None` når det
+    /// ikke er noe nytt å hente eller en henting allerede pågår.
+    fn tid_til_henting(&self) -> Option<Duration> {
+        if !self.utdatert || self.henter {
+            return None;
+        }
+        let intervall = HENTE_INTERVALL.saturating_sub(self.sist_hentet.elapsed());
+        let synk = if self.synk { SYNK_MAKS.saturating_sub(self.synk_siden.elapsed()) } else { Duration::ZERO };
+        Some(intervall.max(synk))
     }
 
     fn send(&mut self, kommando: &str, venter: Venter) {
