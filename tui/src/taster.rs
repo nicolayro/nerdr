@@ -8,6 +8,65 @@ pub fn er_bytt_fokus(k: &KeyEvent) -> bool {
     k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('q')
 }
 
+/// Prefikset fra tmux-oppsettet, så tastene er de samme som i tmux.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Prefiks {
+    tegn: char,
+    ctrl: bool,
+    alt: bool,
+}
+
+impl Default for Prefiks {
+    fn default() -> Prefiks {
+        Prefiks { tegn: 'b', ctrl: true, alt: false }
+    }
+}
+
+impl Prefiks {
+    /// Fra navnet tmux bruker, som `C-b`, `M-a` eller `C-Space`.
+    pub fn fra_tmux(navn: &str) -> Option<Prefiks> {
+        let (mut ctrl, mut alt, mut rest) = (false, false, navn.trim());
+        loop {
+            if let Some(r) = rest.strip_prefix("C-") {
+                (ctrl, rest) = (true, r);
+            } else if let Some(r) = rest.strip_prefix("M-") {
+                (alt, rest) = (true, r);
+            } else {
+                break;
+            }
+        }
+        let tegn = match rest {
+            "Space" => ' ',
+            _ => {
+                let mut tegn = rest.chars();
+                let (Some(c), None) = (tegn.next(), tegn.next()) else { return None };
+                c
+            }
+        };
+        Some(Prefiks { tegn, ctrl, alt })
+    }
+
+    pub fn er(&self, k: &KeyEvent) -> bool {
+        let KeyCode::Char(c) = k.code else { return false };
+        let samme = if self.ctrl { c.eq_ignore_ascii_case(&self.tegn) } else { c == self.tegn };
+        samme
+            && k.modifiers.contains(KeyModifiers::CONTROL) == self.ctrl
+            && k.modifiers.contains(KeyModifiers::ALT) == self.alt
+    }
+
+    pub fn tast(&self) -> KeyEvent {
+        let mut m = KeyModifiers::NONE;
+        m.set(KeyModifiers::CONTROL, self.ctrl);
+        m.set(KeyModifiers::ALT, self.alt);
+        KeyEvent::new(KeyCode::Char(self.tegn), m)
+    }
+
+    pub fn navn(&self) -> String {
+        let tegn = if self.tegn == ' ' { "Space".to_string() } else { self.tegn.to_string() };
+        format!("{}{}{tegn}", if self.ctrl { "C-" } else { "" }, if self.alt { "M-" } else { "" })
+    }
+}
+
 /// Tegn sendes som hex-bytes, så ingenting i dem kan tolkes av tmux sin
 /// kommandoparser. Spesialtaster sendes med navn, så tmux koder dem slik panen
 /// har bedt om, for eksempel piltaster i applikasjonsmodus.
@@ -113,6 +172,18 @@ mod tester {
         assert_eq!(tast(KeyCode::Char('æ'), KeyModifiers::NONE).as_deref(), Some("-H c3 a6"));
         assert_eq!(tast(KeyCode::Char('c'), KeyModifiers::CONTROL).as_deref(), Some("-H 03"));
         assert_eq!(tast(KeyCode::Char('b'), KeyModifiers::ALT).as_deref(), Some("-H 1b 62"));
+    }
+
+    #[test]
+    fn prefiks_fra_tmux() {
+        let p = Prefiks::fra_tmux("C-a").unwrap();
+        assert!(p.er(&KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)));
+        assert!(!p.er(&KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE)));
+        assert_eq!(p.navn(), "C-a");
+        assert_eq!(Prefiks::fra_tmux("C-Space").map(|p| p.navn()).as_deref(), Some("C-Space"));
+        assert_eq!(Prefiks::fra_tmux("`").map(|p| p.navn()).as_deref(), Some("`"));
+        assert_eq!(Prefiks::fra_tmux("F12"), None);
+        assert_eq!(send_keys(&Prefiks::default().tast()).as_deref(), Some("-H 02"));
     }
 
     #[test]

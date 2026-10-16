@@ -53,6 +53,7 @@ enum Venter {
     NyPane { mappe: PathBuf, claude: String },
     /// Svaret er pane-id-en til terminalen for Claude-panen `claude`.
     NyTerminal { claude: String },
+    Prefiks,
     Ingenting,
 }
 
@@ -116,6 +117,9 @@ struct App {
     størrelse_for: Option<Rect>,
 
     fokus: Fokus,
+    prefiks: taster::Prefiks,
+    /// Prefikset er trykket, og neste tast er en kommando.
+    etter_prefiks: bool,
     visning: Rect,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
@@ -253,6 +257,8 @@ impl App {
             output_hale: HashMap::new(),
             størrelse_for: None,
             fokus: Fokus::Liste,
+            prefiks: taster::Prefiks::default(),
+            etter_prefiks: false,
             visning: Rect::default(),
             velger: None,
             hjelp: false,
@@ -263,6 +269,7 @@ impl App {
     }
 
     fn løkke(&mut self, terminal: &mut DefaultTerminal, rx: &Receiver<Hendelse>) -> io::Result<()> {
+        self.send("show-options -gv prefix", Venter::Prefiks);
         self.list_paner();
         let mut tegne = true;
         while self.ferdig.is_none() {
@@ -484,8 +491,41 @@ impl App {
                 self.list_paner();
                 false
             }
+            Venter::Prefiks => {
+                if let Some(prefiks) = linjer.first().filter(|_| ok).and_then(|l| taster::Prefiks::fra_tmux(l)) {
+                    self.prefiks = prefiks;
+                }
+                false
+            }
             Venter::Ingenting => false,
         }
+    }
+
+    /// Tasten etter prefikset. Tastene er de samme som i tmux, og virker
+    /// både fra lista og fra panen.
+    fn prefikstast(&mut self, k: KeyEvent) {
+        let Some(aktiv) = self.aktiv().map(|p| sitat(&p.id)) else { return };
+        let kommando = match k.code {
+            _ if self.prefiks.er(&k) => {
+                let Some(args) = taster::send_keys(&self.prefiks.tast()) else { return };
+                format!("send-keys -t {aktiv} {args}")
+            }
+            KeyCode::Char('%') => format!("split-window -h -t {aktiv} -c '#{{pane_current_path}}'"),
+            KeyCode::Char('"') => format!("split-window -v -t {aktiv} -c '#{{pane_current_path}}'"),
+            KeyCode::Char('o') => {
+                let i = self.vindu.iter().position(|p| p.aktiv).unwrap_or(0);
+                if let Some(neste) = self.vindu.get((i + 1) % self.vindu.len().max(1)).map(|p| p.id.clone()) {
+                    self.aktiver(&neste);
+                }
+                return;
+            }
+            KeyCode::Left => format!("select-pane -L -t {aktiv}"),
+            KeyCode::Right => format!("select-pane -R -t {aktiv}"),
+            KeyCode::Up => format!("select-pane -U -t {aktiv}"),
+            KeyCode::Down => format!("select-pane -D -t {aktiv}"),
+            _ => return,
+        };
+        self.send(&kommando, Venter::Ingenting);
     }
 
     /// Går inn i terminalen til den valgte Claude-en, eller den som hører til
@@ -656,6 +696,14 @@ impl App {
                 KeyCode::Char(c) if !ctrl => velger.skriv(c.encode_utf8(&mut [0; 4])),
                 _ => return false,
             }
+            return true;
+        }
+        if std::mem::take(&mut self.etter_prefiks) {
+            self.prefikstast(k);
+            return true;
+        }
+        if self.prefiks.er(&k) {
+            self.etter_prefiks = true;
             return true;
         }
         if taster::er_bytt_fokus(&k) {

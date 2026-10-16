@@ -17,6 +17,14 @@ pub const TASTER: [(&str, &str); 8] = [
     ("q", "avslutt"),
 ];
 
+/// Etter prefikset, fra lista og fra panen.
+pub const PREFIKSTASTER: [(&str, &str); 4] = [
+    ("%", "del vinduet side om side"),
+    ("\"", "del vinduet over og under"),
+    ("o ←↑↓→", "neste pane, eller i en retning"),
+    ("prefiks", "send prefikset til panen"),
+];
+
 pub const MERKER: [(Merke, &str); 5] = [
     (Merke::Spør, "spør om noe"),
     (Merke::Ferdig, "ferdig med noe du ikke har sett"),
@@ -47,6 +55,10 @@ pub fn tekst() -> String {
         env!("CARGO_PKG_VERSION")
     );
     for (tast, hva) in TASTER {
+        ut += &format!("  {tast:<9}{hva}\n");
+    }
+    ut += "\nEtter prefikset fra tmux, som C-b:\n";
+    for (tast, hva) in PREFIKSTASTER {
         ut += &format!("  {tast:<9}{hva}\n");
     }
     ut += "\nMerker:\n";

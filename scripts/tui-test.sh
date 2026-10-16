@@ -223,10 +223,16 @@ sleep 1.5
 tmux -L nerdr-maal list-windows -t alfa | wc -l
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,4p;16p'
 
-echo "=== alfa delt i to i tmux: Claude til venstre, │ i kolonne 37, cat til høyre ==="
-tmux -L nerdr-maal split-window -h -t alfa:0
+echo "=== C-b viser prefikstastene i hintlinja ==="
+tmux -L nerdr-vert send-keys -t vert C-b
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
+
+echo "=== % deler alfa: Claude til venstre, │ i kolonne 37, cat til høyre, i samme mappe ==="
+tmux -L nerdr-vert send-keys -t vert %
 sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,3p'
+tmux -L nerdr-maal list-panes -t alfa:0 -F '#{pane_index} #{pane_current_path}' | sed "s|$(dirname "$HER")|nerdr|"
 
 echo "=== Enter går inn i Claude-en og ikke i den nye panen, så «til venstre» havner i alfa:0.0 ==="
 tmux -L nerdr-vert send-keys -t vert Enter
@@ -243,6 +249,14 @@ sleep 0.5
 tmux -L nerdr-maal capture-pane -p -t alfa:0.1 | grep -c 'til høyre'
 tmux -L nerdr-maal display-message -p -t alfa:0 '#{pane_index}'
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
+
+echo "=== C-b C-b sender ^B til cat, og C-b o gjør Claude-en aktiv igjen (0) ==="
+tmux -L nerdr-vert send-keys -t vert C-b C-b
+sleep 0.5
+tmux -L nerdr-maal capture-pane -p -t alfa:0.1 | grep -c '\^B'
+tmux -L nerdr-vert send-keys -t vert C-b o
+sleep 0.5
+tmux -L nerdr-maal display-message -p -t alfa:0 '#{pane_index}'
 
 echo "=== når høyre pane lukkes, fyller Claude-en hele visningen igjen (74x16) ==="
 tmux -L nerdr-maal kill-pane -t alfa:0.1

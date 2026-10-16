@@ -39,7 +39,7 @@ pub fn alt(f: &mut Frame, app: &App) {
     tegn_pane(buf, app);
 
     if app.hjelp {
-        tegn_hjelp(buf, område);
+        tegn_hjelp(buf, område, &app.prefiks.navn());
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
@@ -84,7 +84,12 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
         }
     }
 
+    let prefiks;
     let hint = match app.fokus {
+        _ if app.etter_prefiks => {
+            prefiks = format!(" {} … % \" del · o ←↑↓→ pane", app.prefiks.navn());
+            &prefiks
+        }
         Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · ? hjelp",
         Fokus::Pane => " C-q tilbake til lista",
     };
@@ -229,11 +234,11 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
     Some(boks)
 }
 
-fn tegn_hjelp(buf: &mut Buffer, område: Rect) {
+fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str) {
     const BREDDE: u16 = 58;
     let indre = (BREDDE - 4) as usize;
     let om = bryt(hjelp::OM, indre, 3);
-    let høyde = om.len() + 1 + hjelp::TASTER.len() + 1 + hjelp::MERKER.len() + 1 + 2 + 2;
+    let høyde = om.len() + 1 + hjelp::TASTER.len() + 1 + hjelp::PREFIKSTASTER.len() + 1 + hjelp::MERKER.len() + 1 + 2 + 2;
     let Some(boks) = boks(buf, område, BREDDE, høyde as u16, "nerdr", "trykk en tast for å lukke") else { return };
     let x = boks.x + 2;
     let indre = (boks.width - 4) as usize;
@@ -249,6 +254,11 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect) {
     linje("", Style::new());
     for (tast, hva) in hjelp::TASTER {
         linje(&format!("{tast:<9}{hva}"), Style::new().fg(LYS));
+    }
+    linje("", Style::new());
+    for (tast, hva) in hjelp::PREFIKSTASTER {
+        let tast = if tast == "prefiks" { format!("{prefiks} {prefiks}") } else { format!("{prefiks} {tast}") };
+        linje(&format!("{tast:<13}{hva}"), Style::new().fg(LYS));
     }
     linje("", Style::new());
     for (merke, hva) in hjelp::MERKER {
