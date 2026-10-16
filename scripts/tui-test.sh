@@ -175,6 +175,36 @@ sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '4p;16p'
 tmux -L nerdr-maal list-sessions | wc -l
 
+echo "=== t på alfa lager et vindu rett etter alfa:0, merket med alfa, og nerdr er inne i det ==="
+tmux -L nerdr-vert send-keys -t vert k k k k k k k k
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert t
+sleep 1
+tmux -L nerdr-maal list-panes -s -t alfa -F '#{window_index} #{pane_current_command} #{@nerdr-claude}' | sed "s/$alfa/alfa/"
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,4p;16p'
+
+echo "=== det du skriver, går til terminalen (cat skriver «i terminalen» tilbake) ==="
+tmux -L nerdr-vert send-keys -t vert -l 'i terminalen'
+tmux -L nerdr-vert send-keys -t vert Enter
+sleep 0.8
+tmux -L nerdr-maal capture-pane -p -t alfa:1 | grep -c 'i terminalen'
+
+echo "=== C-q, k opp til alfa, og t går inn i samme terminal (skal være 2 vinduer) ==="
+tmux -L nerdr-vert send-keys -t vert C-q
+sleep 0.2
+tmux -L nerdr-vert send-keys -t vert k
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert t
+sleep 0.8
+tmux -L nerdr-maal list-windows -t alfa | wc -l
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
+
+echo "=== C-d avslutter cat, vinduet lukkes, og nerdr står i lista med alfa valgt ==="
+tmux -L nerdr-vert send-keys -t vert C-d
+sleep 1.5
+tmux -L nerdr-maal list-windows -t alfa | wc -l
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,4p;16p'
+
 echo "=== q avslutter ==="
 tmux -L nerdr-vert send-keys -t vert q
 sleep 0.5

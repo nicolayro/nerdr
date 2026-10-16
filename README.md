@@ -33,6 +33,7 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
 | `C-q` | Tilbake til lista |
+| `t` | Terminal i mappa til Claude-en |
 | `n` | Ny Claude i en mappe du velger |
 | `C-r` | Fortsett en tidligere samtale |
 | `?` | Hjelp |
@@ -60,6 +61,14 @@ fortsetter den du velger, i mappa den hørte til. Samtaler som kjører, står ik
 der. `C-r` i popupen bytter mellom samtalene og mappene.
 
 I begge tilfeller er du inne i den nye Claude-en med en gang.
+
+### Terminal
+
+`t` går inn i terminalen til Claude-en du har valgt, og lager den første gang.
+Den er et skall i et eget tmux-vindu rett etter Claude-vinduet, i samme mappe,
+og står under Claude-en i lista med programmet som kjører. Avslutter du skallet,
+lukkes vinduet, og du er tilbake i lista. Terminalen kjører videre når nerdr
+avslutter, og står der igjen neste gang.
 
 ## Kommandoer
 

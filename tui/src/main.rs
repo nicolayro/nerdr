@@ -14,7 +14,7 @@ use std::{env, io, thread};
 use grupper::{Gruppe, Merke, Rad};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{FELT, Pane};
-use nerdr_kjerne::{git, start, tmux};
+use nerdr_kjerne::{git, start, terminal, tmux};
 use nerdr_kjerne::register::{self, Sesjon};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
@@ -47,6 +47,8 @@ enum Venter {
     /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
     NySesjon { navn: String, mappe: PathBuf, claude: String },
     NyPane { mappe: PathBuf, claude: String },
+    /// Svaret er pane-id-en til terminalen for Claude-panen `claude`.
+    NyTerminal { claude: String },
     Ingenting,
 }
 
@@ -367,17 +369,21 @@ impl App {
                     .chain(self.nye.iter().map(|(id, m)| (id, m.as_path())))
                     .filter_map(|(id, mappe)| Some((id.clone(), git::branch(mappe)?)))
                     .collect();
-                self.paner = alle
-                    .into_iter()
-                    .filter(|p| ok && (self.sesjoner.contains_key(&p.id) || self.nye.contains_key(&p.id)))
-                    .collect();
+                let claude: HashSet<&str> =
+                    alle.iter().map(|p| p.id.as_str()).filter(|id| self.er_claude(id)).collect();
+                let synlig = |p: &Pane| claude.contains(p.id.as_str()) || p.claude.as_deref().is_some_and(|c| claude.contains(c));
+                self.paner = alle.iter().filter(|p| ok && synlig(p)).cloned().collect();
                 let valgt = self.valgt.as_ref().and_then(|v| self.paner.iter().find(|p| p.id == v.id));
                 match valgt.cloned() {
                     // Oppdatert, så størrelsen regnes fra det tmux sier nå.
                     Some(pane) => self.valgt = Some(pane),
                     None => {
-                        if let Some(første) = self.i_rekkefølge().first().cloned() {
-                            self.velg(første);
+                        // Tastene du er midt i, skal ikke gå til en annen pane.
+                        self.bytt_fokus(Fokus::Liste);
+                        let eier = self.valgt.as_ref().and_then(|v| v.claude.as_ref());
+                        let eier = eier.and_then(|c| self.paner.iter().find(|p| &p.id == c));
+                        if let Some(pane) = eier.or(self.i_rekkefølge().first()).cloned() {
+                            self.velg(pane);
                         } else {
                             self.valgt = None;
                         }
@@ -428,8 +434,41 @@ impl App {
                 self.list_paner();
                 false
             }
+            Venter::NyTerminal { claude } => {
+                let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
+                self.send(&tmux::linje(&terminal::knytt(&id, &claude)), Venter::Ingenting);
+                self.gå_inn_i = Some(id);
+                self.list_paner();
+                false
+            }
             Venter::Ingenting => false,
         }
+    }
+
+    /// Går inn i terminalen til den valgte Claude-en, eller den som hører til
+    /// samme Claude som den valgte terminalen. Finnes den ikke, lages den.
+    fn åpne_terminal(&mut self) {
+        let Some(valgt) = self.valgt.clone() else { return };
+        let claude = self.eier(&valgt).unwrap_or(&valgt.id).to_string();
+        if let Some(t) = self.paner.iter().find(|p| self.eier(p) == Some(&claude)).cloned() {
+            if t.id != valgt.id {
+                self.velg(t);
+            }
+            self.bytt_fokus(Fokus::Pane);
+            return;
+        }
+        let Some(vindu) = self.paner.iter().find(|p| p.id == claude).map(|p| p.vindu_id.clone()) else { return };
+        let mappe = self.sesjoner.get(&claude).and_then(|s| s.mappe.clone()).or_else(|| self.nye.get(&claude).cloned());
+        self.send(&tmux::linje(&terminal::ny(&vindu, mappe.as_deref())), Venter::NyTerminal { claude });
+    }
+
+    fn er_claude(&self, id: &str) -> bool {
+        self.sesjoner.contains_key(id) || self.nye.contains_key(id)
+    }
+
+    /// Claude-panen `pane` er terminal for, eller `None` når den ikke er det.
+    fn eier<'a>(&self, pane: &'a Pane) -> Option<&'a str> {
+        pane.claude.as_deref().filter(|_| !self.er_claude(&pane.id))
     }
 
     /// Samme kommandoer som `start::start`, men gjennom control mode, så svaret
@@ -548,6 +587,7 @@ impl App {
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
             KeyCode::Enter => self.bytt_fokus(Fokus::Pane),
             KeyCode::Char('n') => self.åpne_velger(false),
+            KeyCode::Char('t') => self.åpne_terminal(),
             KeyCode::Char('r') if k.modifiers.contains(KeyModifiers::CONTROL) => self.åpne_velger(true),
             KeyCode::Char('?') => self.hjelp = true,
             _ => return false,
@@ -659,7 +699,13 @@ impl App {
 
     fn i_rekkefølge(&self) -> Vec<Pane> {
         let rader = self.rader();
-        rader.into_iter().filter_map(|r| if let Rad::Pane(p, _) = r { Some(p.clone()) } else { None }).collect()
+        rader
+            .into_iter()
+            .filter_map(|r| match r {
+                Rad::Pane(p, _) | Rad::Terminal(p) => Some(p.clone()),
+                _ => None,
+            })
+            .collect()
     }
 }
 

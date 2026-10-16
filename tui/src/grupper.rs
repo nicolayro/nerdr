@@ -1,5 +1,5 @@
 //! Rekkefølgen i lista: de som venter på deg først, så de som jobber, så de
-//! du har sett.
+//! du har sett. En terminal står under Claude-en den hører til.
 
 use nerdr_kjerne::paner::Pane;
 use nerdr_kjerne::register::{Sesjon, Tilstand};
@@ -27,6 +27,7 @@ pub enum Rad<'a> {
     Strek,
     Overskrift(Gruppe),
     Pane(&'a Pane, Merke),
+    Terminal(&'a Pane),
 }
 
 impl Merke {
@@ -73,14 +74,19 @@ impl Gruppe {
 /// en gruppe beholdes rekkefølgen fra tmux, så lista ikke stokkes om når bare
 /// tidene endres. Gruppen gis for seg, fordi panen du er inne i, blir stående
 /// der den var selv om merket endres.
+///
+/// En pane uten plass er en terminal når den er knyttet til en Claude. Kjører
+/// det en Claude i en terminal, har den plass og får sitt eget kort.
 pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<(Gruppe, Merke)>) -> Vec<Rad<'a>> {
-    let mut plassert: Vec<(&Pane, Gruppe, Merke)> = paner
-        .iter()
-        .filter_map(|p| {
-            let (g, m) = plass(p)?;
-            Some((p, g, m))
-        })
-        .collect();
+    let mut plassert = Vec::new();
+    let mut terminaler = Vec::new();
+    for p in paner {
+        match plass(p) {
+            Some((g, m)) => plassert.push((p, g, m)),
+            None if p.claude.is_some() => terminaler.push(p),
+            None => {}
+        }
+    }
     plassert.sort_by_key(|(_, g, _)| *g);
 
     let mut rader = Vec::new();
@@ -96,6 +102,9 @@ pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<(Gruppe, Mer
             forrige = Some(g);
         }
         rader.push(Rad::Pane(pane, m));
+        for t in terminaler.iter().filter(|t| t.claude.as_ref() == Some(&pane.id)) {
+            rader.push(Rad::Terminal(t));
+        }
     }
     rader
 }
@@ -117,7 +126,7 @@ mod tester {
 
     #[test]
     fn grupperer_med_overskrifter_og_strek_mellom_panene() {
-        let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20")).unwrap();
+        let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\tzsh\t")).unwrap();
         let paner = [pane("%1"), pane("%2"), pane("%3")];
         let rader = rader(&paner, |p| {
             let m = match p.id.as_str() {
@@ -142,8 +151,32 @@ mod tester {
     }
 
     #[test]
+    fn terminalen_står_under_claude_en_sin() {
+        let pane = |id: &str, claude: &str| {
+            Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\tzsh\t{claude}")).unwrap()
+        };
+        let paner = [pane("%3", "%2"), pane("%1", ""), pane("%2", ""), pane("%4", "%9")];
+        let rader = rader(&paner, |p| match p.id.as_str() {
+            "%1" => Some((Gruppe::VenterPåDeg, Merke::Spør)),
+            "%2" => Some((Gruppe::Sett, Merke::Sett)),
+            _ => None,
+        });
+        assert_eq!(
+            rader,
+            [
+                Rad::Overskrift(Gruppe::VenterPåDeg),
+                Rad::Pane(&paner[1], Merke::Spør),
+                Rad::Tom,
+                Rad::Overskrift(Gruppe::Sett),
+                Rad::Pane(&paner[2], Merke::Sett),
+                Rad::Terminal(&paner[0]),
+            ]
+        );
+    }
+
+    #[test]
     fn gruppen_kan_avvike_fra_merket() {
-        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20").unwrap()];
+        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20\tzsh\t").unwrap()];
         let rader = rader(&paner, |_| Some((Gruppe::Jobber, Merke::Sett)));
         assert_eq!(rader, [Rad::Overskrift(Gruppe::Jobber), Rad::Pane(&paner[0], Merke::Sett)]);
     }

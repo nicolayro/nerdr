@@ -6,10 +6,11 @@ use crate::ny;
 pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
 og du kan gå inn i den og skrive.";
 
-pub const TASTER: [(&str, &str); 7] = [
+pub const TASTER: [(&str, &str); 8] = [
     ("↑↓  k j", "velg Claude"),
     ("⏎", "gå inn i sesjonen"),
     ("C-q", "tilbake til lista"),
+    ("t", "terminal i mappa til Claude-en"),
     ("n", "ny Claude i en mappe du velger"),
     ("C-r", "fortsett en tidligere samtale"),
     ("?", "denne hjelpen"),
