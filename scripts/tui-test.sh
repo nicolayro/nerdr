@@ -180,6 +180,31 @@ tmux -L nerdr-vert send-keys -t vert q
 sleep 0.5
 tmux -L nerdr-maal list-clients
 
+echo "=== nerdr liste: alfa venter, gamma og prosjekt.ny er klare ==="
+CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal liste
+CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal liste --json | grep -o -e '"versjon":1' -e '"tilstand":"[a-z]*"' | tr '\n' ' '
+echo
+
+echo "=== nerdr samtaler: Fiks testene i annet, med id abc-123 ==="
+CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" samtaler
+
+echo "=== nerdr ny lager sesjonen tredje og skriver inn claude ==="
+CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal ny "$KONFIG/kode/tredje" | sed "s|$KONFIG|…|"
+sleep 0.5
+tmux -L nerdr-maal capture-pane -p -t tredje | grep -m1 claude
+
+echo "=== nerdr ny --fortsett abc-123 finner mappa annet og gir et nytt vindu der (skal være 2) ==="
+CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal ny --fortsett abc-123 --json | grep -o '"sesjon":"[a-z]*"'
+sleep 0.5
+tmux -L nerdr-maal list-windows -t annet | wc -l
+tmux -L nerdr-maal capture-pane -p -t annet:1 | grep -m1 'claude --resume'
+
+echo "=== en samtale som kjører, startes ikke en gang til, og ukjent id gir feil ==="
+pane=$(tmux -L nerdr-maal display-message -p -t tredje '#{pane_id}')
+printf '{"tmux":"tredje:@0.%s","status":"busy","sessionId":"abc-123","updatedAt":%s000}' "$pane" "$(date +%s)" > "$KONFIG/sessions/tredje.json"
+CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal ny --fortsett abc-123
+CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal ny --fortsett finnes-ikke
+
 tmux -L nerdr-maal kill-server
 
 echo "=== uten tmux-server lager nerdr en sesjon (skal være 1) ==="

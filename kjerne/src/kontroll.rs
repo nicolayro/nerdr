@@ -7,8 +7,10 @@
 //! sender, holder selv en kø over hva hvert svar gjelder.
 
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::thread;
+
+use crate::tmux;
 
 #[derive(Debug, PartialEq)]
 pub enum Melding {
@@ -99,10 +101,7 @@ impl Kontroll {
         mut melde: impl FnMut(Melding) + Send + 'static,
     ) -> io::Result<Kontroll> {
         let tmux = || {
-            let mut tmux = Command::new("tmux");
-            if let Some(socket) = socket {
-                tmux.args(["-L", socket]);
-            }
+            let mut tmux = tmux::kommando(socket);
             // Uten dette nekter tmux å koble til fra innsiden av en annen tmux.
             tmux.env_remove("TMUX");
             tmux

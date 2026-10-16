@@ -45,6 +45,9 @@ export NERDR_MAPPER=~/git:~/kode
   ikke nerdr den. `n` i nerdr starter en Claude i tmux, og `C-r` fortsetter en
   tidligere samtale.
 - `?` i nerdr viser tastene. `nerdr --help` viser det samme i terminalen.
+- Du kan selv bruke `nerdr liste`, `nerdr samtaler` og `nerdr ny` med
+  `--json`, for eksempel for å svare på hvilke Claude-er som venter på
+  brukeren, eller for å fortsette en samtale.
 
 ## Oppdatere og fjerne
 

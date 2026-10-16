@@ -12,7 +12,7 @@ use nerdr_kjerne::samtaler;
 /// under dem.
 pub const MAPPER_VARIABEL: &str = "NERDR_MAPPER";
 const STANDARD_MAPPER: &str = "~/git";
-const SAMTALER: usize = 50;
+pub const SAMTALER: usize = 50;
 
 pub struct Kandidat {
     pub mappe: PathBuf,
@@ -117,7 +117,7 @@ impl Velger {
     }
 }
 
-fn alder(tid: Duration) -> String {
+pub fn alder(tid: Duration) -> String {
     match tid.as_secs() / 60 {
         0 => "nå".into(),
         m @ 1..60 => format!("{m} min"),
@@ -193,23 +193,9 @@ fn poeng(søk: &str, tekst: &str) -> Option<(i32, Vec<usize>)> {
     best
 }
 
-/// Punktum og kolon er skilletegn i tmux-targets, og tmux bytter dem ut selv.
-/// Da ville navnet ikke funnet sesjonen igjen.
-pub fn sesjonsnavn(mappe: &Path) -> String {
-    let navn = mappe.file_name().map_or_else(|| "claude".into(), |n| n.to_string_lossy());
-    navn.replace(['.', ':'], "-")
-}
-
 #[cfg(test)]
 mod tester {
     use super::*;
-
-    #[test]
-    fn sesjonsnavn_uten_skilletegn() {
-        assert_eq!(sesjonsnavn(Path::new("/h/git/nit.æ")), "nit-æ");
-        assert_eq!(sesjonsnavn(Path::new("/h/git/a:b")), "a-b");
-        assert_eq!(sesjonsnavn(Path::new("/")), "claude");
-    }
 
     #[test]
     fn kandidater_er_mappene_rett_under_hver_rot() {

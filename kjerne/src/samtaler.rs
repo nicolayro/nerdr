@@ -56,14 +56,25 @@ pub fn siste(katalog: &Path, antall: usize, utenom: &HashSet<String>) -> Vec<Sam
         .collect();
     filer.sort_by(|a, b| b.0.cmp(&a.0));
 
-    filer
-        .into_iter()
-        .filter_map(|(endret, id, sti)| {
-            let (mappe, tittel) = les(&sti)?;
-            mappe.is_dir().then_some(Samtale { id, mappe, tittel, endret })
-        })
-        .take(antall)
-        .collect()
+    filer.into_iter().filter_map(|(endret, id, sti)| samtale(&sti, id, endret)).take(antall).collect()
+}
+
+/// Samtalen med `id`, uansett hvor gammel den er.
+pub fn finn(katalog: &Path, id: &str) -> Option<Samtale> {
+    // Id-en blir en del av en sti.
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return None;
+    }
+    fs::read_dir(katalog).ok()?.flatten().find_map(|prosjekt| {
+        let sti = prosjekt.path().join(format!("{id}.jsonl"));
+        let endret = fs::metadata(&sti).ok()?.modified().ok()?;
+        samtale(&sti, id.to_string(), endret)
+    })
+}
+
+fn samtale(sti: &Path, id: String, endret: SystemTime) -> Option<Samtale> {
+    let (mappe, tittel) = les(sti)?;
+    mappe.is_dir().then_some(Samtale { id, mappe, tittel, endret })
 }
 
 fn les(sti: &Path) -> Option<(PathBuf, String)> {
@@ -145,6 +156,8 @@ mod tester {
             .map(|s| s.tittel)
             .collect();
         assert_eq!(titler, ["Ny", "Gammel"]);
+        assert_eq!(finn(&rot, "gammel").map(|s| s.tittel).as_deref(), Some("Gammel"));
+        assert_eq!(finn(&rot, "../-a-nerdr/ny"), None);
         fs::remove_dir_all(rot).unwrap();
     }
 }

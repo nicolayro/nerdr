@@ -61,6 +61,21 @@ der. `C-r` i popupen bytter mellom samtalene og mappene.
 
 I begge tilfeller er du inne i den nye Claude-en med en gang.
 
+## Kommandoer
+
+For script og agenter, ved siden av TUI-et. Med `--json` kommer svaret som JSON
+med et `versjon`-felt.
+
+| | |
+| --- | --- |
+| `nerdr liste` | Claude-ene i tmux, med tilstand (`venter`, `jobber` eller `klar`), pane, mappe, branch og oppgave |
+| `nerdr samtaler` | Tidligere samtaler, nyest først, med id, mappe og tittel |
+| `nerdr ny <mappe>` | Start en Claude i mappa, som `n` |
+| `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som `C-r` |
+
+Hvilke Claude-er du har sett, husker bare TUI-et, så `liste` skiller ikke en
+som er ferdig, fra en du har sett.
+
 ## Innstillinger
 
 | | |

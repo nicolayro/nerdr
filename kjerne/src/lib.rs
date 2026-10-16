@@ -8,3 +8,5 @@ pub mod paner;
 pub mod register;
 pub mod samtaler;
 pub mod sgr;
+pub mod start;
+pub mod tmux;

@@ -1,5 +1,6 @@
 mod grupper;
 mod hjelp;
+mod kommandoer;
 mod ny;
 mod taster;
 mod tegn;
@@ -13,7 +14,7 @@ use std::{env, io, thread};
 use grupper::{Gruppe, Merke, Rad};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{FELT, Pane};
-use nerdr_kjerne::git;
+use nerdr_kjerne::{git, start, tmux};
 use nerdr_kjerne::register::{self, Sesjon};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
@@ -108,26 +109,62 @@ struct App {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
-    let socket = match args.as_slice() {
-        [] => None,
-        [flagg, socket] if flagg == "-L" => Some(socket.as_str()),
-        [flagg] if flagg == "-h" || flagg == "--help" => {
-            print!("{}", hjelp::tekst());
-            return;
-        }
-        [flagg] if matches!(flagg.as_str(), "-v" | "-V" | "--version") => {
-            println!("nerdr {}", env!("CARGO_PKG_VERSION"));
-            return;
-        }
-        _ => {
-            eprintln!("bruk: nerdr [-L socket], eller nerdr --help");
-            std::process::exit(2);
-        }
+    let mut args: Vec<String> = env::args().skip(1).collect();
+    let (Some(socket), Some(fortsett)) = (ta_verdi(&mut args, "-L"), ta_verdi(&mut args, "--fortsett")) else {
+        bruk();
     };
-    if let Err(feil) = kjør(socket) {
-        eprintln!("nerdr: {feil}");
+    let json = ta_flagg(&mut args, "--json");
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let (socket, fortsett) = (socket.as_deref(), fortsett.as_deref());
+
+    let res = match args.as_slice() {
+        [] if !json && fortsett.is_none() => kjør(socket),
+        ["liste"] if fortsett.is_none() => kommandoer::liste(socket, json),
+        ["samtaler"] if fortsett.is_none() => kommandoer::samtaler(json),
+        ["ny"] if fortsett.is_some() => kommandoer::ny(socket, None, fortsett, json),
+        ["ny", mappe] => kommandoer::ny(socket, Some(mappe), fortsett, json),
+        ["-h" | "--help"] => {
+            print!("{}", hjelp::tekst());
+            Ok(())
+        }
+        ["-v" | "-V" | "--version"] => {
+            println!("nerdr {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        _ => bruk(),
+    };
+    if let Err(feil) = res {
+        eprintln!("nerdr: {}", uten_tmux(feil));
         std::process::exit(1);
+    }
+}
+
+fn bruk() -> ! {
+    eprintln!("bruk: nerdr [liste | samtaler | ny <mappe>] [--json] [-L socket], eller nerdr --help");
+    std::process::exit(2);
+}
+
+/// Fjerner `navn verdi` fra `args`. Ytterst `None` når verdien mangler.
+fn ta_verdi(args: &mut Vec<String>, navn: &str) -> Option<Option<String>> {
+    let Some(i) = args.iter().position(|a| a == navn) else { return Some(None) };
+    if i + 1 >= args.len() {
+        return None;
+    }
+    let verdi = args.remove(i + 1);
+    args.remove(i);
+    Some(Some(verdi))
+}
+
+fn ta_flagg(args: &mut Vec<String>, navn: &str) -> bool {
+    let før = args.len();
+    args.retain(|a| a != navn);
+    args.len() < før
+}
+
+fn uten_tmux(feil: io::Error) -> io::Error {
+    match feil.kind() {
+        io::ErrorKind::NotFound => io::Error::other("fant ikke tmux. Installer den, for eksempel med `brew install tmux`."),
+        _ => feil,
     }
 }
 
@@ -136,10 +173,6 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
     let tmux_tx = tx.clone();
     let kontroll = Kontroll::start(socket, move |m| {
         let _ = tmux_tx.send(Hendelse::Tmux(m));
-    })
-    .map_err(|feil| match feil.kind() {
-        io::ErrorKind::NotFound => io::Error::other("fant ikke tmux. Installer den, for eksempel med `brew install tmux`."),
-        _ => feil,
     })?;
     thread::spawn(move || {
         while let Ok(e) = event::read() {
@@ -164,7 +197,7 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 }
 
 /// Samme katalog som Claude Code bruker: `$CLAUDE_CONFIG_DIR`, ellers `~/.claude`.
-fn konfigkatalog() -> PathBuf {
+pub fn konfigkatalog() -> PathBuf {
     env::var("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(env::var("HOME").unwrap_or_default()).join(".claude"))
@@ -382,18 +415,14 @@ impl App {
                 true
             }
             Venter::NySesjon { navn, mappe, claude } if !ok => {
-                let mål = sitat(&format!("={navn}:"));
-                let kommando =
-                    format!("new-window -t {mål} -c {} -P -F {}", sitat(&mappe.to_string_lossy()), sitat("#{pane_id}"));
-                self.send(&kommando, Venter::NyPane { mappe, claude });
+                self.send(&tmux::linje(&start::nytt_vindu(&navn, &mappe)), Venter::NyPane { mappe, claude });
                 false
             }
             Venter::NySesjon { mappe, claude, .. } | Venter::NyPane { mappe, claude } => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
-                // Skrevet inn i skallet heller enn kjørt av tmux, siden `claude`
-                // kan være en funksjon i .zshrc, som tmux ikke ser.
-                self.send(&format!("send-keys -t {} -l {}", sitat(&id), sitat(&claude)), Venter::Ingenting);
-                self.send(&format!("send-keys -t {} Enter", sitat(&id)), Venter::Ingenting);
+                for kommando in start::skriv_inn(&id, &claude) {
+                    self.send(&tmux::linje(&kommando), Venter::Ingenting);
+                }
                 self.nye.insert(id.clone(), mappe);
                 self.gå_inn_i = Some(id);
                 self.list_paner();
@@ -403,16 +432,12 @@ impl App {
         }
     }
 
-    /// `claude` er kommandolinja som skrives inn, som `claude --resume <id>`.
-    fn start_claude(&mut self, mappe: PathBuf, claude: String) {
-        let navn = ny::sesjonsnavn(&mappe);
-        let kommando = format!(
-            "new-session -d -s {} -c {} -P -F {}",
-            sitat(&navn),
-            sitat(&mappe.to_string_lossy()),
-            sitat("#{pane_id}")
-        );
-        self.send(&kommando, Venter::NySesjon { navn, mappe, claude });
+    /// Samme kommandoer som `start::start`, men gjennom control mode, så svaret
+    /// kommer som en melding.
+    fn start_claude(&mut self, mappe: PathBuf, samtale: Option<&str>) {
+        let navn = start::sesjonsnavn(&mappe);
+        let claude = start::claude(samtale);
+        self.send(&tmux::linje(&start::ny_sesjon(&navn, &mappe)), Venter::NySesjon { navn, mappe, claude });
     }
 
     /// Er en liste alt på vei, kan den være bestilt før endringen, så det
@@ -483,13 +508,9 @@ impl App {
                 KeyCode::Char('c') if ctrl => self.velger = None,
                 KeyCode::Enter => {
                     if let Some(valgt) = velger.valgt() {
-                        let claude = match &valgt.samtale {
-                            Some(id) => format!("claude --resume {id}"),
-                            None => "claude".into(),
-                        };
-                        let mappe = valgt.mappe.clone();
+                        let (mappe, samtale) = (valgt.mappe.clone(), valgt.samtale.clone());
                         self.velger = None;
-                        self.start_claude(mappe, claude);
+                        self.start_claude(mappe, samtale.as_deref());
                     }
                 }
                 KeyCode::Char('r') if ctrl => velger.bytt(),
