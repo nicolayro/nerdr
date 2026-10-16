@@ -944,6 +944,10 @@ impl App {
             return false;
         }
         if m.column < v.x {
+            if m.kind == MouseEventKind::Down(MouseButton::Left) && tegn::antall_på(self, m.row) {
+                self.bytt_fokus(Fokus::Liste);
+                return true;
+            }
             let Some(pane) = tegn::pane_på(self, m.row) else { return false };
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
@@ -1062,7 +1066,8 @@ impl App {
     }
 
     fn rader(&self) -> Vec<Rad<'_>> {
-        grupper::rader(&self.paner, |p| self.plass(p))
+        let her = self.valgt.as_ref().map(|p| p.id.as_str());
+        grupper::rader(&self.paner, |p| self.plass(p), her, self.fokus == Fokus::Liste)
     }
 
     fn i_rekkefølge(&self) -> Vec<Pane> {

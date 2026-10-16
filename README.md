@@ -76,10 +76,19 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
 
-Lista er delt i to. Øverst, under **venter på deg**, står de som spør om noe
-(`●`) eller er ferdige med noe du ikke har sett (`◆`), med mappe, branch og
-oppgaven. Nederst, under **resten**, står de andre med én linje hver, i samme
-rekkefølge hele tiden: `◐` jobber, `◌` starter og `○` er ferdig og sett.
+Lista har fire grupper, og en gruppe uten noen i seg har ingen overskrift:
+
+| | |
+| --- | --- |
+| **spør** | `●` spør om noe, som et tillatelsesspørsmål |
+| **ferdig** | `◆` er ferdig med noe du ikke har sett |
+| **jobber** | `◐` jobber, `◌` starter |
+| **sett** | `○` er ferdig, og du har vært inne i den siden |
+
+De som spør eller er ferdige, står med mappe, branch og oppgave, og resten med
+én linje hver. Mens du er i panen, står den du er i, øverst under **her**, så de
+som spør eller er ferdige, og bare antallet av resten. Et klikk på antallet tar
+deg til lista.
 
 ### Starte og fortsette
 
