@@ -4,7 +4,7 @@ mod ny;
 mod taster;
 mod tegn;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -44,8 +44,8 @@ enum Venter {
     Bilde,
     Markør,
     /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
-    NySesjon { navn: String, mappe: PathBuf, claude: &'static str },
-    NyPane { mappe: PathBuf, claude: &'static str },
+    NySesjon { navn: String, mappe: PathBuf, claude: String },
+    NyPane { mappe: PathBuf, claude: String },
     Ingenting,
 }
 
@@ -63,8 +63,9 @@ struct App {
     lister: bool,
     list_igjen: bool,
     sist_listet: Option<Instant>,
-    /// Sesjonsregisteret til Claude Code.
-    register: PathBuf,
+    /// Konfigurasjonskatalogen til Claude Code, med registeret i `sessions`
+    /// og samtalene i `projects`.
+    konfig: PathBuf,
     /// Pane-id → sesjon, for panene der en Claude kjører.
     sesjoner: HashMap<String, Sesjon>,
     /// Pane-id → branchen mappen til sesjonen står på.
@@ -163,11 +164,10 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 }
 
 /// Samme katalog som Claude Code bruker: `$CLAUDE_CONFIG_DIR`, ellers `~/.claude`.
-fn registerkatalog() -> PathBuf {
-    let konfig = env::var("CLAUDE_CONFIG_DIR")
+fn konfigkatalog() -> PathBuf {
+    env::var("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(env::var("HOME").unwrap_or_default()).join(".claude"));
-    konfig.join("sessions")
+        .unwrap_or_else(|_| PathBuf::from(env::var("HOME").unwrap_or_default()).join(".claude"))
 }
 
 impl App {
@@ -179,7 +179,7 @@ impl App {
             lister: false,
             list_igjen: false,
             sist_listet: None,
-            register: registerkatalog(),
+            konfig: konfigkatalog(),
             sesjoner: HashMap::new(),
             brancher: HashMap::new(),
             sett: HashMap::new(),
@@ -317,7 +317,7 @@ impl App {
             Venter::Paner => {
                 self.lister = false;
                 self.sist_listet = Some(Instant::now());
-                self.sesjoner = register::les(&self.register);
+                self.sesjoner = register::les(&self.konfig.join("sessions"));
                 let nå = nå_ms();
                 self.sett.retain(|id, _| self.sesjoner.contains_key(id));
                 for id in self.sesjoner.keys() {
@@ -392,7 +392,7 @@ impl App {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
                 // Skrevet inn i skallet heller enn kjørt av tmux, siden `claude`
                 // kan være en funksjon i .zshrc, som tmux ikke ser.
-                self.send(&format!("send-keys -t {} -l {}", sitat(&id), sitat(claude)), Venter::Ingenting);
+                self.send(&format!("send-keys -t {} -l {}", sitat(&id), sitat(&claude)), Venter::Ingenting);
                 self.send(&format!("send-keys -t {} Enter", sitat(&id)), Venter::Ingenting);
                 self.nye.insert(id.clone(), mappe);
                 self.gå_inn_i = Some(id);
@@ -403,8 +403,8 @@ impl App {
         }
     }
 
-    /// `claude` er kommandolinja som skrives inn, som `claude --resume`.
-    fn start_claude(&mut self, mappe: PathBuf, claude: &'static str) {
+    /// `claude` er kommandolinja som skrives inn, som `claude --resume <id>`.
+    fn start_claude(&mut self, mappe: PathBuf, claude: String) {
         let navn = ny::sesjonsnavn(&mappe);
         let kommando = format!(
             "new-session -d -s {} -c {} -P -F {}",
@@ -482,18 +482,17 @@ impl App {
                 KeyCode::Esc => self.velger = None,
                 KeyCode::Char('c') if ctrl => self.velger = None,
                 KeyCode::Enter => {
-                    if let Some(mappe) = velger.valgt_mappe() {
+                    if let Some(valgt) = velger.valgt() {
+                        let claude = match &valgt.samtale {
+                            Some(id) => format!("claude --resume {id}"),
+                            None => "claude".into(),
+                        };
+                        let mappe = valgt.mappe.clone();
                         self.velger = None;
-                        self.start_claude(mappe, "claude");
+                        self.start_claude(mappe, claude);
                     }
                 }
-                // Claude viser selv de tidligere samtalene i mappa å velge mellom.
-                KeyCode::Char('r') if ctrl => {
-                    if let Some(mappe) = velger.valgt_mappe() {
-                        self.velger = None;
-                        self.start_claude(mappe, "claude --resume");
-                    }
-                }
+                KeyCode::Char('r') if ctrl => velger.bytt(),
                 KeyCode::Up => velger.flytt(-1),
                 KeyCode::Char('p' | 'k') if ctrl => velger.flytt(-1),
                 KeyCode::Down => velger.flytt(1),
@@ -527,11 +526,17 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
             KeyCode::Enter => self.bytt_fokus(Fokus::Pane),
-            KeyCode::Char('n') => self.velger = Some(ny::Velger::ny()),
+            KeyCode::Char('n') => self.åpne_velger(false),
+            KeyCode::Char('r') if k.modifiers.contains(KeyModifiers::CONTROL) => self.åpne_velger(true),
             KeyCode::Char('?') => self.hjelp = true,
             _ => return false,
         }
         true
+    }
+
+    fn åpne_velger(&mut self, fortsett: bool) {
+        let kjører: HashSet<String> = self.sesjoner.values().filter_map(|s| s.samtale.clone()).collect();
+        self.velger = Some(ny::Velger::ny(fortsett, &self.konfig.join("projects"), &kjører));
     }
 
     /// `paste-buffer -p` legger på markørene for bracketed paste bare når panen

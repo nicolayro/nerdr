@@ -23,6 +23,8 @@ pub struct Sesjon {
     /// Millisekunder siden 1970.
     pub endret: u64,
     pub mappe: Option<PathBuf>,
+    /// Samtalen som kjører, som i `claude --resume <id>`.
+    pub samtale: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -35,6 +37,7 @@ struct Oppføring {
     updated_at: u64,
     status_updated_at: Option<u64>,
     cwd: Option<PathBuf>,
+    session_id: Option<String>,
 }
 
 /// Pane-id → sesjon for hver Claude som kjører i tmux.
@@ -69,7 +72,7 @@ fn tolk(tekst: &str) -> Option<(String, u64, Sesjon)> {
         _ => return None,
     };
     let endret = o.status_updated_at.unwrap_or(o.updated_at);
-    Some((pane.to_string(), o.updated_at, Sesjon { tilstand, endret, mappe: o.cwd }))
+    Some((pane.to_string(), o.updated_at, Sesjon { tilstand, endret, mappe: o.cwd, samtale: o.session_id }))
 }
 
 #[cfg(test)]
@@ -78,8 +81,9 @@ mod tester {
 
     #[test]
     fn leser_pane_og_tilstand() {
-        let t = r#"{"pid":1,"tmux":"sidebar:@7.%37","status":"waiting","cwd":"/a/nerdr","updatedAt":5,"statusUpdatedAt":3}"#;
-        let sesjon = Sesjon { tilstand: Tilstand::Venter, endret: 3, mappe: Some("/a/nerdr".into()) };
+        let t = r#"{"pid":1,"tmux":"nerdr:@7.%37","status":"waiting","cwd":"/a/nerdr","updatedAt":5,"statusUpdatedAt":3,"sessionId":"abc"}"#;
+        let sesjon =
+            Sesjon { tilstand: Tilstand::Venter, endret: 3, mappe: Some("/a/nerdr".into()), samtale: Some("abc".into()) };
         assert_eq!(tolk(t), Some(("%37".into(), 5, sesjon)));
         let uten = r#"{"tmux":"a:@1.%2","status":"idle","updatedAt":5}"#;
         assert_eq!(tolk(uten).map(|(_, _, s)| s.endret), Some(5));
@@ -100,7 +104,7 @@ mod tester {
         fs::write(katalog.join("2.json"), r#"{"tmux":"b:@3.%2","status":"busy","updatedAt":20}"#).unwrap();
         fs::write(katalog.join("2.key"), "hemmelig").unwrap();
 
-        let jobber = Sesjon { tilstand: Tilstand::Jobber, endret: 20, mappe: None };
+        let jobber = Sesjon { tilstand: Tilstand::Jobber, endret: 20, mappe: None, samtale: None };
         assert_eq!(les(&katalog), HashMap::from([("%2".to_string(), jobber)]));
         fs::remove_dir_all(katalog).unwrap();
     }

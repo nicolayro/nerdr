@@ -1,17 +1,28 @@
-//! Ny Claude: mappa velges i en popup, og sesjonen i tmux får navnet til mappa.
+//! Ny Claude: mappa, eller en tidligere samtale, velges i en popup, og
+//! sesjonen i tmux får navnet til mappa.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 use std::{env, fs};
+
+use nerdr_kjerne::samtaler;
 
 /// Mappene det søkes i, kolonseparert som `PATH`. Kandidatene er mappene rett
 /// under dem.
 pub const MAPPER_VARIABEL: &str = "NERDR_MAPPER";
 const STANDARD_MAPPER: &str = "~/git";
+const SAMTALER: usize = 50;
 
 pub struct Kandidat {
     pub mappe: PathBuf,
-    /// Stien med `~` for `$HOME`, som er det som vises og søkes i.
+    /// Det som vises og søkes i: stien med `~` for `$HOME`, eller mappenavnet
+    /// og tittelen til en samtale.
     pub vis: String,
+    /// Samtalen `claude --resume` skal fortsette.
+    pub samtale: Option<String>,
+    /// Hvor lenge siden samtalen sist ble endret.
+    pub alder: Option<String>,
 }
 
 pub struct Treff<'a> {
@@ -21,34 +32,61 @@ pub struct Treff<'a> {
 }
 
 pub struct Velger {
-    kandidater: Vec<Kandidat>,
+    mapper: Vec<Kandidat>,
+    samtaler: Vec<Kandidat>,
     pub søk: String,
     pub valgt: usize,
+    /// Tidligere samtaler vises i stedet for mappene.
+    pub fortsett: bool,
 }
 
 impl Velger {
-    pub fn ny() -> Velger {
+    /// `prosjekter` er `~/.claude/projects`, og samtalene i `kjører` er i gang
+    /// og vises ikke.
+    pub fn ny(fortsett: bool, prosjekter: &Path, kjører: &HashSet<String>) -> Velger {
         let hjem = PathBuf::from(env::var("HOME").unwrap_or_default());
-        let kandidater = kandidater(&røtter(&mapper(), &hjem))
+        let mapper = kandidater(&røtter(&mapper(), &hjem))
             .into_iter()
             .map(|mappe| {
                 let vis = mappe
                     .strip_prefix(&hjem)
                     .map_or_else(|_| mappe.display().to_string(), |r| format!("~/{}", r.display()));
-                Kandidat { mappe, vis }
+                Kandidat { mappe, vis, samtale: None, alder: None }
             })
             .collect();
-        Velger { kandidater, søk: String::new(), valgt: 0 }
+        let nå = SystemTime::now();
+        let samtaler = samtaler::siste(prosjekter, SAMTALER, kjører)
+            .into_iter()
+            .map(|s| {
+                let navn = s.mappe.file_name().map_or_else(|| s.mappe.display().to_string(), |n| n.to_string_lossy().into());
+                Kandidat {
+                    vis: format!("{navn}  {}", s.tittel),
+                    alder: Some(alder(nå.duration_since(s.endret).unwrap_or_default())),
+                    samtale: Some(s.id),
+                    mappe: s.mappe,
+                }
+            })
+            .collect();
+        Velger { mapper, samtaler, søk: String::new(), valgt: 0, fortsett }
+    }
+
+    fn kandidater(&self) -> &[Kandidat] {
+        if self.fortsett { &self.samtaler } else { &self.mapper }
     }
 
     pub fn antall(&self) -> usize {
-        self.kandidater.len()
+        self.kandidater().len()
+    }
+
+    pub fn bytt(&mut self) {
+        self.fortsett = !self.fortsett;
+        self.valgt = 0;
     }
 
     /// Kandidatene søket treffer, best først. Like gode beholder rekkefølgen.
     pub fn treff(&self) -> Vec<Treff<'_>> {
         let mut treff: Vec<(i32, Treff)> = self
-            .kandidater
+            .kandidater()
             .iter()
             .filter_map(|k| {
                 let (poeng, tegn) = poeng(&self.søk, &k.vis)?;
@@ -74,8 +112,17 @@ impl Velger {
         self.valgt = (self.valgt as isize + steg).clamp(0, siste) as usize;
     }
 
-    pub fn valgt_mappe(&self) -> Option<PathBuf> {
-        self.treff().get(self.valgt).map(|t| t.kandidat.mappe.clone())
+    pub fn valgt(&self) -> Option<&Kandidat> {
+        self.treff().into_iter().nth(self.valgt).map(|t| t.kandidat)
+    }
+}
+
+fn alder(tid: Duration) -> String {
+    match tid.as_secs() / 60 {
+        0 => "nå".into(),
+        m @ 1..60 => format!("{m} min"),
+        m @ 60..1440 => format!("{} t", m / 60),
+        m => format!("{} d", m / 1440),
     }
 }
 
@@ -175,6 +222,12 @@ mod tester {
         let navn: Vec<_> = kandidater(&røtter("git:fagdag", &hjem)).iter().map(|m| m.strip_prefix(&hjem).unwrap().to_path_buf()).collect();
         assert_eq!(navn, [Path::new("git/a"), Path::new("git/b"), Path::new("fagdag/c")]);
         fs::remove_dir_all(hjem).unwrap();
+    }
+
+    #[test]
+    fn alder_i_minutter_timer_og_dager() {
+        let min = |m: u64| alder(Duration::from_secs(m * 60));
+        assert_eq!([min(0), min(5), min(90), min(3 * 1440)], ["nå", "5 min", "1 t", "3 d"]);
     }
 
     #[test]

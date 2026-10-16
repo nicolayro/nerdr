@@ -242,7 +242,11 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect) {
 
 /// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
 fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
-    let Some(boks) = boks(buf, område, 64, VELGER_LINJER + 4, "ny claude", "⏎ ny · C-r fortsett en tidligere · esc avbryt") else {
+    let (tittel, hint) = match velger.fortsett {
+        false => ("ny claude", "⏎ start · C-r tidligere samtaler · esc avbryt"),
+        true => ("tidligere samtaler", "⏎ fortsett · C-r ny · esc avbryt"),
+    };
+    let Some(boks) = boks(buf, område, 64, VELGER_LINJER + 4, tittel, hint) else {
         return (0, 0);
     };
     let bredde = boks.width;
@@ -252,7 +256,7 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
     let treff = velger.treff();
     let x = boks.x + 2;
     let y = boks.y + 1;
-    let prompt = "mappe › ";
+    let prompt = if velger.fortsett { "samtale › " } else { "mappe › " };
     let søk = kutt(&velger.søk, indre.saturating_sub(prompt.chars().count() + 8));
     let etter = buf.set_stringn(x, y, prompt, indre, Style::new().fg(ORANSJE)).0;
     let markør = buf.set_stringn(etter, y, &søk, indre, Style::new().fg(HVIT)).0;
@@ -269,9 +273,22 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
             buf.set_string(boks.x + 1, y, "▎", Style::new().fg(HVIT));
         }
         let farge = if valgt { HVIT } else { LYS };
-        for (n, c) in kutt(&t.kandidat.vis, indre).chars().enumerate() {
-            let stil = if t.tegn.contains(&n) { Style::new().fg(ORANSJE) } else { Style::new().fg(farge) };
-            buf.set_string(x + n as u16, y, c.encode_utf8(&mut [0; 4]), stil);
+        let k = t.kandidat;
+        let mut plass = indre;
+        if let Some(alder) = &k.alder {
+            let bredde = alder.chars().count();
+            buf.set_string(boks.right() - 2 - bredde as u16, y, alder, Style::new().fg(DIM));
+            plass = plass.saturating_sub(bredde + 2);
+        }
+        // Mappenavnet foran tittelen til en samtale er grått.
+        let mappe = k.samtale.as_ref().and_then(|_| k.vis.find("  ")).map_or(0, |i| k.vis[..i].chars().count());
+        for (n, c) in kutt(&k.vis, plass).chars().enumerate() {
+            let farge = match () {
+                _ if t.tegn.contains(&n) => ORANSJE,
+                _ if n < mappe => GRÅ,
+                _ => farge,
+            };
+            buf.set_string(x + n as u16, y, c.encode_utf8(&mut [0; 4]), Style::new().fg(farge));
         }
     }
     (markør, y)

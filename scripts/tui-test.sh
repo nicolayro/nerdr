@@ -9,6 +9,10 @@ KONFIG=$(mktemp -d)
 mkdir "$KONFIG/sessions"
 # HOME for nerdr, så mappevelgeren viser disse mappene og ikke brukerens egne.
 mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/fagdag/tredje"
+# En tidligere samtale i annet, og en tom en som ikke skal vises.
+mkdir -p "$KONFIG/projects/annet"
+printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
+printf '{"type":"user","cwd":"%s"}\n{"type":"last-prompt"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/tom.jsonl"
 
 tmux -L nerdr-maal kill-server 2>/dev/null
 tmux -L nerdr-vert kill-server 2>/dev/null
@@ -141,14 +145,23 @@ tmux -L nerdr-vert send-keys -t vert Enter
 sleep 0.8
 tmux -L nerdr-maal list-windows -t prosjekt-ny | wc -l
 
-echo "=== C-r i popupen lager sesjonen annet og skriver inn claude --resume ==="
+echo "=== C-r i lista viser tidligere samtaler: bare «annet  Fiks testene», 1/1 ==="
 tmux -L nerdr-vert send-keys -t vert C-q
 sleep 0.2
-tmux -L nerdr-vert send-keys -t vert n
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert -l annet
-sleep 0.3
 tmux -L nerdr-vert send-keys -t vert C-r
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,4p'
+
+echo "=== C-r der bytter til mappene og tilbake ==="
+tmux -L nerdr-vert send-keys -t vert C-r
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | grep -o -e 'tidligere samtaler' -e 'ny claude' | head -1
+tmux -L nerdr-vert send-keys -t vert C-r
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | grep -o -e 'tidligere samtaler' -e 'ny claude' | head -1
+
+echo "=== Enter lager sesjonen annet og skriver inn claude --resume abc-123 ==="
+tmux -L nerdr-vert send-keys -t vert Enter
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t annet | grep -m1 'claude --resume'
 

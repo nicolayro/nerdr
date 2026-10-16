@@ -26,6 +26,7 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | `⏎` | Gå inn i sesjonen |
 | `C-q` | Tilbake til lista |
 | `n` | Ny Claude i en mappe du velger |
+| `C-r` | Fortsett en tidligere samtale i en mappe |
 | `?` | Hjelp |
 | `q` | Avslutt, fra lista |
 
@@ -43,9 +44,13 @@ holder på med.
 `n` åpner en popup der du søker fram en mappe under `~/git`, og `⏎` starter
 `claude` der i en tmux-sesjon med samme navn som mappa. Finnes sesjonen
 allerede, får den et nytt vindu. Du er inne i den med en gang, og kortet står
-med `◌` til Claude er klar. `C-r` i stedet for `⏎` starter `claude --resume`,
-så du kan fortsette en tidligere samtale i mappa. Andre mapper settes
-kolonseparert i `NERDR_MAPPER`, som `NERDR_MAPPER=~/git:~/kode`.
+med `◌` til Claude er klar. Andre mapper settes kolonseparert i
+`NERDR_MAPPER`, som `NERDR_MAPPER=~/git:~/kode`.
+
+`C-r` viser de siste samtalene du har hatt med Claude, med mappe, tittel og
+hvor lenge siden. `⏎` fortsetter den du velger, i mappa den hørte til.
+Samtaler som kjører, står ikke der. `C-r` i popupen bytter mellom samtalene og
+mappene.
 
 ## Utvikle
 

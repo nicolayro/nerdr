@@ -105,7 +105,7 @@ mod tester {
     use super::*;
 
     fn sesjon(tilstand: Tilstand, endret: u64) -> Sesjon {
-        Sesjon { tilstand, endret, mappe: None }
+        Sesjon { tilstand, endret, mappe: None, samtale: None }
     }
 
     #[test]

@@ -6,4 +6,5 @@ pub mod git;
 pub mod kontroll;
 pub mod paner;
 pub mod register;
+pub mod samtaler;
 pub mod sgr;

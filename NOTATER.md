@@ -72,6 +72,14 @@ for `event::poll` i crossterm leser tastene inn i sin egen buffer.
 Det tar flere sekunder før en ny Claude står i registeret. Panen vises derfor
 fra tmux har laget den, med `◌` og «starter …», og nerdr går inn i den.
 
+Tidligere samtaler leses fra transkriptene i `~/.claude/projects/<mappe>/<id>.jsonl`.
+Formatet er internt, som registeret. Tittelen er siste `custom-title` (gitt med
+`/rename`), ellers siste `ai-title`, ellers første linje av siste `last-prompt`.
+Claude Code skriver dem og `cwd` på nytt nær slutten etter hver tur, så bare de
+siste 256 KB leses, også av filer på flere megabyte. Samtaler uten noen av dem
+er tomme, startet og avsluttet uten en melding, og vises ikke. Samtaler som
+står i registeret (`sessionId`), kjører og vises heller ikke.
+
 Uten sesjoner svarer `attach-session` med feilen i blokka fra selve
 oppkoblingen, som tolkeren hopper over. nerdr sjekker derfor med `has-session`
 først, og bruker `new-session` når det ikke finnes noen.

@@ -11,7 +11,7 @@ pub const TASTER: [(&str, &str); 7] = [
     ("⏎", "gå inn i sesjonen"),
     ("C-q", "tilbake til lista"),
     ("n", "ny Claude i en mappe du velger"),
-    ("  C-r", "fortsett en tidligere samtale i mappa"),
+    ("C-r", "fortsett en tidligere samtale"),
     ("?", "denne hjelpen"),
     ("q", "avslutt"),
 ];
