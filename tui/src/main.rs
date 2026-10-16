@@ -45,7 +45,8 @@ enum Hendelse {
 /// kommandoene, så køen holder rede på dem.
 enum Venter {
     Paner,
-    Bilde,
+    /// Innholdet i panen med id-en.
+    Bilde(String),
     Markør,
     /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
     NySesjon { navn: String, mappe: PathBuf, claude: String },
@@ -65,7 +66,10 @@ struct App {
     kontroll: Kontroll,
     kø: VecDeque<Venter>,
 
+    /// Claude-ene og terminalene som hører til dem, i lista.
     paner: Vec<Pane>,
+    /// Alle panene på serveren.
+    alle: Vec<Pane>,
     lister: bool,
     list_igjen: bool,
     sist_listet: Option<Instant>,
@@ -83,9 +87,13 @@ struct App {
     /// der til du går ut, så kortet ikke flytter seg for hver melding.
     låst: Option<(String, Gruppe)>,
 
-    /// Panen som er valgt i lista og vises til høyre.
+    /// Panen som er valgt i lista. Vinduet den står i, vises til høyre.
     valgt: Option<Pane>,
-    bilde: Vec<Linje>,
+    /// Panene i vinduet, der tmux har plassert dem.
+    vindu: Vec<Pane>,
+    /// Pane-id → innholdet.
+    bilder: HashMap<String, Vec<Linje>>,
+    /// Resten gjelder den aktive panen i vinduet, den tastene går til.
     markør: Option<(u16, u16)>,
     /// Panen har slått på mus med SGR-koding, slik Claude Code gjør i fullskjerm.
     pane_mus: bool,
@@ -99,11 +107,11 @@ struct App {
     utdatert: bool,
     henter: bool,
     sist_hentet: Instant,
-    /// Den viste panen er midt i en synkronisert oppdatering.
-    synk: bool,
-    synk_siden: Instant,
-    /// Slutten av forrige `%output`, i tilfelle en synkmarkør er delt over to.
-    output_hale: String,
+    /// Pane-id → siden når panen har vært midt i en synkronisert oppdatering.
+    synk: HashMap<String, Instant>,
+    /// Pane-id → slutten av forrige `%output`, i tilfelle en synkmarkør er
+    /// delt over to.
+    output_hale: HashMap<String, String>,
     /// Visningen klientstørrelsen sist ble sendt for.
     størrelse_for: Option<Rect>,
 
@@ -221,6 +229,7 @@ impl App {
             kontroll,
             kø: VecDeque::new(),
             paner: Vec::new(),
+            alle: Vec::new(),
             lister: false,
             list_igjen: false,
             sist_listet: None,
@@ -230,7 +239,8 @@ impl App {
             sett: HashMap::new(),
             låst: None,
             valgt: None,
-            bilde: Vec::new(),
+            vindu: Vec::new(),
+            bilder: HashMap::new(),
             markør: None,
             pane_mus: false,
             alternativ: false,
@@ -239,9 +249,8 @@ impl App {
             utdatert: false,
             henter: false,
             sist_hentet: Instant::now(),
-            synk: false,
-            synk_siden: Instant::now(),
-            output_hale: String::new(),
+            synk: HashMap::new(),
+            output_hale: HashMap::new(),
             størrelse_for: None,
             fokus: Fokus::Liste,
             visning: Rect::default(),
@@ -297,7 +306,7 @@ impl App {
             return None;
         }
         let intervall = HENTE_INTERVALL.saturating_sub(self.sist_hentet.elapsed());
-        let synk = if self.synk { SYNK_MAKS.saturating_sub(self.synk_siden.elapsed()) } else { Duration::ZERO };
+        let synk = self.synk.values().min().map_or(Duration::ZERO, |siden| SYNK_MAKS.saturating_sub(siden.elapsed()));
         Some(intervall.max(synk))
     }
 
@@ -315,8 +324,8 @@ impl App {
                 None => false,
             },
             Hendelse::Tmux(Melding::Output { pane, data }) => {
-                if self.valgt.as_ref().is_some_and(|p| p.id == pane) {
-                    self.output(&data);
+                if self.vindu.iter().any(|p| p.id == pane) {
+                    self.output(pane, &data);
                 }
                 false
             }
@@ -345,19 +354,22 @@ impl App {
         }
     }
 
-    fn output(&mut self, data: &str) {
+    fn output(&mut self, pane: String, data: &str) {
         self.utdatert = true;
-        let søk = std::mem::take(&mut self.output_hale) + data;
-        if let Some(synk) = synkronisert_etter(&søk) {
-            if synk && !self.synk {
-                self.synk_siden = Instant::now();
+        let søk = self.output_hale.remove(&pane).unwrap_or_default() + data;
+        match synkronisert_etter(&søk) {
+            Some(true) => {
+                self.synk.entry(pane.clone()).or_insert_with(Instant::now);
             }
-            self.synk = synk;
+            Some(false) => {
+                self.synk.remove(&pane);
+            }
+            None => {}
         }
         // Markøren er 11 tegn, så de siste 10 holder for å fange en som er
         // delt mellom to biter.
         let fra = søk.char_indices().rev().nth(9).map_or(0, |(i, _)| i);
-        self.output_hale = søk[fra..].to_string();
+        self.output_hale.insert(pane, søk[fra..].to_string());
     }
 
     fn svar(&mut self, venter: Venter, ok: bool, linjer: Vec<String>) -> bool {
@@ -386,10 +398,14 @@ impl App {
                     alle.iter().map(|p| p.id.as_str()).filter(|id| self.er_claude(id)).collect();
                 let synlig = |p: &Pane| claude.contains(p.id.as_str()) || p.claude.as_deref().is_some_and(|c| claude.contains(c));
                 self.paner = alle.iter().filter(|p| ok && synlig(p)).cloned().collect();
+                self.alle = alle;
                 let valgt = self.valgt.as_ref().and_then(|v| self.paner.iter().find(|p| p.id == v.id));
                 match valgt.cloned() {
                     // Oppdatert, så størrelsen regnes fra det tmux sier nå.
-                    Some(pane) => self.valgt = Some(pane),
+                    Some(pane) => {
+                        self.valgt = Some(pane);
+                        self.oppdater_vindu(None);
+                    }
                     None => {
                         // Tastene du er midt i, skal ikke gå til en annen pane.
                         self.bytt_fokus(Fokus::Liste);
@@ -399,6 +415,7 @@ impl App {
                             self.velg(pane);
                         } else {
                             self.valgt = None;
+                            self.vindu.clear();
                         }
                     }
                 }
@@ -417,9 +434,9 @@ impl App {
                 }
                 true
             }
-            Venter::Bilde => {
-                if ok {
-                    self.bilde = sgr::tolk(&linjer);
+            Venter::Bilde(id) => {
+                if ok && self.vindu.iter().any(|p| p.id == id) {
+                    self.bilder.insert(id, sgr::tolk(&linjer));
                 }
                 false
             }
@@ -523,25 +540,70 @@ impl App {
         // Vinduet må være sesjonens aktive for å få størrelsen fra denne
         // klienten. Det bytter også vindu for andre klienter i samme sesjon.
         self.send(&format!("select-window -t {}", sitat(&pane.vindu_id)), Venter::Ingenting);
+        self.send(&format!("select-pane -t {}", sitat(&pane.id)), Venter::Ingenting);
+        let id = pane.id.clone();
         self.valgt = Some(pane);
-        self.bilde.clear();
+        self.bilder.clear();
+        self.synk.clear();
+        self.output_hale.clear();
+        self.størrelse_for = None;
+        self.oppdater_vindu(Some(&id));
+        self.nullstill_aktiv();
+    }
+
+    /// Henter panene i vinduet til den valgte fra `alle`. `aktiv` overstyrer
+    /// den aktive panen, for et svar fra tmux som kan være eldre enn
+    /// `select-pane`.
+    fn oppdater_vindu(&mut self, aktiv: Option<&str>) {
+        let Some(valgt) = &self.valgt else { return };
+        let før = self.aktiv().map(|p| p.id.clone());
+        self.vindu = self.alle.iter().filter(|p| p.vindu_id == valgt.vindu_id).cloned().collect();
+        if let Some(aktiv) = aktiv {
+            for p in &mut self.vindu {
+                p.aktiv = p.id == aktiv;
+            }
+        }
+        if self.aktiv().map(|p| &p.id) != før.as_ref() {
+            self.nullstill_aktiv();
+        }
+        self.utdatert = true;
+    }
+
+    /// Den aktive panen i vinduet, eller den valgte før vinduet er listet.
+    fn aktiv(&self) -> Option<&Pane> {
+        self.vindu.iter().find(|p| p.aktiv).or(self.valgt.as_ref())
+    }
+
+    fn aktiver(&mut self, id: &str) {
+        self.send(&format!("select-pane -t {}", sitat(id)), Venter::Ingenting);
+        for p in &mut self.vindu {
+            p.aktiv = p.id == id;
+        }
+        self.nullstill_aktiv();
+    }
+
+    fn nullstill_aktiv(&mut self) {
         self.markør = None;
         self.pane_mus = false;
         self.alternativ = false;
         self.historie = 0;
         self.rull = 0;
-        self.størrelse_for = None;
         self.utdatert = true;
-        self.synk = false;
-        self.output_hale.clear();
     }
 
     fn hent(&mut self) {
-        let Some(id) = self.valgt.as_ref().map(|p| sitat(&p.id)) else { return };
-        // Fra -S og ned til bunnen er flere linjer enn visningen, og tegningen
-        // tar de øverste.
-        let fra = if self.rull > 0 { format!(" -S -{}", self.rull) } else { String::new() };
-        self.send(&format!("capture-pane -p -e -N -t {id}{fra}"), Venter::Bilde);
+        let Some(aktiv) = self.aktiv().map(|p| p.id.clone()) else { return };
+        let mut ider: Vec<String> = self.vindu.iter().map(|p| p.id.clone()).collect();
+        if ider.is_empty() {
+            ider.push(aktiv.clone());
+        }
+        for id in ider {
+            // Fra -S og ned til bunnen er flere linjer enn panen, og tegningen
+            // tar de øverste.
+            let fra = if id == aktiv && self.rull > 0 { format!(" -S -{}", self.rull) } else { String::new() };
+            self.send(&format!("capture-pane -p -e -N -t {}{fra}", sitat(&id)), Venter::Bilde(id));
+        }
+        let id = sitat(&aktiv);
         let felt = sitat(
             "#{cursor_x}\t#{cursor_y}\t#{cursor_flag}\t#{&&:#{mouse_any_flag},#{mouse_sgr_flag}}\t\
              #{alternate_on}\t#{history_size}",
@@ -552,20 +614,17 @@ impl App {
         self.sist_hentet = Instant::now();
     }
 
-    /// Klienten får størrelsen som gjør at den valgte panen fyller visningen.
-    /// Resten av vinduet, som paner ved siden av den, legges til.
+    /// Klienten får størrelsen til visningen, så vinduet fyller den.
     ///
     /// Sendes bare når visningen endres eller en ny pane velges, aldri fordi
     /// panene i tmux har endret størrelse. Et tmux-oppsett med en
     /// `client-resized`-hook som endrer panene, gir ellers en løkke.
     fn synk_størrelse(&mut self) {
-        let Some(pane) = &self.valgt else { return };
-        if self.størrelse_for == Some(self.visning) || self.visning.width == 0 {
+        let v = self.visning;
+        if self.valgt.is_none() || self.størrelse_for == Some(v) || v.width == 0 {
             return;
         }
-        let bredde = self.visning.width + pane.vindu_bredde.saturating_sub(pane.bredde);
-        let høyde = self.visning.height + pane.vindu_høyde.saturating_sub(pane.høyde);
-        self.send(&format!("refresh-client -C {bredde}x{høyde}"), Venter::Ingenting);
+        self.send(&format!("refresh-client -C {}x{}", v.width, v.height), Venter::Ingenting);
         self.størrelse_for = Some(self.visning);
         self.utdatert = true;
     }
@@ -607,7 +666,7 @@ impl App {
             return true;
         }
         if self.fokus == Fokus::Pane {
-            if let (Some(pane), Some(args)) = (&self.valgt, taster::send_keys(&k)) {
+            if let (Some(pane), Some(args)) = (self.aktiv(), taster::send_keys(&k)) {
                 let kommando = format!("send-keys -t {} {args}", sitat(&pane.id));
                 self.send(&kommando, Venter::Ingenting);
                 self.rull_til(0);
@@ -639,7 +698,7 @@ impl App {
     /// `paste-buffer -p` legger på markørene for bracketed paste bare når panen
     /// har bedt om dem, og uten dem sender Claude inn ved første linjeskift.
     fn lim_inn(&mut self, tekst: &str) {
-        let Some(pane) = self.valgt.as_ref().filter(|_| self.fokus == Fokus::Pane) else { return };
+        let Some(pane) = self.aktiv().filter(|_| self.fokus == Fokus::Pane) else { return };
         let id = sitat(&pane.id);
         // paste-buffer gjør LF om til CR, så CRLF ville blitt to linjeskift.
         let tekst = tekst.replace("\r\n", "\n");
@@ -681,9 +740,18 @@ impl App {
             self.bytt_fokus(Fokus::Pane);
         }
         let (x, y) = (m.column - v.x, m.row - v.y);
-        let Some(id) = self.valgt.as_ref().filter(|_| x < v.width && y < v.height).map(|p| sitat(&p.id)) else {
+        let inni = |p: &&Pane| (p.venstre..p.venstre + p.bredde).contains(&x) && (p.topp..p.topp + p.høyde).contains(&y);
+        let Some(pane) = self.vindu.iter().find(inni).filter(|_| x < v.width && y < v.height).cloned() else {
             return byttet;
         };
+        if !pane.aktiv {
+            if matches!(m.kind, MouseEventKind::Down(_)) {
+                self.aktiver(&pane.id);
+                return true;
+            }
+            return byttet;
+        }
+        let (id, x, y) = (sitat(&pane.id), x - pane.venstre, y - pane.topp);
         let opp = match m.kind {
             MouseEventKind::ScrollUp => Some(true),
             MouseEventKind::ScrollDown => Some(false),
@@ -730,6 +798,14 @@ impl App {
         };
         if let Some(pane) = &self.valgt {
             self.sett.insert(pane.id.clone(), nå_ms());
+        }
+        // Fra lista går du inn i panen du valgte, også når en annen er aktiv
+        // i vinduet.
+        let valgt = self.valgt.as_ref().map(|p| p.id.clone());
+        if fokus == Fokus::Pane
+            && let Some(id) = valgt.filter(|id| self.aktiv().is_some_and(|a| &a.id != id))
+        {
+            self.aktiver(&id);
         }
         self.fokus = fokus;
     }

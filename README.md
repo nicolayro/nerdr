@@ -44,6 +44,9 @@ programmet der har slått på mus, som Claude Code i fullskjerm. Ellers ruller
 hjulet i historikken, og en tast tar deg tilbake til bunnen. I `less` og `man`
 blir hjulet til piltaster.
 
+Har du delt vinduet i flere paner i tmux, viser nerdr hele vinduet. Tastene går
+til den aktive panen, og et klikk gjør en annen pane aktiv.
+
 Hver Claude viser mappen og branchen den jobber i, og oppgaven under. Lista er
 delt i tre:
 

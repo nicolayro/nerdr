@@ -1,7 +1,7 @@
 //! Lista over paner til venstre og den valgte panen til høyre.
 
 use nerdr_kjerne::paner::Pane;
-use nerdr_kjerne::sgr::{Farge, Stil};
+use nerdr_kjerne::sgr::{Farge, Linje, Stil};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
@@ -43,7 +43,8 @@ pub fn alt(f: &mut Frame, app: &App) {
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
-    } else if let (Fokus::Pane, Some((x, y)), 0) = (app.fokus, app.markør, app.rull) {
+    } else if let (Fokus::Pane, Some((x, y)), 0, Some(aktiv)) = (app.fokus, app.markør, app.rull, app.aktiv()) {
+        let (x, y) = (aktiv.venstre + x, aktiv.topp + y);
         let v = app.visning;
         if x < v.width && y < v.height {
             f.set_cursor_position((v.x + x, v.y + y));
@@ -352,22 +353,81 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
         buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, Style::new().fg(GRÅ));
         return;
     }
-    for (y, linje) in app.bilde.iter().enumerate().take(v.height as usize) {
-        let y = v.y + y as u16;
-        let mut x = v.x;
-        for bit in linje {
-            if x >= v.right() {
-                break;
-            }
-            x = buf.set_stringn(x, y, &bit.tekst, (v.right() - x) as usize, stil(bit.stil)).0;
+    for pane in &app.vindu {
+        let område = Rect::new(v.x + pane.venstre, v.y + pane.topp, pane.bredde, pane.høyde).intersection(v);
+        if let Some(bilde) = app.bilder.get(&pane.id) {
+            tegn_bilde(buf, område, bilde);
         }
     }
-    if app.rull > 0 {
+    if app.vindu.len() > 1 {
+        tegn_rammer(buf, app);
+    }
+    if let (true, Some(aktiv)) = (app.rull > 0, app.aktiv()) {
         let hvor = format!(" {}/{} ", app.rull, app.historie);
         let bredde = hvor.chars().count() as u16;
-        if bredde < v.width {
-            buf.set_string(v.right() - bredde, v.y, hvor, Style::new().fg(ORANSJE).add_modifier(Modifier::REVERSED));
+        let (høyre, y) = (v.x + aktiv.venstre + aktiv.bredde, v.y + aktiv.topp);
+        if bredde < aktiv.bredde && høyre <= v.right() && y < v.bottom() {
+            buf.set_string(høyre - bredde, y, hvor, Style::new().fg(ORANSJE).add_modifier(Modifier::REVERSED));
         }
+    }
+}
+
+fn tegn_bilde(buf: &mut Buffer, område: Rect, bilde: &[Linje]) {
+    for (y, linje) in (område.top()..område.bottom()).zip(bilde) {
+        let mut x = område.x;
+        for bit in linje {
+            if x >= område.right() {
+                break;
+            }
+            x = buf.set_stringn(x, y, &bit.tekst, (område.right() - x) as usize, stil(bit.stil)).0;
+        }
+    }
+}
+
+/// Rutene i vinduet som ingen pane dekker, er rammene tmux legger mellom
+/// dem. Tegnet i hver rute avhenger av hvilke naboer som også er ramme, så
+/// kryss og hjørner blir riktige. Rammen rundt den aktive panen er oransje
+/// når du er inne i vinduet.
+fn tegn_rammer(buf: &mut Buffer, app: &App) {
+    let v = app.visning;
+    let første = &app.vindu[0];
+    let (bredde, høyde) = (første.vindu_bredde.min(v.width), første.vindu_høyde.min(v.height));
+    let dekket = |x: u16, y: u16| {
+        app.vindu.iter().any(|p| (p.venstre..p.venstre + p.bredde).contains(&x) && (p.topp..p.topp + p.høyde).contains(&y))
+    };
+    let ramme = |x: i32, y: i32| {
+        x >= 0 && y >= 0 && x < bredde as i32 && y < høyde as i32 && !dekket(x as u16, y as u16)
+    };
+    let aktiv = app.aktiv().filter(|_| app.fokus == Fokus::Pane);
+    let ved_aktiv = |x: u16, y: u16| {
+        aktiv.is_some_and(|p| x + 1 >= p.venstre && x <= p.venstre + p.bredde && y + 1 >= p.topp && y <= p.topp + p.høyde)
+    };
+    for y in 0..høyde {
+        for x in 0..bredde {
+            if dekket(x, y) {
+                continue;
+            }
+            let (xi, yi) = (x as i32, y as i32);
+            let tegn = rammetegn(ramme(xi, yi - 1), ramme(xi, yi + 1), ramme(xi - 1, yi), ramme(xi + 1, yi));
+            let farge = if ved_aktiv(x, y) { ORANSJE } else { DIM };
+            buf.set_string(v.x + x, v.y + y, tegn, Style::new().fg(farge));
+        }
+    }
+}
+
+fn rammetegn(opp: bool, ned: bool, venstre: bool, høyre: bool) -> &'static str {
+    match (opp, ned, venstre, høyre) {
+        (true, true, true, true) => "┼",
+        (true, true, false, true) => "├",
+        (true, true, true, false) => "┤",
+        (false, true, true, true) => "┬",
+        (true, false, true, true) => "┴",
+        (false, true, false, true) => "┌",
+        (false, true, true, false) => "┐",
+        (true, false, false, true) => "└",
+        (true, false, true, false) => "┘",
+        (_, _, false, false) => "│",
+        _ => "─",
     }
 }
 
@@ -401,6 +461,14 @@ fn farge(f: Farge) -> Color {
 #[cfg(test)]
 mod tester {
     use super::*;
+
+    #[test]
+    fn rammetegn_etter_naboene() {
+        assert_eq!(rammetegn(true, true, false, false), "│");
+        assert_eq!(rammetegn(false, false, true, true), "─");
+        assert_eq!(rammetegn(true, true, false, true), "├");
+        assert_eq!(rammetegn(false, false, false, false), "│");
+    }
 
     #[test]
     fn bryter_på_ord_og_kutter_det_som_ikke_får_plass() {

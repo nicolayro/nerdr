@@ -126,7 +126,7 @@ mod tester {
 
     #[test]
     fn grupperer_med_overskrifter_og_strek_mellom_panene() {
-        let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\tzsh\t")).unwrap();
+        let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\tzsh\t")).unwrap();
         let paner = [pane("%1"), pane("%2"), pane("%3")];
         let rader = rader(&paner, |p| {
             let m = match p.id.as_str() {
@@ -153,7 +153,7 @@ mod tester {
     #[test]
     fn terminalen_står_under_claude_en_sin() {
         let pane = |id: &str, claude: &str| {
-            Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\tzsh\t{claude}")).unwrap()
+            Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\tzsh\t{claude}")).unwrap()
         };
         let paner = [pane("%3", "%2"), pane("%1", ""), pane("%2", ""), pane("%4", "%9")];
         let rader = rader(&paner, |p| match p.id.as_str() {
@@ -176,7 +176,7 @@ mod tester {
 
     #[test]
     fn gruppen_kan_avvike_fra_merket() {
-        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20\tzsh\t").unwrap()];
+        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20\t0\t0\t1\tzsh\t").unwrap()];
         let rader = rader(&paner, |_| Some((Gruppe::Jobber, Merke::Sett)));
         assert_eq!(rader, [Rad::Overskrift(Gruppe::Jobber), Rad::Pane(&paner[0], Merke::Sett)]);
     }
