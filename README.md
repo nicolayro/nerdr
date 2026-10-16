@@ -71,6 +71,7 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
 | `PgUp` | Rull en side opp |
 | `(` `)` | Forrige og neste Claude i lista |
+| `B` | Bytt mellom linjer og bokser |
 | `w` `s` | Tilbake til lista |
 | `d` | Avslutt |
 | `?` | Hjelp |
@@ -116,7 +117,7 @@ som er ferdig, fra en du har sett.
 | | |
 | --- | --- |
 | `NERDR_MAPPER` | Mappene `n` søker i, kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
-| `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `linjer`. |
+| `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `linjer`, og prefikset og `B` bytter mens nerdr kjører. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |
 | `nerdr -L <socket>` | tmux-serveren, som `tmux -L`. |
 

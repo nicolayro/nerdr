@@ -544,6 +544,14 @@ impl App {
                 return;
             }
             KeyCode::Char('d') if !ctrl => return self.ferdig = Some(String::new()),
+            KeyCode::Char('B') => {
+                self.rammer = match self.rammer {
+                    bokser::Rammer::Linjer => bokser::Rammer::Bokser,
+                    bokser::Rammer::Bokser => bokser::Rammer::Linjer,
+                };
+                self.utdatert = true;
+                return;
+            }
             KeyCode::Char('?') => return self.hjelp = true,
             _ => {}
         }

@@ -275,6 +275,14 @@ echo "=== uten split fyller Claude-en hele visningen igjen (68x13, 74x14 med lin
 tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'
 tmux -L nerdr-vert send-keys -t vert C-b w
 
+echo "=== C-b B bytter rammene: alfa går fra 68x13 med bokser til 74x14 med linjer, og tilbake ==="
+for i in 1 2; do
+  tmux -L nerdr-vert send-keys -t vert C-b B
+  sleep 0.8
+  tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
+  tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p'
+done
+
 echo "=== C-b c fra lista lager alfa:1, nerdr er inne i det, og fanene gcat og tmux står øverst (navnet kan være tmux til tmux har gitt det navnet cat) ==="
 tmux -L nerdr-vert send-keys -t vert C-b c
 sleep 1
