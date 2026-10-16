@@ -7,7 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
-use crate::grupper::{Merke, Rad};
+use crate::grupper::{Gruppe, Merke, Rad};
 use crate::{App, Fokus};
 
 /// Bredden på lista, med skillelinja.
@@ -48,30 +48,26 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     let bredde = LISTE - 1;
     let hint_y = område.height.saturating_sub(1);
 
-    let mut y = 0;
-    for rad in app.rader() {
+    for (y, høyde, rad) in plasser(app, hint_y) {
         if y >= hint_y {
             break;
         }
         match rad {
-            Rad::Tom => y += 1,
+            Rad::Tom => {}
             Rad::Strek => {
                 let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
                 buf.set_stringn(TEKST_X, y, strek, TEKST, Style::new().fg(DIM));
-                y += 1;
             }
             Rad::Overskrift(gruppe) => {
                 let x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
                 let strek = "─".repeat(bredde.saturating_sub(x + 1) as usize);
                 buf.set_stringn(x, y, strek, bredde as usize, Style::new().fg(DIM));
-                y += 1;
             }
             Rad::Pane(pane, merke) => {
                 let kort = kort(app, pane);
-                let høyde = kort.høyde().min(hint_y - y);
+                let område = Rect::new(0, y, bredde, høyde.min(hint_y - y));
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
-                tegn_kort(buf, Rect::new(0, y, bredde, høyde), &kort, merke, valgt, app.fokus);
-                y += høyde;
+                tegn_kort(buf, område, &kort, merke, valgt, app.fokus);
             }
         }
     }
@@ -143,20 +139,38 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
     }
 }
 
+/// Radene i lista med y og høyde. Får alt plass, legges SETT nederst, med en
+/// tom rad over hintet, så det du har lagt bort står for seg selv.
+fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
+    let rader = app.rader();
+    let høyder: Vec<u16> = rader
+        .iter()
+        .map(|r| if let Rad::Pane(pane, _) = r { kort(app, pane).høyde() } else { 1 })
+        .collect();
+    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Sett))).unwrap_or(rader.len());
+    let over: u16 = høyder[..sett].iter().sum();
+    let under: u16 = høyder[sett..].iter().sum();
+    let sett_y = if over + under < plass { plass - under - 1 } else { over };
+
+    let mut y = 0;
+    let mut plassert = Vec::with_capacity(rader.len());
+    for (i, (rad, høyde)) in rader.into_iter().zip(høyder).enumerate() {
+        if i == sett {
+            y = sett_y;
+        }
+        plassert.push((y, høyde, rad));
+        y += høyde;
+    }
+    plassert
+}
+
 /// Panen som står på rad `y` i lista.
 pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
-    let mut topp = 0;
-    for rad in app.rader() {
-        let høyde = match &rad {
-            Rad::Pane(pane, _) => kort(app, pane).høyde(),
-            _ => 1,
-        };
-        if y < topp + høyde {
-            return if let Rad::Pane(pane, _) = rad { Some(pane.clone()) } else { None };
-        }
-        topp += høyde;
-    }
-    None
+    let plass = app.visning.height.saturating_sub(1);
+    plasser(app, plass).into_iter().find_map(|(topp, høyde, rad)| match rad {
+        Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
+        _ => None,
+    })
 }
 
 fn kutt(tekst: &str, bredde: usize) -> String {

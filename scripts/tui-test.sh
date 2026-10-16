@@ -69,12 +69,19 @@ printf '{"tmux":"gamma:@0.%s","status":"idle","updatedAt":%s000}' "$pane" "$(dat
 sleep 2.5
 tmux -L nerdr-vert capture-pane -p -t vert | head -7
 
-echo "=== inn i gamma og ut igjen, så står den under SETT med ○ ==="
+echo "=== inn i gamma og ut igjen, så står den under SETT med ○, nederst ==="
 tmux -L nerdr-vert send-keys -t vert j Enter
 sleep 0.3
 tmux -L nerdr-vert send-keys -t vert C-]
 sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | head -7
+tmux -L nerdr-vert capture-pane -p -t vert
+
+echo "=== k opp til alfa, så klikk på gamma nederst (rad 14) velger gamma ==="
+tmux -L nerdr-vert send-keys -t vert k
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;14M\033[<0;5;14m')"
+sleep 0.5
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p;14p'
 
 echo "=== q avslutter ==="
 tmux -L nerdr-vert send-keys -t vert q
