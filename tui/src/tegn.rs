@@ -28,9 +28,11 @@ const LYS: Color = Color::Indexed(252);
 const GRÅ: Color = Color::Indexed(245);
 const DIM: Color = Color::Indexed(240);
 const MARKERT: Color = Color::Indexed(236);
+const LYSERE: Color = Color::Indexed(239);
 
+/// Til høyre for lista, under statuslinja.
 pub fn visning(størrelse: Size) -> Rect {
-    Rect::new(LISTE, 0, størrelse.width.saturating_sub(LISTE), størrelse.height)
+    Rect::new(LISTE, 1, størrelse.width.saturating_sub(LISTE), størrelse.height.saturating_sub(1))
 }
 
 pub fn alt(f: &mut Frame, app: &App) {
@@ -191,7 +193,7 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     })
 }
 
-/// Et vindu i sesjonen, som fane over visningen.
+/// Et vindu i sesjonen, som fane i statuslinja.
 struct Fane {
     fra: u16,
     til: u16,
@@ -201,33 +203,42 @@ struct Fane {
     vist: bool,
 }
 
-/// Fanene når sesjonen har mer enn ett vindu.
 fn faner(app: &App) -> Vec<Fane> {
-    let faner = app.faner();
-    if faner.len() < 2 {
-        return Vec::new();
-    }
-    let mut x = app.visning.x + 1;
+    let mut x = app.visning.x;
     let mut ut = Vec::new();
-    for p in faner {
+    for p in app.faner() {
         let navn = kutt(&p.vindunavn, 20);
         let til = x + (p.vindu.chars().count() + navn.chars().count() + 3) as u16;
         let vist = app.vist.as_ref() == Some(&p.vindu_id);
         ut.push(Fane { fra: x, til, nummer: p.vindu.clone(), navn, vindu: p.vindu_id.clone(), vist });
-        x = til + 1;
+        x = til;
     }
     ut
 }
 
+/// Raden over visningen, som statuslinja i tmux: vinduene i sesjonen til
+/// venstre, og mappe › branch til Claude-en til høyre.
 fn tegn_faner(buf: &mut Buffer, app: &App) {
     let v = app.visning;
     let Some(y) = v.y.checked_sub(1) else { return };
+    buf.set_style(Rect::new(v.x, y, v.width, 1), Style::new().bg(MARKERT));
+    let mut slutt = v.x;
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
-        let (bak, fg, nummer) = if f.vist { (MARKERT, HVIT, ORANSJE) } else { (Color::Reset, GRÅ, DIM) };
+        let (bak, fg, nummer) = if f.vist { (LYSERE, HVIT, ORANSJE) } else { (MARKERT, GRÅ, GRÅ) };
         buf.set_style(Rect::new(f.fra, y, f.til - f.fra, 1), Style::new().bg(bak));
         let x = buf.set_stringn(f.fra + 1, y, &f.nummer, f.nummer.len(), Style::new().fg(nummer).bg(bak)).0;
         let stil = Style::new().fg(fg).bg(bak);
         buf.set_string(x + 1, y, &f.navn, if f.vist { stil.add_modifier(Modifier::BOLD) } else { stil });
+        slutt = f.til;
+    }
+    let Some(valgt) = &app.valgt else { return };
+    let kort = kort(app, valgt);
+    let branch = kort.branch.map(|b| format!(" › {b}")).unwrap_or_default();
+    let bredde = (kort.mappe.chars().count() + branch.chars().count() + 1) as u16;
+    if slutt + bredde + 1 < v.right() {
+        let x = v.right() - bredde;
+        let x = buf.set_stringn(x, y, &kort.mappe, kort.mappe.len(), Style::new().fg(LYS).bg(MARKERT)).0;
+        buf.set_string(x, y, branch, Style::new().fg(GRÅ).bg(MARKERT));
     }
 }
 

@@ -293,10 +293,6 @@ impl App {
         while self.ferdig.is_none() {
             if tegne {
                 self.visning = tegn::visning(terminal.size()?);
-                if self.faner().len() > 1 {
-                    self.visning.y += 1;
-                    self.visning.height = self.visning.height.saturating_sub(1);
-                }
                 // Når teksten i panen ruller, skrives nesten hver celle på nytt.
                 // Uten synkronisert oppdatering kan terminalen vise den halvveis.
                 execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
