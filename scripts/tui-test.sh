@@ -26,7 +26,7 @@ tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
   "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
 sleep 2
 
-echo "=== nerdr etter oppstart (alfa ● og gamma ◐, ingen beta) ==="
+echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
 tmux -L nerdr-vert capture-pane -p -t vert
 echo "=== størrelse på alfa (skal være 74x16) ==="
 tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
@@ -55,12 +55,25 @@ tmux -L nerdr-vert send-keys -t vert C-]
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert j
 sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | head -3
+tmux -L nerdr-vert capture-pane -p -t vert | head -5
 
-echo "=== klikk på første rad velger alfa igjen ==="
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;1M\033[<0;5;1m')"
+echo "=== klikk på andre rad velger alfa igjen ==="
+tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;2M\033[<0;5;2m')"
 sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | head -3
+tmux -L nerdr-vert capture-pane -p -t vert | head -5
+
+echo "=== gamma blir ferdig og havner under VENTER PÅ DEG med ◆ ==="
+pane=$(tmux -L nerdr-maal display-message -p -t gamma '#{pane_id}')
+printf '{"tmux":"gamma:@0.%s","status":"idle","updatedAt":%s000}' "$pane" "$(date +%s)" > "$KONFIG/sessions/gamma.json"
+sleep 2.5
+tmux -L nerdr-vert capture-pane -p -t vert | head -5
+
+echo "=== inn i gamma og ut igjen, så står den under SETT med ○ ==="
+tmux -L nerdr-vert send-keys -t vert j Enter
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert C-]
+sleep 0.5
+tmux -L nerdr-vert capture-pane -p -t vert | head -5
 
 echo "=== q avslutter ==="
 tmux -L nerdr-vert send-keys -t vert q

@@ -28,5 +28,7 @@ Kjør den i en vanlig terminalfane, utenfor tmux.
 Du kan også bruke musen. Klikk i lista velger en Claude, og klikk og musehjul i
 sesjonen går videre til Claude.
 
-Foran hver Claude står `●` når den venter på deg, `◐` når den jobber og `○` når
-den er klar.
+Lista er delt i tre. Under **venter på deg** står de som spør om noe (`●`) og de
+som er ferdige med noe du ikke har sett (`◆`). Så kommer de som **jobber** (`◐`),
+og til slutt de du har **sett** (`○`). En ferdig Claude regnes som sett når du
+har vært inne i den.

@@ -17,6 +17,13 @@ pub enum Tilstand {
     Klar,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Status {
+    pub tilstand: Tilstand,
+    /// Millisekunder siden 1970.
+    pub endret: u64,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Oppføring {
@@ -25,30 +32,31 @@ struct Oppføring {
     status: Option<String>,
     #[serde(default)]
     updated_at: u64,
+    status_updated_at: Option<u64>,
 }
 
-/// Pane-id → tilstand for hver Claude som kjører i tmux.
-pub fn les(katalog: &Path) -> HashMap<String, Tilstand> {
-    let mut nyest: HashMap<String, (u64, Tilstand)> = HashMap::new();
+/// Pane-id → status for hver Claude som kjører i tmux.
+pub fn les(katalog: &Path) -> HashMap<String, Status> {
+    let mut nyest: HashMap<String, (u64, Status)> = HashMap::new();
     let Ok(filer) = fs::read_dir(katalog) else { return HashMap::new() };
     for fil in filer.flatten() {
         let sti = fil.path();
         if sti.extension().is_none_or(|e| e != "json") {
             continue;
         }
-        let Some((pane, oppdatert, tilstand)) = fs::read_to_string(&sti).ok().and_then(|t| tolk(&t)) else {
+        let Some((pane, oppdatert, status)) = fs::read_to_string(&sti).ok().and_then(|t| tolk(&t)) else {
             continue;
         };
         // En sesjon som krasjet, lar fila ligge igjen, og pane-id-en kan være
         // tatt i bruk på nytt. Den sist oppdaterte vinner.
         if nyest.get(&pane).is_none_or(|(t, _)| oppdatert > *t) {
-            nyest.insert(pane, (oppdatert, tilstand));
+            nyest.insert(pane, (oppdatert, status));
         }
     }
-    nyest.into_iter().map(|(pane, (_, tilstand))| (pane, tilstand)).collect()
+    nyest.into_iter().map(|(pane, (_, status))| (pane, status)).collect()
 }
 
-fn tolk(tekst: &str) -> Option<(String, u64, Tilstand)> {
+fn tolk(tekst: &str) -> Option<(String, u64, Status)> {
     let o: Oppføring = serde_json::from_str(tekst).ok()?;
     let tmux = o.tmux?;
     let (_, pane) = tmux.rsplit_once('.')?;
@@ -58,7 +66,8 @@ fn tolk(tekst: &str) -> Option<(String, u64, Tilstand)> {
         "idle" => Tilstand::Klar,
         _ => return None,
     };
-    Some((pane.to_string(), o.updated_at, tilstand))
+    let endret = o.status_updated_at.unwrap_or(o.updated_at);
+    Some((pane.to_string(), o.updated_at, Status { tilstand, endret }))
 }
 
 #[cfg(test)]
@@ -67,8 +76,10 @@ mod tester {
 
     #[test]
     fn leser_pane_og_tilstand() {
-        let t = r#"{"pid":1,"tmux":"sidebar:@7.%37","status":"waiting","waitingFor":"dialog open","updatedAt":5}"#;
-        assert_eq!(tolk(t), Some(("%37".into(), 5, Tilstand::Venter)));
+        let t = r#"{"pid":1,"tmux":"sidebar:@7.%37","status":"waiting","waitingFor":"dialog open","updatedAt":5,"statusUpdatedAt":3}"#;
+        assert_eq!(tolk(t), Some(("%37".into(), 5, Status { tilstand: Tilstand::Venter, endret: 3 })));
+        let uten = r#"{"tmux":"a:@1.%2","status":"idle","updatedAt":5}"#;
+        assert_eq!(tolk(uten).map(|(_, _, s)| s.endret), Some(5));
     }
 
     #[test]
@@ -86,7 +97,8 @@ mod tester {
         fs::write(katalog.join("2.json"), r#"{"tmux":"b:@3.%2","status":"busy","updatedAt":20}"#).unwrap();
         fs::write(katalog.join("2.key"), "hemmelig").unwrap();
 
-        assert_eq!(les(&katalog), HashMap::from([("%2".to_string(), Tilstand::Jobber)]));
+        let jobber = Status { tilstand: Tilstand::Jobber, endret: 20 };
+        assert_eq!(les(&katalog), HashMap::from([("%2".to_string(), jobber)]));
         fs::remove_dir_all(katalog).unwrap();
     }
 }

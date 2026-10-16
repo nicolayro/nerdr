@@ -1,15 +1,17 @@
+mod grupper;
 mod taster;
 mod tegn;
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
+use grupper::{Merke, Rad};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{FELT, Pane};
-use nerdr_kjerne::register::{self, Tilstand};
+use nerdr_kjerne::register::{self, Status};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
@@ -56,8 +58,11 @@ struct App {
     sist_listet: Option<Instant>,
     /// Sesjonsregisteret til Claude Code.
     register: PathBuf,
-    /// Pane-id → tilstand, for panene der en Claude kjører.
-    tilstander: HashMap<String, Tilstand>,
+    /// Pane-id → status, for panene der en Claude kjører.
+    tilstander: HashMap<String, Status>,
+    /// Pane-id → da du sist var inne i panen. En Claude nerdr ikke har sett
+    /// før, regnes som sett, så ingenting havner i «venter på deg» ved oppstart.
+    sett: HashMap<String, u64>,
 
     /// Panen som er valgt i lista og vises til høyre.
     valgt: Option<Pane>,
@@ -143,6 +148,7 @@ impl App {
             sist_listet: None,
             register: registerkatalog(),
             tilstander: HashMap::new(),
+            sett: HashMap::new(),
             valgt: None,
             bilde: Vec::new(),
             markør: None,
@@ -267,6 +273,11 @@ impl App {
                 self.lister = false;
                 self.sist_listet = Some(Instant::now());
                 self.tilstander = register::les(&self.register);
+                let nå = nå_ms();
+                self.sett.retain(|id, _| self.tilstander.contains_key(id));
+                for id in self.tilstander.keys() {
+                    self.sett.entry(id.clone()).or_insert(nå);
+                }
                 self.paner = linjer
                     .iter()
                     .filter_map(|l| Pane::fra_linje(l))
@@ -277,7 +288,7 @@ impl App {
                     // Oppdatert, så størrelsen regnes fra det tmux sier nå.
                     Some(pane) => self.valgt = Some(pane),
                     None => {
-                        if let Some(første) = self.paner.first().cloned() {
+                        if let Some(første) = self.i_rekkefølge().first().cloned() {
                             self.velg(første);
                         } else {
                             self.valgt = None;
@@ -360,10 +371,10 @@ impl App {
 
     fn tast(&mut self, k: KeyEvent) -> bool {
         if taster::er_bytt_fokus(&k) {
-            self.fokus = match self.fokus {
+            self.bytt_fokus(match self.fokus {
                 Fokus::Liste => Fokus::Pane,
                 Fokus::Pane => Fokus::Liste,
-            };
+            });
             return true;
         }
         if self.fokus == Fokus::Pane {
@@ -380,7 +391,7 @@ impl App {
             }
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
-            KeyCode::Enter => self.fokus = Fokus::Pane,
+            KeyCode::Enter => self.bytt_fokus(Fokus::Pane),
             _ => return false,
         }
         true
@@ -400,21 +411,22 @@ impl App {
     fn mus(&mut self, m: MouseEvent) -> bool {
         let v = self.visning;
         if m.column < v.x {
-            let rad = (m.row + 1 < v.height).then(|| self.paner.get(m.row as usize)).flatten();
-            let Some(pane) = rad.cloned() else { return false };
+            let rad = (m.row + 1 < v.height).then(|| self.rader().into_iter().nth(m.row as usize)).flatten();
+            let Some(Rad::Pane(pane, _)) = rad else { return false };
+            let pane = pane.clone();
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
+            self.bytt_fokus(Fokus::Liste);
             if self.valgt.as_ref().map(|p| &p.id) != Some(&pane.id) {
                 self.velg(pane);
             }
-            self.fokus = Fokus::Liste;
             return true;
         }
 
         let byttet = matches!(m.kind, MouseEventKind::Down(_)) && self.fokus != Fokus::Pane;
         if byttet {
-            self.fokus = Fokus::Pane;
+            self.bytt_fokus(Fokus::Pane);
         }
         let (x, y) = (m.column - v.x, m.row - v.y);
         if self.pane_mus
@@ -429,17 +441,43 @@ impl App {
     }
 
     fn flytt(&mut self, steg: isize) {
-        if self.paner.is_empty() {
+        let paner = self.i_rekkefølge();
+        if paner.is_empty() {
             return;
         }
-        let nå = self
-            .valgt
-            .as_ref()
-            .and_then(|v| self.paner.iter().position(|p| p.id == v.id))
-            .unwrap_or(0);
-        let ny = (nå as isize + steg).clamp(0, self.paner.len() as isize - 1) as usize;
+        let nå = self.valgt.as_ref().and_then(|v| paner.iter().position(|p| p.id == v.id)).unwrap_or(0);
+        let ny = (nå as isize + steg).clamp(0, paner.len() as isize - 1) as usize;
         if ny != nå {
-            self.velg(self.paner[ny].clone());
+            self.velg(paner[ny].clone());
         }
     }
+
+    fn bytt_fokus(&mut self, fokus: Fokus) {
+        if fokus != self.fokus
+            && let Some(pane) = &self.valgt
+        {
+            self.sett.insert(pane.id.clone(), nå_ms());
+        }
+        self.fokus = fokus;
+    }
+
+    fn merke(&self, pane: &Pane) -> Option<Merke> {
+        let status = *self.tilstander.get(&pane.id)?;
+        let inne = self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| v.id == pane.id);
+        let sett = if inne { u64::MAX } else { self.sett.get(&pane.id).copied().unwrap_or(0) };
+        Some(Merke::fra(status, sett))
+    }
+
+    fn rader(&self) -> Vec<Rad<'_>> {
+        grupper::rader(&self.paner, |p| self.merke(p))
+    }
+
+    fn i_rekkefølge(&self) -> Vec<Pane> {
+        let rader = self.rader();
+        rader.into_iter().filter_map(|r| if let Rad::Pane(p, _) = r { Some(p.clone()) } else { None }).collect()
+    }
+}
+
+fn nå_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }

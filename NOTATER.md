@@ -40,6 +40,12 @@ den er satt. Bare paner som står der, vises. `status` er `waiting`, `busy` elle
 `idle`, og `tmux` sier hvilken pane sesjonen kjører i (`sesjon:@vindu.%pane`).
 Formatet er internt og ikke dokumentert, så ukjente verdier gir ingen tilstand.
 
+Registeret skiller ikke mellom en Claude som er ferdig med noe du ikke har sett,
+og en du har lest og latt ligge. Begge er `idle`. nerdr husker derfor når du sist
+var inne i hver pane, og en `idle` med nyere `statusUpdatedAt` står under
+«venter på deg». Det huskes ikke mellom kjøringer, så ved oppstart regnes alle
+som sett.
+
 Skjermbildet hentes med `capture-pane -e` når tmux melder `%output` for panen
 som vises, høyst 60 ganger i sekundet. Claude Code tømmer og tegner hele
 skjermen i hver oppdatering, pakket i en synkronisert oppdatering

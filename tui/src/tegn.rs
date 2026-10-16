@@ -1,12 +1,12 @@
 //! Lista over paner til venstre og den valgte panen til høyre.
 
-use nerdr_kjerne::register::Tilstand;
 use nerdr_kjerne::sgr::{Farge, Stil};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::grupper::{Merke, Rad};
 use crate::{App, Fokus};
 
 /// Bredden på lista, med skillelinja.
@@ -42,18 +42,28 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     let bredde = LISTE - 1;
     let hint_y = område.height.saturating_sub(1);
 
-    for (y, pane) in app.paner.iter().enumerate().take(hint_y as usize) {
+    for (y, rad) in app.rader().into_iter().enumerate().take(hint_y as usize) {
         let y = y as u16;
+        let (pane, merke) = match rad {
+            Rad::Tom => continue,
+            Rad::Overskrift(gruppe) => {
+                let x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
+                let strek = "─".repeat(bredde.saturating_sub(x + 1) as usize);
+                buf.set_stringn(x, y, strek, bredde as usize, Style::new().fg(DIM));
+                continue;
+            }
+            Rad::Pane(pane, merke) => (pane, merke),
+        };
         let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
         if valgt && app.fokus == Fokus::Liste {
             buf.set_style(Rect::new(0, y, bredde, 1), Style::new().bg(MARKERT));
         }
         let (peker, farge) = if valgt { ("▎", HVIT) } else { (" ", LYS) };
-        let (glyf, glyffarge) = match app.tilstander.get(&pane.id) {
-            Some(Tilstand::Venter) => ("●", ORANSJE),
-            Some(Tilstand::Jobber) => ("◐", GRØNN),
-            Some(Tilstand::Klar) => ("○", LYS),
-            None => (" ", DIM),
+        let (glyf, glyffarge) = match merke {
+            Merke::Spør => ("●", ORANSJE),
+            Merke::Ferdig => ("◆", ORANSJE),
+            Merke::Jobber => ("◐", GRØNN),
+            Merke::Sett => ("○", LYS),
         };
         let navn = format!("{}:{} ", pane.sesjon, pane.vindu);
         let x = buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT)).0;
