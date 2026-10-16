@@ -64,8 +64,8 @@ for status in idle waiting; do
   [ $status = idle ] && tmux -L nerdr-vert capture-pane -p -t vert | head -3
 done
 
-echo "=== C-] tilbake, j ned til gamma ==="
-tmux -L nerdr-vert send-keys -t vert C-]
+echo "=== C-q tilbake, j ned til gamma ==="
+tmux -L nerdr-vert send-keys -t vert C-q
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert j
 sleep 1
@@ -85,7 +85,7 @@ tmux -L nerdr-vert capture-pane -p -t vert | head -7
 echo "=== inn i gamma og ut igjen, så står den under SETT med ○, nederst ==="
 tmux -L nerdr-vert send-keys -t vert j Enter
 sleep 0.3
-tmux -L nerdr-vert send-keys -t vert C-]
+tmux -L nerdr-vert send-keys -t vert C-q
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert
 
@@ -120,7 +120,7 @@ sleep 2.5
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '5,8p;16p'
 
 echo "=== samme mappe igjen gir et nytt vindu i prosjekt-ny (skal være 2) ==="
-tmux -L nerdr-vert send-keys -t vert C-]
+tmux -L nerdr-vert send-keys -t vert C-q
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert n
 sleep 0.3
@@ -131,7 +131,7 @@ sleep 0.8
 tmux -L nerdr-maal list-windows -t prosjekt-ny | wc -l
 
 echo "=== Esc i popupen går tilbake til lista uten ny sesjon (skal være 4 sesjoner) ==="
-tmux -L nerdr-vert send-keys -t vert C-]
+tmux -L nerdr-vert send-keys -t vert C-q
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert n
 sleep 0.3

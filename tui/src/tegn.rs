@@ -79,7 +79,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
 
     let hint = match app.fokus {
         Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · q avslutt",
-        Fokus::Pane => " C-] tilbake til lista",
+        Fokus::Pane => " C-q tilbake til lista",
     };
     buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(GRÅ));
 

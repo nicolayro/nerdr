@@ -22,7 +22,7 @@ Kjør den i en vanlig terminalfane, utenfor tmux.
 | --- | --- |
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
-| `C-]` | Tilbake til lista |
+| `C-q` | Tilbake til lista |
 | `n` | Ny Claude i en mappe du velger |
 | `q` | Avslutt, fra lista |
 

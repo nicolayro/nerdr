@@ -2,10 +2,10 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-/// Ctrl-] bytter mellom lista og panen. Terminalen sender 0x1d for den, og
-/// crossterm melder 0x1c–0x1f som Ctrl-4 til Ctrl-7.
+/// Ctrl-Q bytter mellom lista og panen. Claude Code bruker den ikke, og den
+/// ligger lett til også på nordiske tastatur, der `]` krever Option.
 pub fn er_bytt_fokus(k: &KeyEvent) -> bool {
-    k.modifiers.contains(KeyModifiers::CONTROL) && matches!(k.code, KeyCode::Char(']' | '5'))
+    k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('q')
 }
 
 /// Tegn sendes som hex-bytes, så ingenting i dem kan tolkes av tmux sin
