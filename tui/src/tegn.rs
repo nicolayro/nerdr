@@ -221,16 +221,17 @@ fn faner(app: &App) -> Vec<Fane> {
 }
 
 /// Raden over visningen, med vinduene i sesjonen. Hele raden er understreket,
-/// så streken står under fanene uten en egen rad.
+/// så streken står under fanene uten en egen rad. Understreken har tekstfargen,
+/// så all tekst i raden har samme farge for at streken skal bli ensfarget.
 fn tegn_faner(buf: &mut Buffer, app: &App) {
     let v = app.visning;
     let Some(y) = v.y.checked_sub(1) else { return };
-    let strek = Style::new().fg(DIM).add_modifier(Modifier::UNDERLINED);
+    let strek = Style::new().fg(GRÅ).add_modifier(Modifier::UNDERLINED);
     buf.set_string(v.x, y, " ".repeat(v.width as usize), strek);
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
         let stil = match f.vist {
-            true => strek.fg(HVIT).bg(MARKERT).add_modifier(Modifier::BOLD),
-            false => strek.fg(GRÅ),
+            true => strek.bg(MARKERT).add_modifier(Modifier::BOLD),
+            false => strek,
         };
         buf.set_string(f.fra, y, format!(" {} ", f.navn), stil);
     }
