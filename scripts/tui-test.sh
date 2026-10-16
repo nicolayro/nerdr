@@ -242,6 +242,17 @@ tmux -L nerdr-vert send-keys -t vert C-b z
 sleep 0.8
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
 
+echo "=== C-b ) og C-b ( bytter fra den delte alfa til neste Claude og til en annen igjen uten at noe vindu endrer størrelse (ingen linjer) ==="
+tmux -L nerdr-maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}x#{window_height} >> $KONFIG/storrelser'"
+tmux -L nerdr-vert send-keys -t vert C-b ')'
+sleep 0.8
+tmux -L nerdr-vert send-keys -t vert C-b '('
+sleep 0.8
+cat "$KONFIG/storrelser" 2>/dev/null
+tmux -L nerdr-maal set-hook -gu window-resized
+tmux -L nerdr-vert send-keys -t vert C-b w k k k k k k k k Enter
+sleep 0.5
+
 echo "=== C-b o, C-b x spør, n lar panen stå, og y lukker den (2, så 1) ==="
 tmux -L nerdr-vert send-keys -t vert C-b o C-b x
 sleep 0.3

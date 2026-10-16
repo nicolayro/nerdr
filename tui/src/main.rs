@@ -125,7 +125,7 @@ struct App {
     /// delt over to.
     output_hale: HashMap<String, String>,
     /// Visningen og rutene boksene trengte, da klientstørrelsen sist ble sendt.
-    størrelse_for: Option<(Rect, (u16, u16))>,
+    størrelser: HashMap<String, (u16, u16)>,
 
     fokus: Fokus,
     prefiks: taster::Prefiks,
@@ -271,7 +271,7 @@ impl App {
             sist_hentet: Instant::now(),
             synk: HashMap::new(),
             output_hale: HashMap::new(),
-            størrelse_for: None,
+            størrelser: HashMap::new(),
             fokus: Fokus::Liste,
             prefiks: taster::Prefiks::default(),
             rammer: bokser::Rammer::fra(env::var(bokser::RAMMER_VARIABEL).ok().as_deref()),
@@ -424,6 +424,7 @@ impl App {
                     .filter(|p| ok && (self.sesjoner.contains_key(&p.id) || self.nye.contains_key(&p.id)))
                     .cloned()
                     .collect();
+                self.størrelser.retain(|vindu, _| alle.iter().any(|p| &p.vindu_id == vindu));
                 self.alle = alle;
                 let valgt = self.valgt.as_ref().and_then(|v| self.paner.iter().find(|p| p.id == v.id));
                 match valgt.cloned() {
@@ -636,6 +637,7 @@ impl App {
             self.velg(claude);
         } else {
             let sesjon = self.alle.iter().find(|p| p.vindu_id == vindu).map(|p| p.sesjon_id.clone());
+            self.synk_størrelse_for(&vindu);
             if let Some(sesjon) = sesjon.filter(|s| self.vindu.first().map(|p| &p.sesjon_id) != Some(s)) {
                 self.send(&format!("switch-client -t {}", sitat(&sesjon)), Venter::Ingenting);
             }
@@ -654,7 +656,6 @@ impl App {
         self.bilder.clear();
         self.synk.clear();
         self.output_hale.clear();
-        self.størrelse_for = None;
         self.oppdater_vindu(aktiv);
         self.nullstill_aktiv();
     }
@@ -679,6 +680,7 @@ impl App {
     }
 
     fn velg(&mut self, pane: Pane) {
+        self.synk_størrelse_for(&pane.vindu_id);
         if self.valgt.as_ref().map(|p| &p.sesjon_id) != Some(&pane.sesjon_id) {
             self.send(&format!("switch-client -t {}", sitat(&pane.sesjon_id)), Venter::Ingenting);
         }
@@ -705,7 +707,6 @@ impl App {
         if let Some(lukket) = lukket.cloned() {
             let gjeldende = self.alle.iter().find(|p| p.sesjon_id == lukket.sesjon_id && p.vindu_aktiv);
             self.vist = gjeldende.or(self.valgt.as_ref()).map(|p| p.vindu_id.clone());
-            self.størrelse_for = None;
         }
         let Some(vist) = self.vist.clone() else { return };
         let før = self.aktiv().map(|p| p.id.clone());
@@ -787,23 +788,39 @@ impl App {
         self.sist_hentet = Instant::now();
     }
 
-    /// Klienten får størrelsen til visningen, minus rutene rammene rundt
-    /// boksene trenger, så vinduet fyller visningen.
+    /// Vinduet får størrelsen til visningen, minus rutene rammene trenger.
     ///
-    /// Sendes bare når visningen endres, en ny pane velges eller vinduet deles
-    /// på en annen måte, aldri fordi panene i tmux har endret størrelse. Et
-    /// tmux-oppsett med en `client-resized`-hook som endrer panene, gir ellers
-    /// en løkke.
+    /// Størrelsen settes for hvert vindu, ikke for klienten. Da får ikke et
+    /// vindu du bytter til, størrelsen til det forrige før sin egen, og Claude
+    /// Code tegner seg ikke på nytt to ganger. Klienten får den samme, for
+    /// vinduer nerdr ikke har satt størrelse for ennå.
+    ///
+    /// Sendes bare når visningen endres eller vinduet deles på en annen måte,
+    /// aldri fordi panene i tmux har endret størrelse. Et tmux-oppsett med en
+    /// `client-resized`-hook som endrer panene, gir ellers en løkke.
     fn synk_størrelse(&mut self) {
+        if let Some(vist) = self.vist.clone().filter(|_| !self.vindu.is_empty()) {
+            self.synk_størrelse_for(&vist);
+        }
+    }
+
+    fn synk_størrelse_for(&mut self, vindu: &str) {
         let v = self.visning;
-        let ekstra = self.oppsett().map_or((0, 0), |o| bokser::ekstra(&o, self.rammer));
-        let ukjent = self.valgt.is_none() || self.vindu.is_empty();
-        if ukjent || self.størrelse_for == Some((v, ekstra)) || v.width <= ekstra.0 || v.height <= ekstra.1 {
+        let Some(oppsett) = self.alle.iter().find(|p| p.vindu_id == vindu).and_then(|p| oppsett::tolk(&p.oppsett)) else {
+            return;
+        };
+        let ekstra = bokser::ekstra(&oppsett, self.rammer);
+        if v.width <= ekstra.0 || v.height <= ekstra.1 {
             return;
         }
-        let (bredde, høyde) = (v.width - ekstra.0, v.height - ekstra.1);
+        let størrelse = (v.width - ekstra.0, v.height - ekstra.1);
+        if self.størrelser.get(vindu) == Some(&størrelse) {
+            return;
+        }
+        let (bredde, høyde) = størrelse;
+        self.send(&format!("refresh-client -C {}", sitat(&format!("{vindu}:{bredde}x{høyde}"))), Venter::Ingenting);
         self.send(&format!("refresh-client -C {bredde}x{høyde}"), Venter::Ingenting);
-        self.størrelse_for = Some((v, ekstra));
+        self.størrelser.insert(vindu.to_string(), størrelse);
         self.utdatert = true;
     }
 

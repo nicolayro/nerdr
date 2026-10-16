@@ -29,7 +29,6 @@ const GRÅ: Color = Color::Indexed(245);
 const DIM: Color = Color::Indexed(240);
 const MARKERT: Color = Color::Indexed(236);
 const STATUS: Color = Color::Indexed(235);
-const STATUS_AKTIV: Color = Color::Indexed(238);
 
 /// Til høyre for lista, under statuslinja.
 pub fn visning(størrelse: Size) -> Rect {
@@ -228,10 +227,11 @@ fn tegn_faner(buf: &mut Buffer, app: &App) {
         if f.fra > v.x {
             buf.set_string(f.fra - 1, y, "│", Style::new().fg(DIM).bg(STATUS));
         }
-        let (bak, fg) = if f.vist { (STATUS_AKTIV, HVIT) } else { (STATUS, GRÅ) };
-        let stil = Style::new().fg(fg).bg(bak);
-        buf.set_style(Rect::new(f.fra, y, f.til - f.fra, 1), stil);
-        buf.set_string(f.fra + 1, y, &f.navn, if f.vist { stil.add_modifier(Modifier::BOLD) } else { stil });
+        let stil = match f.vist {
+            true => Style::new().fg(HVIT).bg(STATUS).add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            false => Style::new().fg(GRÅ).bg(STATUS),
+        };
+        buf.set_string(f.fra + 1, y, &f.navn, stil);
         slutt = f.til;
     }
     let Some(valgt) = &app.valgt else { return };
