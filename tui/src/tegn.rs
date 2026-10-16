@@ -8,6 +8,7 @@ use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::grupper::{Gruppe, Merke, Rad};
+use crate::ny::Velger;
 use crate::{App, Fokus};
 
 /// Bredden på lista, med skillelinja.
@@ -17,6 +18,7 @@ pub const LISTE: u16 = 36;
 const TEKST_X: u16 = 4;
 const TEKST: usize = (LISTE - 1 - TEKST_X - 1) as usize;
 const OPPGAVE_LINJER: usize = 2;
+const VELGER_LINJER: u16 = 12;
 
 const ORANSJE: Color = Color::Rgb(217, 119, 87);
 const GRØNN: Color = Color::Indexed(108);
@@ -36,7 +38,10 @@ pub fn alt(f: &mut Frame, app: &App) {
     tegn_liste(buf, område, app);
     tegn_pane(buf, app);
 
-    if let (Fokus::Pane, Some((x, y))) = (app.fokus, app.markør) {
+    if let Some(velger) = &app.velger {
+        let markør = tegn_velger(buf, område, velger);
+        f.set_cursor_position(markør);
+    } else if let (Fokus::Pane, Some((x, y))) = (app.fokus, app.markør) {
         let v = app.visning;
         if x < v.width && y < v.height {
             f.set_cursor_position((v.x + x, v.y + y));
@@ -73,7 +78,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     }
 
     let hint = match app.fokus {
-        Fokus::Liste => " ↑↓ velg · ⏎ gå inn · q avslutt",
+        Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · q avslutt",
         Fokus::Pane => " C-] tilbake til lista",
     };
     buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(GRÅ));
@@ -97,16 +102,19 @@ impl Kort {
 }
 
 fn kort(app: &App, pane: &Pane) -> Kort {
+    let ny = app.nye.get(&pane.id);
     let mappe = app
         .sesjoner
         .get(&pane.id)
-        .and_then(|s| s.mappe.as_deref()?.file_name()?.to_str())
+        .and_then(|s| s.mappe.as_deref())
+        .or(ny.map(|m| m.as_path()))
+        .and_then(|m| m.file_name()?.to_str())
         .map_or_else(|| format!("{}:{}", pane.sesjon, pane.vindu), str::to_string);
-    Kort {
-        mappe,
-        branch: app.brancher.get(&pane.id).cloned(),
-        oppgave: pane.oppgave().map(|o| bryt(o, TEKST, OPPGAVE_LINJER)).unwrap_or_default(),
-    }
+    let oppgave = match ny {
+        Some(_) => vec!["starter …".to_string()],
+        None => pane.oppgave().map(|o| bryt(o, TEKST, OPPGAVE_LINJER)).unwrap_or_default(),
+    };
+    Kort { mappe, branch: app.brancher.get(&pane.id).cloned(), oppgave }
 }
 
 fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus) {
@@ -122,6 +130,7 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
         Merke::Ferdig => ("◆", ORANSJE),
         Merke::Jobber => ("◐", GRØNN),
         Merke::Sett => ("○", LYS),
+        Merke::Starter => ("◌", GRØNN),
     };
     let y = område.y;
     buf.set_stringn(1, y, glyf, 1, Style::new().fg(glyffarge));
@@ -173,6 +182,57 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     })
 }
 
+/// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
+fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
+    let bredde = område.width.saturating_sub(4).min(64);
+    let høyde = område.height.saturating_sub(4).min(VELGER_LINJER + 4);
+    let boks = Rect::new((område.width - bredde) / 2, (område.height - høyde) / 3, bredde, høyde);
+    if bredde < 12 || høyde < 5 {
+        return (boks.x, boks.y);
+    }
+    let indre = (bredde - 4) as usize;
+    let ramme = Style::new().fg(ORANSJE);
+    buf.set_style(boks, Style::reset());
+    for y in boks.top()..boks.bottom() {
+        let (v, h) = match y {
+            y if y == boks.top() => ("╭", "╮"),
+            y if y == boks.bottom() - 1 => ("╰", "╯"),
+            _ => ("│", "│"),
+        };
+        let fyll = if y == boks.top() || y == boks.bottom() - 1 { "─" } else { " " };
+        buf.set_string(boks.x, y, format!("{v}{}{h}", fyll.repeat(bredde as usize - 2)), ramme);
+    }
+    buf.set_string(boks.x + 2, boks.y, " ny claude ", Style::new().fg(HVIT).add_modifier(Modifier::BOLD));
+    buf.set_string(boks.x + 2, boks.bottom() - 1, " ⏎ start · esc avbryt ", Style::new().fg(GRÅ));
+
+    let treff = velger.treff();
+    let x = boks.x + 2;
+    let y = boks.y + 1;
+    let prompt = "mappe › ";
+    let søk = kutt(&velger.søk, indre.saturating_sub(prompt.chars().count() + 8));
+    let etter = buf.set_stringn(x, y, prompt, indre, Style::new().fg(ORANSJE)).0;
+    let markør = buf.set_stringn(etter, y, &søk, indre, Style::new().fg(HVIT)).0;
+    let antall = format!("{}/{}", treff.len(), velger.antall());
+    buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, Style::new().fg(DIM));
+
+    let linjer = (høyde - 3) as usize;
+    let fra = velger.valgt.saturating_sub(linjer - 1);
+    for (i, t) in treff.iter().enumerate().skip(fra).take(linjer) {
+        let y = boks.y + 2 + (i - fra) as u16;
+        let valgt = i == velger.valgt;
+        if valgt {
+            buf.set_style(Rect::new(boks.x + 1, y, bredde - 2, 1), Style::new().bg(MARKERT));
+            buf.set_string(boks.x + 1, y, "▎", Style::new().fg(HVIT));
+        }
+        let farge = if valgt { HVIT } else { LYS };
+        for (n, c) in kutt(&t.kandidat.vis, indre).chars().enumerate() {
+            let stil = if t.tegn.contains(&n) { Style::new().fg(ORANSJE) } else { Style::new().fg(farge) };
+            buf.set_string(x + n as u16, y, c.encode_utf8(&mut [0; 4]), stil);
+        }
+    }
+    (markør, y)
+}
+
 fn kutt(tekst: &str, bredde: usize) -> String {
     if tekst.chars().count() <= bredde {
         return tekst.to_string();
@@ -210,7 +270,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
         return;
     }
     if app.valgt.is_none() {
-        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux.", v.width as usize, Style::new().fg(GRÅ));
+        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, Style::new().fg(GRÅ));
         return;
     }
     for (y, linje) in app.bilde.iter().enumerate().take(v.height as usize) {

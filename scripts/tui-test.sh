@@ -7,6 +7,8 @@ NERDR=$HER/../target/debug/nerdr
 FALSK=$HER/falsk-claude.sh
 KONFIG=$(mktemp -d)
 mkdir "$KONFIG/sessions"
+# HOME for nerdr, så mappevelgeren viser disse mappene og ikke brukerens egne.
+mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/fagdag/tredje"
 
 tmux -L nerdr-maal kill-server 2>/dev/null
 tmux -L nerdr-vert kill-server 2>/dev/null
@@ -14,6 +16,9 @@ tmux -L nerdr-vert kill-server 2>/dev/null
 tmux -L nerdr-maal -f /dev/null new-session -d -s alfa -x 80 -y 20 "sh $FALSK"
 tmux -L nerdr-maal new-session -d -s beta -x 80 -y 20 /bin/sh
 tmux -L nerdr-maal new-session -d -s gamma -x 80 -y 20 /bin/cat
+# Nye sesjoner får cat i stedet for et skall, så «claude» som skrives inn,
+# bare blir stående.
+tmux -L nerdr-maal set -g default-command /bin/cat
 
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
 for linje in "alfa waiting" "gamma busy"; do
@@ -23,7 +28,7 @@ for linje in "alfa waiting" "gamma busy"; do
 done
 
 tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
-  "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
+  "HOME=$KONFIG CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
@@ -90,6 +95,50 @@ sleep 0.3
 tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;14M\033[<0;5;14m')"
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p;14p'
+
+echo "=== n åpner popupen med mappene under ~/git, ~/worktree og ~/fagdag ==="
+tmux -L nerdr-vert send-keys -t vert n
+sleep 0.5
+tmux -L nerdr-vert capture-pane -p -t vert
+
+echo "=== «pny» sorterer prosjekt.ny øverst ==="
+tmux -L nerdr-vert send-keys -t vert -l pny
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '4,7p'
+
+echo "=== Enter lager sesjonen prosjekt-ny, skriver inn claude, og nerdr er inne i den med ◌ og «starter …» ==="
+tmux -L nerdr-vert send-keys -t vert Enter
+sleep 0.8
+tmux -L nerdr-maal list-sessions -F '#{session_name} #{pane_current_path}' | grep prosjekt
+tmux -L nerdr-maal capture-pane -p -t prosjekt-ny | grep -c claude
+tmux -L nerdr-vert capture-pane -p -t vert
+
+echo "=== når den står i registeret, får den vanlig merke og mister «starter …» ==="
+pane=$(tmux -L nerdr-maal display-message -p -t prosjekt-ny '#{pane_id}')
+printf '{"tmux":"prosjekt-ny:@0.%s","status":"idle","cwd":"%s","updatedAt":%s000}' "$pane" "$KONFIG/git/prosjekt.ny" "$(date +%s)" > "$KONFIG/sessions/ny.json"
+sleep 2.5
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '5,8p;16p'
+
+echo "=== samme mappe igjen gir et nytt vindu i prosjekt-ny (skal være 2) ==="
+tmux -L nerdr-vert send-keys -t vert C-]
+sleep 0.2
+tmux -L nerdr-vert send-keys -t vert n
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert -l pny
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert Enter
+sleep 0.8
+tmux -L nerdr-maal list-windows -t prosjekt-ny | wc -l
+
+echo "=== Esc i popupen går tilbake til lista uten ny sesjon (skal være 4 sesjoner) ==="
+tmux -L nerdr-vert send-keys -t vert C-]
+sleep 0.2
+tmux -L nerdr-vert send-keys -t vert n
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert Escape
+sleep 0.5
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '4p;16p'
+tmux -L nerdr-maal list-sessions | wc -l
 
 echo "=== q avslutter ==="
 tmux -L nerdr-vert send-keys -t vert q

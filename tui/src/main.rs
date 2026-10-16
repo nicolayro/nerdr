@@ -1,4 +1,5 @@
 mod grupper;
+mod ny;
 mod taster;
 mod tegn;
 
@@ -41,6 +42,9 @@ enum Venter {
     Paner,
     Bilde,
     Markør,
+    /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
+    NySesjon { navn: String, mappe: PathBuf },
+    NyPane { mappe: PathBuf },
     Ingenting,
 }
 
@@ -56,6 +60,7 @@ struct App {
 
     paner: Vec<Pane>,
     lister: bool,
+    list_igjen: bool,
     sist_listet: Option<Instant>,
     /// Sesjonsregisteret til Claude Code.
     register: PathBuf,
@@ -89,6 +94,13 @@ struct App {
 
     fokus: Fokus,
     visning: Rect,
+    /// Mappevelgeren, når den er oppe.
+    velger: Option<ny::Velger>,
+    /// Pane-id → mappe for Claude-er nerdr har startet, til de står i
+    /// registeret. Oppstarten tar flere sekunder, og så lenge vises de likevel.
+    nye: HashMap<String, PathBuf>,
+    /// Panen nerdr skal gå inn i når den dukker opp i `list-panes`.
+    gå_inn_i: Option<String>,
     ferdig: Option<String>,
 }
 
@@ -151,6 +163,7 @@ impl App {
             kø: VecDeque::new(),
             paner: Vec::new(),
             lister: false,
+            list_igjen: false,
             sist_listet: None,
             register: registerkatalog(),
             sesjoner: HashMap::new(),
@@ -170,6 +183,9 @@ impl App {
             størrelse_for: None,
             fokus: Fokus::Liste,
             visning: Rect::default(),
+            velger: None,
+            nye: HashMap::new(),
+            gå_inn_i: None,
             ferdig: None,
         }
     }
@@ -251,10 +267,16 @@ impl App {
             }
             Hendelse::Term(Event::Key(k)) if k.kind == KeyEventKind::Press => self.tast(k),
             Hendelse::Term(Event::Mouse(m)) => self.mus(m),
-            Hendelse::Term(Event::Paste(tekst)) => {
-                self.lim_inn(&tekst);
-                false
-            }
+            Hendelse::Term(Event::Paste(tekst)) => match &mut self.velger {
+                Some(velger) => {
+                    velger.skriv(&tekst);
+                    true
+                }
+                None => {
+                    self.lim_inn(&tekst);
+                    false
+                }
+            },
             Hendelse::Term(Event::Resize(..)) => true,
             Hendelse::Term(_) => false,
         }
@@ -286,15 +308,20 @@ impl App {
                 for id in self.sesjoner.keys() {
                     self.sett.entry(id.clone()).or_insert(nå);
                 }
+                let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
+                if ok {
+                    self.nye.retain(|id, _| !self.sesjoner.contains_key(id) && alle.iter().any(|p| &p.id == id));
+                }
                 self.brancher = self
                     .sesjoner
                     .iter()
-                    .filter_map(|(id, s)| Some((id.clone(), git::branch(s.mappe.as_deref()?)?)))
+                    .filter_map(|(id, s)| Some((id, s.mappe.as_deref()?)))
+                    .chain(self.nye.iter().map(|(id, m)| (id, m.as_path())))
+                    .filter_map(|(id, mappe)| Some((id.clone(), git::branch(mappe)?)))
                     .collect();
-                self.paner = linjer
-                    .iter()
-                    .filter_map(|l| Pane::fra_linje(l))
-                    .filter(|p| ok && self.sesjoner.contains_key(&p.id))
+                self.paner = alle
+                    .into_iter()
+                    .filter(|p| ok && (self.sesjoner.contains_key(&p.id) || self.nye.contains_key(&p.id)))
                     .collect();
                 let valgt = self.valgt.as_ref().and_then(|v| self.paner.iter().find(|p| p.id == v.id));
                 match valgt.cloned() {
@@ -307,6 +334,19 @@ impl App {
                             self.valgt = None;
                         }
                     }
+                }
+                let ny = self.gå_inn_i.as_ref().and_then(|id| self.paner.iter().find(|p| &p.id == id));
+                if let Some(pane) = ny.cloned() {
+                    self.gå_inn_i = None;
+                    // Er du inne i en annen Claude, skal ikke tastene dine gå et
+                    // annet sted midt i en setning.
+                    if self.fokus == Fokus::Liste {
+                        self.velg(pane);
+                        self.bytt_fokus(Fokus::Pane);
+                    }
+                }
+                if std::mem::take(&mut self.list_igjen) {
+                    self.list_paner();
                 }
                 true
             }
@@ -326,12 +366,45 @@ impl App {
                 self.pane_mus = felt.get(3) == Some(&"1");
                 true
             }
+            Venter::NySesjon { navn, mappe } if !ok => {
+                let mål = sitat(&format!("={navn}:"));
+                let kommando =
+                    format!("new-window -t {mål} -c {} -P -F {}", sitat(&mappe.to_string_lossy()), sitat("#{pane_id}"));
+                self.send(&kommando, Venter::NyPane { mappe });
+                false
+            }
+            Venter::NySesjon { mappe, .. } | Venter::NyPane { mappe } => {
+                let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
+                // Skrevet inn i skallet heller enn kjørt av tmux, siden `claude`
+                // kan være en funksjon i .zshrc, som wrapperen til teamet.
+                self.send(&format!("send-keys -t {} -l claude", sitat(&id)), Venter::Ingenting);
+                self.send(&format!("send-keys -t {} Enter", sitat(&id)), Venter::Ingenting);
+                self.nye.insert(id.clone(), mappe);
+                self.gå_inn_i = Some(id);
+                self.list_paner();
+                false
+            }
             Venter::Ingenting => false,
         }
     }
 
+    fn start_claude(&mut self, mappe: PathBuf) {
+        let navn = ny::sesjonsnavn(&mappe);
+        let kommando = format!(
+            "new-session -d -s {} -c {} -P -F {}",
+            sitat(&navn),
+            sitat(&mappe.to_string_lossy()),
+            sitat("#{pane_id}")
+        );
+        self.send(&kommando, Venter::NySesjon { navn, mappe });
+    }
+
+    /// Er en liste alt på vei, kan den være bestilt før endringen, så det
+    /// listes en gang til når den kommer.
     fn list_paner(&mut self) {
-        if !self.lister {
+        if self.lister {
+            self.list_igjen = true;
+        } else {
             self.lister = true;
             self.send(&format!("list-panes -a -F {}", sitat(FELT)), Venter::Paner);
         }
@@ -383,6 +456,28 @@ impl App {
     }
 
     fn tast(&mut self, k: KeyEvent) -> bool {
+        if let Some(velger) = &mut self.velger {
+            let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+            match k.code {
+                KeyCode::Esc => self.velger = None,
+                KeyCode::Char('c') if ctrl => self.velger = None,
+                KeyCode::Enter => {
+                    if let Some(mappe) = velger.valgt_mappe() {
+                        self.velger = None;
+                        self.start_claude(mappe);
+                    }
+                }
+                KeyCode::Up => velger.flytt(-1),
+                KeyCode::Char('p' | 'k') if ctrl => velger.flytt(-1),
+                KeyCode::Down => velger.flytt(1),
+                KeyCode::Char('n' | 'j') if ctrl => velger.flytt(1),
+                KeyCode::Char('u') if ctrl => velger.søk.clear(),
+                KeyCode::Backspace => velger.slett(),
+                KeyCode::Char(c) if !ctrl => velger.skriv(c.encode_utf8(&mut [0; 4])),
+                _ => return false,
+            }
+            return true;
+        }
         if taster::er_bytt_fokus(&k) {
             self.bytt_fokus(match self.fokus {
                 Fokus::Liste => Fokus::Pane,
@@ -405,6 +500,7 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
             KeyCode::Enter => self.bytt_fokus(Fokus::Pane),
+            KeyCode::Char('n') => self.velger = Some(ny::Velger::ny()),
             _ => return false,
         }
         true
@@ -422,6 +518,9 @@ impl App {
     }
 
     fn mus(&mut self, m: MouseEvent) -> bool {
+        if self.velger.is_some() {
+            return false;
+        }
         let v = self.visning;
         if m.column < v.x {
             let pane = (m.row + 1 < v.height).then(|| tegn::pane_på(self, m.row)).flatten();
@@ -481,7 +580,9 @@ impl App {
     }
 
     fn merke(&self, pane: &Pane) -> Option<Merke> {
-        let sesjon = self.sesjoner.get(&pane.id)?;
+        let Some(sesjon) = self.sesjoner.get(&pane.id) else {
+            return self.nye.contains_key(&pane.id).then_some(Merke::Starter);
+        };
         let inne = self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| v.id == pane.id);
         let sett = if inne { u64::MAX } else { self.sett.get(&pane.id).copied().unwrap_or(0) };
         Some(Merke::fra(sesjon, sett))

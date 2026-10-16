@@ -57,6 +57,21 @@ skjermen i hver oppdatering, pakket i en synkronisert oppdatering
 (`\033[?2026h` … `\033[?2026l`), så nerdr venter til den er ferdig før den
 henter. nerdr pakker også sine egne tegninger på samme måte.
 
+En ny Claude startes i en tmux-sesjon som heter det samme som mappa, med punktum
+og kolon byttet ut med bindestrek, siden tmux ellers bytter dem ut selv og navnet
+ikke finner sesjonen igjen. Vinduet starter med et vanlig skall, og `claude`
+skrives inn med `send-keys`. Kjører tmux kommandoen direkte, går den gjennom
+`zsh -c`, som ikke leser `.zshrc`, og da hopper den over en `claude`-funksjon der,
+som wrapperen til teamet. Når Claude avslutter, står du i skallet i samme mappe.
+
+Mappevelgeren er nerdr sin egen, ikke fzf. nerdr står utenfor tmux, så
+`fzf --popup` virker ikke, og `fzf --height` tømmer hele radene den bruker og
+alt under seg. Å gi terminalen til fzf betyr også at tastetråden må stå stille,
+for `event::poll` i crossterm leser tastene inn i sin egen buffer.
+
+Det tar flere sekunder før en ny Claude står i registeret. Panen vises derfor
+fra tmux har laget den, med `◌` og «starter …», og nerdr går inn i den.
+
 `-L <socket>` velger tmux-server, som `tmux -L`. `scripts/tui-test.sh` bruker
 det, sammen med et falskt register i `CLAUDE_CONFIG_DIR`, til å kjøre nerdr mot
 en falsk Claude på to egne tmux-servere.
@@ -88,16 +103,12 @@ Alternativer å vurdere:
 
 ## Senere iterasjoner
 
-**Ny sesjon.** En tast starter `claude` i et nytt tmux-vindu, i en mappe du
-velger med `fzf`. Å lage en ny mappe kommer etterpå. Uavhengig av beslutningen
-om terminal i samme område.
+**Ny mappe.** `n` starter Claude i en mappe som finnes. Neste steg er å kunne
+lage en ny, for eksempel et worktree, slik `ny-sesjon.sh` i sidebar-repoet gjør.
 
-- `fzf` forutsettes installert. nerdr må forlate alternativ skjerm og raw mode
-  mens den kjører, siden nerdr står utenfor tmux og ikke kan bruke
-  `display-popup`.
-- Mappene det søkes i, er faste til å begynne med, men samlet ett sted så de er
-  lette å endre. Før nerdr deles med andre, må de kunne settes per bruker, f.eks.
-  med en miljøvariabel.
+**Mappene per bruker.** Mappene det søkes i, er faste (`MAPPER` i `tui/src/ny.rs`).
+Før nerdr deles med andre, må de kunne settes per bruker, for eksempel med en
+miljøvariabel.
 
 Branchen `full-prototype` har en første versjon av tilstand per Claude
 (venter, jobber, klar) oversatt fra `sesjoner.py` i sidebar-repoet,

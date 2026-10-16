@@ -23,6 +23,7 @@ Kjør den i en vanlig terminalfane, utenfor tmux.
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
 | `C-]` | Tilbake til lista |
+| `n` | Ny Claude i en mappe du velger |
 | `q` | Avslutt, fra lista |
 
 Du kan også bruke musen. Klikk i lista velger en Claude, og klikk og musehjul i
@@ -35,3 +36,8 @@ har vært inne i den.
 
 Hver Claude viser mappen og branchen den jobber i, og under det oppgaven den
 holder på med.
+
+`n` åpner en popup der du søker fram en mappe under `~/git`, `~/worktree` eller
+`~/fagdag`, og `⏎` starter `claude` der i en tmux-sesjon med samme navn som
+mappa. Finnes sesjonen allerede, får den et nytt vindu. Du er inne i den med en
+gang, og kortet står med `◌` til Claude er klar.

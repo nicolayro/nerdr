@@ -10,6 +10,8 @@ pub enum Merke {
     Ferdig,
     Jobber,
     Sett,
+    /// Startet av nerdr og ikke i registeret ennå.
+    Starter,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -41,7 +43,7 @@ impl Merke {
     pub fn gruppe(self) -> Gruppe {
         match self {
             Merke::Spør | Merke::Ferdig => Gruppe::VenterPåDeg,
-            Merke::Jobber => Gruppe::Jobber,
+            Merke::Jobber | Merke::Starter => Gruppe::Jobber,
             Merke::Sett => Gruppe::Sett,
         }
     }
