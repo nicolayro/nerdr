@@ -43,7 +43,7 @@ pub fn alt(f: &mut Frame, app: &App) {
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
-    } else if let (Fokus::Pane, Some((x, y))) = (app.fokus, app.markør) {
+    } else if let (Fokus::Pane, Some((x, y)), 0) = (app.fokus, app.markør, app.rull) {
         let v = app.visning;
         if x < v.width && y < v.height {
             f.set_cursor_position((v.x + x, v.y + y));
@@ -360,6 +360,13 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
                 break;
             }
             x = buf.set_stringn(x, y, &bit.tekst, (v.right() - x) as usize, stil(bit.stil)).0;
+        }
+    }
+    if app.rull > 0 {
+        let hvor = format!(" {}/{} ", app.rull, app.historie);
+        let bredde = hvor.chars().count() as u16;
+        if bredde < v.width {
+            buf.set_string(v.right() - bredde, v.y, hvor, Style::new().fg(ORANSJE).add_modifier(Modifier::REVERSED));
         }
     }
 }

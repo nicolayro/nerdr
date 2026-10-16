@@ -189,6 +189,24 @@ tmux -L nerdr-vert send-keys -t vert Enter
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t alfa:1 | grep -c 'i terminalen'
 
+echo "=== 30 linjer i terminalen, og bunnen viser linje 30 ==="
+for i in $(seq 1 30); do tmux -L nerdr-maal send-keys -t alfa:1 "linje $i" Enter; done
+sleep 0.8
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '15p'
+
+echo "=== ti hakk opp er 30 linjer, og cat med ekko gir linje 8 og 9 øverst, med 30/47 oppe til høyre ==="
+for i in $(seq 1 10); do tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;41;4M')"; done
+sleep 0.8
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
+
+echo "=== to hakk ned gir linje 11 og 24/47, og Enter går tilbake til bunnen uten teller, med to tomme linjer nederst ==="
+for i in 1 2; do tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<65;41;4M')"; done
+sleep 0.5
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
+tmux -L nerdr-vert send-keys -t vert Enter
+sleep 0.5
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p;14,15p'
+
 echo "=== C-q, k opp til alfa, og t går inn i samme terminal (skal være 2 vinduer) ==="
 tmux -L nerdr-vert send-keys -t vert C-q
 sleep 0.2

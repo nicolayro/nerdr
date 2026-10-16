@@ -39,8 +39,10 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | `?` | Hjelp |
 | `q` | Avslutt, fra lista |
 
-Klikk i lista går inn i en Claude, og klikk og musehjul i sesjonen går videre
-til Claude.
+Klikk i lista går inn i en Claude. Klikk og musehjul i sesjonen går videre når
+programmet der har slått på mus, som Claude Code i fullskjerm. Ellers ruller
+hjulet i historikken, og en tast tar deg tilbake til bunnen. I `less` og `man`
+blir hjulet til piltaster.
 
 Hver Claude viser mappen og branchen den jobber i, og oppgaven under. Lista er
 delt i tre:

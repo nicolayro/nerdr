@@ -32,6 +32,9 @@ const HENTE_INTERVALL: Duration = Duration::from_millis(16);
 /// Så lenge venter vi på at en synkronisert oppdatering blir ferdig, i tilfelle
 /// avslutningen aldri kommer.
 const SYNK_MAKS: Duration = Duration::from_millis(200);
+/// Linjer per hakk på hjulet, som piltaster i alternativ skjerm og som linjer
+/// i historikken.
+const RULL_STEG: u32 = 3;
 
 enum Hendelse {
     Tmux(Melding),
@@ -86,6 +89,13 @@ struct App {
     markør: Option<(u16, u16)>,
     /// Panen har slått på mus med SGR-koding, slik Claude Code gjør i fullskjerm.
     pane_mus: bool,
+    /// Panen viser den alternative skjermen, som `less` og `vim`, og den har
+    /// ingen historikk.
+    alternativ: bool,
+    /// Linjer i historikken til panen, og hvor mange av dem visningen er rullet
+    /// opp. 0 er bunnen, slik panen står.
+    historie: u32,
+    rull: u32,
     utdatert: bool,
     henter: bool,
     sist_hentet: Instant,
@@ -223,6 +233,9 @@ impl App {
             bilde: Vec::new(),
             markør: None,
             pane_mus: false,
+            alternativ: false,
+            historie: 0,
+            rull: 0,
             utdatert: false,
             henter: false,
             sist_hentet: Instant::now(),
@@ -418,6 +431,19 @@ impl App {
                     _ => None,
                 };
                 self.pane_mus = felt.get(3) == Some(&"1");
+                self.alternativ = felt.get(4) == Some(&"1");
+                let historie: u32 = felt.get(5).and_then(|h| h.parse().ok()).unwrap_or(0);
+                // Det du leser, blir stående når ny tekst skyver historikken opp.
+                let rull = match self.rull {
+                    _ if self.alternativ => 0,
+                    0 => 0,
+                    rull => rull.saturating_add(historie.saturating_sub(self.historie)).min(historie),
+                };
+                self.historie = historie;
+                if rull != self.rull {
+                    self.rull = rull;
+                    self.utdatert = true;
+                }
                 true
             }
             Venter::NySesjon { navn, mappe, claude } if !ok => {
@@ -501,6 +527,9 @@ impl App {
         self.bilde.clear();
         self.markør = None;
         self.pane_mus = false;
+        self.alternativ = false;
+        self.historie = 0;
+        self.rull = 0;
         self.størrelse_for = None;
         self.utdatert = true;
         self.synk = false;
@@ -509,8 +538,14 @@ impl App {
 
     fn hent(&mut self) {
         let Some(id) = self.valgt.as_ref().map(|p| sitat(&p.id)) else { return };
-        self.send(&format!("capture-pane -p -e -N -t {id}"), Venter::Bilde);
-        let felt = sitat("#{cursor_x}\t#{cursor_y}\t#{cursor_flag}\t#{&&:#{mouse_any_flag},#{mouse_sgr_flag}}");
+        // Fra -S og ned til bunnen er flere linjer enn visningen, og tegningen
+        // tar de øverste.
+        let fra = if self.rull > 0 { format!(" -S -{}", self.rull) } else { String::new() };
+        self.send(&format!("capture-pane -p -e -N -t {id}{fra}"), Venter::Bilde);
+        let felt = sitat(
+            "#{cursor_x}\t#{cursor_y}\t#{cursor_flag}\t#{&&:#{mouse_any_flag},#{mouse_sgr_flag}}\t\
+             #{alternate_on}\t#{history_size}",
+        );
         self.send(&format!("display-message -p -t {id} {felt}"), Venter::Markør);
         self.utdatert = false;
         self.henter = true;
@@ -575,6 +610,7 @@ impl App {
             if let (Some(pane), Some(args)) = (&self.valgt, taster::send_keys(&k)) {
                 let kommando = format!("send-keys -t {} {args}", sitat(&pane.id));
                 self.send(&kommando, Venter::Ingenting);
+                self.rull_til(0);
             }
             return false;
         }
@@ -609,6 +645,15 @@ impl App {
         let tekst = tekst.replace("\r\n", "\n");
         self.send(&format!("set-buffer -b nerdr {}", dobbelt_sitat(&tekst)), Venter::Ingenting);
         self.send(&format!("paste-buffer -p -d -b nerdr -t {id}"), Venter::Ingenting);
+        self.rull_til(0);
+    }
+
+    fn rull_til(&mut self, rull: u32) {
+        let rull = rull.min(self.historie);
+        if rull != self.rull {
+            self.rull = rull;
+            self.utdatert = true;
+        }
     }
 
     fn mus(&mut self, m: MouseEvent) -> bool {
@@ -636,13 +681,27 @@ impl App {
             self.bytt_fokus(Fokus::Pane);
         }
         let (x, y) = (m.column - v.x, m.row - v.y);
-        if self.pane_mus
-            && x < v.width
-            && y < v.height
-            && let (Some(pane), Some(args)) = (&self.valgt, taster::mus(&m, x, y))
-        {
-            let kommando = format!("send-keys -t {} {args}", sitat(&pane.id));
-            self.send(&kommando, Venter::Ingenting);
+        let Some(id) = self.valgt.as_ref().filter(|_| x < v.width && y < v.height).map(|p| sitat(&p.id)) else {
+            return byttet;
+        };
+        let opp = match m.kind {
+            MouseEventKind::ScrollUp => Some(true),
+            MouseEventKind::ScrollDown => Some(false),
+            _ => None,
+        };
+        match opp {
+            _ if self.pane_mus => {
+                if let Some(args) = taster::mus(&m, x, y) {
+                    self.send(&format!("send-keys -t {id} {args}"), Venter::Ingenting);
+                }
+            }
+            Some(opp) if self.alternativ => {
+                let tast = if opp { "Up" } else { "Down" };
+                self.send(&format!("send-keys -t {id} -N {RULL_STEG} {tast}"), Venter::Ingenting);
+            }
+            Some(true) => self.rull_til(self.rull.saturating_add(RULL_STEG)),
+            Some(false) => self.rull_til(self.rull.saturating_sub(RULL_STEG)),
+            None => {}
         }
         byttet
     }
