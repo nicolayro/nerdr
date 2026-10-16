@@ -5,15 +5,38 @@ den valgte live til høyre, så du kan følge og skrive til dem fra ett sted.
 
 ## Installere
 
-Krever tmux og `gh`, logget inn med tilgang til repoet.
+Krever tmux. Ferdige binærer finnes for macOS (arm64 og Intel) og Linux (x86_64).
 
 ```
-gh api repos/nicolayro/nerdr/contents/scripts/installer.sh -H 'Accept: application/vnd.github.raw' | sh
+curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/installer.sh | sh
 ```
+
+nerdr legges i `~/opt/bin`, `~/bin` eller `~/.local/bin`, den første som finnes,
+eller der den ligger fra før. `NERDR_BIN=<mappe>` foran `sh` velger en annen, og
+`NERDR_VERSJON=v0.1.0` en bestemt versjon. Kjør kommandoen på nytt for å
+oppdatere. nerdr oppdaterer seg ikke selv.
 
 Eller be Claude om det: «Installer nerdr etter INSTALL.md i nicolayro/nerdr.»
-[INSTALL.md](INSTALL.md) er skrevet for at Claude kan følge den, også for å
-sette opp mappene og bygge fra kildekoden når det ikke finnes en binær.
+[INSTALL.md](INSTALL.md) er skrevet for at Claude kan følge den.
+
+## Avinstallere
+
+```
+curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/avinstaller.sh | sh
+```
+
+nerdr lagrer ingenting annet enn seg selv, så det er alt. Har du satt
+`NERDR_MAPPER`, kan linja fjernes fra skallets oppstartsfil.
+
+## Bygge fra kildekoden
+
+Krever Rust 1.85 eller nyere.
+
+```
+cargo install --locked --git https://github.com/nicolayro/nerdr nerdr
+```
+
+nerdr havner i `~/.cargo/bin`, og fjernes med `cargo uninstall nerdr`.
 
 ## Bruk
 
@@ -55,5 +78,7 @@ mappene.
 ## Utvikle
 
 Rust 1.85 eller nyere. `cargo run` starter nerdr, og `scripts/tui-test.sh` kjører
-den mot en falsk Claude på egne tmux-servere. Når en tag som `v1.0.0` pushes,
+den mot en falsk Claude på egne tmux-servere. `scripts/installer-test.sh` kjører
+installeringen og avinstalleringen mot en release i en lokal mappe og et falskt
+`HOME`. Når en tag som `v1.0.0` pushes,
 bygger `.github/workflows/release.yml` binærene og legger dem i en release.

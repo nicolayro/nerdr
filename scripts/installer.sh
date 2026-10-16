@@ -1,17 +1,18 @@
 #!/bin/sh
-# Installerer nerdr fra siste release i ~/.local/bin, eller i NERDR_BIN. Kjør
-# på nytt for å oppdatere.
+# Installerer nerdr fra en release på GitHub. Kjør på nytt for å oppdatere.
 #
-# Repoet er privat, så nedlastingen går gjennom gh, som må være logget inn med
-# tilgang til det.
+#   NERDR_VERSJON  en bestemt versjon, som v0.1.0, ellers den siste
+#   NERDR_BIN      mappa nerdr legges i, ellers der den ligger fra før, eller
+#                  den første som finnes av ~/opt/bin, ~/bin og ~/.local/bin
 set -eu
 
 REPO=nicolayro/nerdr
-BIN=${NERDR_BIN:-$HOME/.local/bin}
+# Kan pekes et annet sted, som et speil eller en mappe i en test.
+URL=${NERDR_URL:-https://github.com/$REPO/releases}
 
 bygg_selv() {
   echo "Bygg den selv med Rust 1.85 eller nyere:" >&2
-  echo "CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --locked --git https://github.com/$REPO nerdr" >&2
+  echo "  cargo install --locked --git https://github.com/$REPO nerdr" >&2
   exit 1
 }
 
@@ -25,38 +26,60 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
-if ! command -v gh >/dev/null; then
-  echo "nerdr: installeringen trenger gh (GitHub CLI), logget inn med tilgang til $REPO." >&2
+bin=
+if [ -n "${NERDR_BIN:-}" ]; then
+  bin=$NERDR_BIN
+else
+  # En oppdatering skal erstatte den som er der, ikke legge en til ved siden av.
+  for mappe in "$HOME/opt/bin" "$HOME/bin" "$HOME/.local/bin"; do
+    if [ -f "$mappe/nerdr" ] && [ ! -L "$mappe/nerdr" ]; then bin=$mappe; break; fi
+  done
+  if [ -z "$bin" ]; then
+    for mappe in "$HOME/opt/bin" "$HOME/bin" "$HOME/.local/bin"; do
+      bin=$mappe
+      [ -d "$mappe" ] && break
+    done
+  fi
+fi
+
+if [ -L "$bin/nerdr" ]; then
+  echo "nerdr: $bin/nerdr er en lenke til $(readlink "$bin/nerdr"), så nerdr er installert på en annen måte." >&2
+  echo "Sett NERDR_BIN for å installere et annet sted." >&2
   exit 1
 fi
 
-if ! feil=$(gh release view --repo "$REPO" 2>&1 >/dev/null); then
-  case $feil in
-    *"not found"*)
-      echo "nerdr: $REPO har ingen release ennå." >&2
-      bygg_selv
-      ;;
-    *) echo "nerdr: $feil" >&2; exit 1 ;;
-  esac
+if [ -n "${NERDR_VERSJON:-}" ]; then
+  kilde=$URL/download/$NERDR_VERSJON
+else
+  kilde=$URL/latest/download
 fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 pakke=nerdr-$maal.tar.gz
-gh release download --repo "$REPO" --pattern "$pakke*" --dir "$tmp"
+for fil in "$pakke" "$pakke.sha256"; do
+  if ! curl -fsSL -o "$tmp/$fil" "$kilde/$fil"; then
+    echo "nerdr: fant ikke $fil i ${NERDR_VERSJON:-siste release}." >&2
+    bygg_selv
+  fi
+done
 
-if command -v shasum >/dev/null; then
-  (cd "$tmp" && shasum -a 256 -c "$pakke.sha256" >/dev/null)
-else
-  (cd "$tmp" && sha256sum -c "$pakke.sha256" >/dev/null)
+if command -v shasum >/dev/null; then sjekk="shasum -a 256 -c"; else sjekk="sha256sum -c"; fi
+if ! (cd "$tmp" && $sjekk "$pakke.sha256" >/dev/null 2>&1); then
+  echo "nerdr: sjekksummen til $pakke stemmer ikke, så ingenting er installert." >&2
+  exit 1
 fi
 
-mkdir -p "$BIN"
-tar -xzf "$tmp/$pakke" -C "$BIN"
-echo "$("$BIN/nerdr" --version) er installert i $BIN/nerdr."
+# Pakket ut ved siden av og flyttet på plass, så en nerdr som kjører, ikke
+# skrives over mens den er i bruk.
+mkdir -p "$bin"
+tar -xzf "$tmp/$pakke" -C "$tmp"
+mv "$tmp/nerdr" "$bin/nerdr.ny"
+mv "$bin/nerdr.ny" "$bin/nerdr"
+echo "$("$bin/nerdr" --version) er installert i $bin/nerdr."
 
 case ":$PATH:" in
-  *":$BIN:"*) ;;
-  *) echo "$BIN står ikke i PATH. Legg til i skallets oppstartsfil: export PATH=\"$BIN:\$PATH\"" ;;
+  *":$bin:"*) ;;
+  *) echo "$bin står ikke i PATH. Legg til i skallets oppstartsfil: export PATH=\"$bin:\$PATH\"" ;;
 esac
 command -v tmux >/dev/null || echo "nerdr trenger tmux. Installer den, for eksempel med: brew install tmux"

@@ -1,5 +1,9 @@
-# Bygger nerdr for macOS og Linux når en tag som v0.1.0 pushes, og legger
+# Bygger nerdr for macOS og Linux når en tag som v1.0.0 pushes, og legger
 # binærene i en GitHub-release. scripts/installer.sh henter dem derfra.
+#
+# Releasen er et utkast til alle binærene er lastet opp, så installer.sh aldri
+# finner en siste release uten dem. Scriptene legges ved, så de som hentes fra
+# en release, hører til binærene i den.
 name: Release
 
 on:
@@ -13,7 +17,10 @@ jobs:
   opprett:
     runs-on: ubuntu-latest
     steps:
-      - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: >-
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes --draft
+          scripts/installer.sh scripts/avinstaller.sh
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -40,5 +47,13 @@ jobs:
           tar -czf "$navn" -C target/${{ matrix.target }}/release nerdr
           shasum -a 256 "$navn" > "$navn.sha256"
           gh release upload "$GITHUB_REF_NAME" "$navn" "$navn.sha256" --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publiser:
+    needs: bygg
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
         env:
           GH_TOKEN: ${{ github.token }}
