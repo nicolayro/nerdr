@@ -1,5 +1,5 @@
 //! Rekkefølgen i lista: de som venter på deg først, så de som jobber, så de
-//! du har sett.
+//! som er ferdige og sett.
 
 use nerdr_kjerne::paner::Pane;
 use nerdr_kjerne::register::{Sesjon, Tilstand};
@@ -7,7 +7,8 @@ use nerdr_kjerne::register::{Sesjon, Tilstand};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Merke {
     Spør,
-    Ferdig,
+    /// Ferdig med noe du ikke har sett.
+    Ulest,
     Jobber,
     Sett,
     /// Startet av nerdr og ikke i registeret ennå.
@@ -16,9 +17,9 @@ pub enum Merke {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Gruppe {
-    VenterPåDeg,
+    Venter,
     Jobber,
-    Sett,
+    Ferdig,
 }
 
 #[derive(Debug, PartialEq)]
@@ -35,7 +36,7 @@ impl Merke {
         match sesjon.tilstand {
             Tilstand::Venter => Merke::Spør,
             Tilstand::Jobber => Merke::Jobber,
-            Tilstand::Klar if sesjon.endret > sett => Merke::Ferdig,
+            Tilstand::Klar if sesjon.endret > sett => Merke::Ulest,
             Tilstand::Klar => Merke::Sett,
         }
     }
@@ -43,7 +44,7 @@ impl Merke {
     pub fn glyf(self) -> &'static str {
         match self {
             Merke::Spør => "●",
-            Merke::Ferdig => "◆",
+            Merke::Ulest => "◆",
             Merke::Jobber => "◐",
             Merke::Sett => "○",
             Merke::Starter => "◌",
@@ -52,9 +53,9 @@ impl Merke {
 
     pub fn gruppe(self) -> Gruppe {
         match self {
-            Merke::Spør | Merke::Ferdig => Gruppe::VenterPåDeg,
+            Merke::Spør | Merke::Ulest => Gruppe::Venter,
             Merke::Jobber | Merke::Starter => Gruppe::Jobber,
-            Merke::Sett => Gruppe::Sett,
+            Merke::Sett => Gruppe::Ferdig,
         }
     }
 }
@@ -62,9 +63,9 @@ impl Merke {
 impl Gruppe {
     pub fn tittel(self) -> &'static str {
         match self {
-            Gruppe::VenterPåDeg => "VENTER PÅ DEG",
+            Gruppe::Venter => "VENTER",
             Gruppe::Jobber => "JOBBER",
-            Gruppe::Sett => "SETT",
+            Gruppe::Ferdig => "FERDIG",
         }
     }
 }
@@ -110,19 +111,19 @@ mod tester {
 
     #[test]
     fn ferdig_etter_at_du_var_inne_venter_på_deg() {
-        assert_eq!(Merke::fra(&sesjon(Tilstand::Klar, 20), 10), Merke::Ferdig);
+        assert_eq!(Merke::fra(&sesjon(Tilstand::Klar, 20), 10), Merke::Ulest);
         assert_eq!(Merke::fra(&sesjon(Tilstand::Klar, 10), 20), Merke::Sett);
         assert_eq!(Merke::fra(&sesjon(Tilstand::Venter, 10), 20), Merke::Spør);
     }
 
     #[test]
     fn grupperer_med_overskrifter_og_strek_mellom_panene() {
-        let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20")).unwrap();
+        let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\t")).unwrap();
         let paner = [pane("%1"), pane("%2"), pane("%3")];
         let rader = rader(&paner, |p| {
             let m = match p.id.as_str() {
                 "%1" => Merke::Sett,
-                "%2" => Merke::Ferdig,
+                "%2" => Merke::Ulest,
                 _ => Merke::Spør,
             };
             Some((m.gruppe(), m))
@@ -130,12 +131,12 @@ mod tester {
         assert_eq!(
             rader,
             [
-                Rad::Overskrift(Gruppe::VenterPåDeg),
-                Rad::Pane(&paner[1], Merke::Ferdig),
+                Rad::Overskrift(Gruppe::Venter),
+                Rad::Pane(&paner[1], Merke::Ulest),
                 Rad::Strek,
                 Rad::Pane(&paner[2], Merke::Spør),
                 Rad::Tom,
-                Rad::Overskrift(Gruppe::Sett),
+                Rad::Overskrift(Gruppe::Ferdig),
                 Rad::Pane(&paner[0], Merke::Sett),
             ]
         );
@@ -143,7 +144,7 @@ mod tester {
 
     #[test]
     fn gruppen_kan_avvike_fra_merket() {
-        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20").unwrap()];
+        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\t").unwrap()];
         let rader = rader(&paner, |_| Some((Gruppe::Jobber, Merke::Sett)));
         assert_eq!(rader, [Rad::Overskrift(Gruppe::Jobber), Rad::Pane(&paner[0], Merke::Sett)]);
     }

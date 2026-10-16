@@ -1,15 +1,16 @@
 //! Lista over paner til venstre og den valgte panen til høyre.
 
 use nerdr_kjerne::paner::Pane;
-use nerdr_kjerne::sgr::{Farge, Stil};
+use nerdr_kjerne::sgr::{Farge, Linje, Stil};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::bokser::{Boks, Rammer};
 use crate::grupper::{Gruppe, Merke, Rad};
 use crate::ny::Velger;
-use crate::{App, Fokus, hjelp};
+use crate::{App, Fokus, Lukke, hjelp};
 
 /// Bredden på lista, med skillelinja.
 pub const LISTE: u16 = 36;
@@ -28,25 +29,29 @@ const GRÅ: Color = Color::Indexed(245);
 const DIM: Color = Color::Indexed(240);
 const MARKERT: Color = Color::Indexed(236);
 
-pub fn visning(størrelse: Size) -> Rect {
-    Rect::new(LISTE, 0, størrelse.width.saturating_sub(LISTE), størrelse.height)
+/// Til høyre for lista, under faneraden. Med bokser står en tom rad mellom, så
+/// streken fanene står på, ikke ligger rett over toppen av boksene.
+pub fn visning(størrelse: Size, rammer: Rammer) -> Rect {
+    let topp = if rammer == Rammer::Bokser { 2 } else { 1 };
+    Rect::new(LISTE, topp, størrelse.width.saturating_sub(LISTE), størrelse.height.saturating_sub(topp))
 }
 
 pub fn alt(f: &mut Frame, app: &App) {
     let område = f.area();
     let buf = f.buffer_mut();
     tegn_liste(buf, område, app);
+    tegn_faner(buf, app);
     tegn_pane(buf, app);
 
     if app.hjelp {
-        tegn_hjelp(buf, område);
+        tegn_hjelp(buf, område, &app.prefiks.navn());
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
-    } else if let (Fokus::Pane, Some((x, y))) = (app.fokus, app.markør) {
-        let v = app.visning;
-        if x < v.width && y < v.height {
-            f.set_cursor_position((v.x + x, v.y + y));
+    } else if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app)) {
+        let i = boks.innhold;
+        if x < i.width && y < i.height {
+            f.set_cursor_position((i.x + x, i.y + y));
         }
     }
 }
@@ -55,6 +60,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     let bredde = LISTE - 1;
     let hint_y = område.height.saturating_sub(1);
 
+    let mut overskrifter = Vec::new();
     for (y, høyde, rad) in plasser(app, hint_y) {
         if y >= hint_y {
             break;
@@ -67,8 +73,9 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
             }
             Rad::Overskrift(gruppe) => {
                 let x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
-                let strek = "─".repeat(bredde.saturating_sub(x + 1) as usize);
+                let strek = "─".repeat(bredde.saturating_sub(x) as usize);
                 buf.set_stringn(x, y, strek, bredde as usize, Style::new().fg(DIM));
+                overskrifter.push(y);
             }
             Rad::Pane(pane, merke) => {
                 let kort = kort(app, pane);
@@ -79,18 +86,31 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
         }
     }
 
-    let hint = match app.fokus {
-        Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · ? hjelp",
-        Fokus::Pane => " C-q tilbake til lista",
+    // Hintet sier noe bare når du har trykket prefikset eller nerdr spør. Ellers
+    // står bare veien til hjelpen der, dempet.
+    let prefiks = app.prefiks.navn();
+    let (hint, farge) = match app.fokus {
+        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => (" lukke panen? y/n".to_string(), LYS),
+        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => (" lukke vinduet? y/n".to_string(), LYS),
+        _ if app.etter_prefiks => (format!(" {prefiks} … w lista · c vindu · ? mer"), LYS),
+        Fokus::Liste => (" ? hjelp".to_string(), DIM),
+        Fokus::Pane => (format!(" {prefiks} ? hjelp"), DIM),
     };
-    buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(GRÅ));
+    buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(farge));
 
+    // Overskriftene treffer skillestreken, og øverst går streken videre til
+    // fanene.
     for y in 0..område.height {
-        buf.set_stringn(bredde, y, "│", 1, Style::new().fg(DIM));
+        let tegn = match y {
+            0 => "┬",
+            _ if overskrifter.contains(&y) => "┤",
+            _ => "│",
+        };
+        buf.set_stringn(bredde, y, tegn, 1, Style::new().fg(DIM));
     }
 }
 
-/// En sesjon i lista: mappe › branch, og oppgaven under.
+/// En sesjon i lista: mappa, branchen helt til høyre, og oppgaven under.
 struct Kort {
     mappe: String,
     branch: Option<String>,
@@ -131,10 +151,13 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
     buf.set_stringn(1, y, merke.glyf(), 1, Style::new().fg(glyffarge(merke)));
 
     let mappe = kutt(&kort.mappe, TEKST);
-    let x = buf.set_stringn(TEKST_X, y, &mappe, TEKST, Style::new().fg(farge).add_modifier(Modifier::BOLD)).0;
-    if let Some(branch) = &kort.branch {
-        let rest = TEKST.saturating_sub(mappe.chars().count());
-        buf.set_stringn(x, y, kutt(&format!(" › {branch}"), rest), rest, Style::new().fg(GRÅ));
+    buf.set_stringn(TEKST_X, y, &mappe, TEKST, Style::new().fg(farge).add_modifier(Modifier::BOLD));
+    // Med mindre enn to tegn igjen blir branchen bare en …
+    let plass = TEKST.saturating_sub(mappe.chars().count() + 2);
+    if let Some(branch) = kort.branch.as_ref().filter(|_| plass >= 2) {
+        let branch = kutt(branch, plass);
+        let x = TEKST_X + TEKST as u16 - branch.chars().count() as u16;
+        buf.set_string(x, y, branch, Style::new().fg(GRÅ));
     }
 
     let oppgavefarge = if valgt { LYS } else { GRÅ };
@@ -145,13 +168,13 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
 
 fn glyffarge(merke: Merke) -> Color {
     match merke {
-        Merke::Spør | Merke::Ferdig => ORANSJE,
+        Merke::Spør | Merke::Ulest => ORANSJE,
         Merke::Jobber | Merke::Starter => GRØNN,
         Merke::Sett => LYS,
     }
 }
 
-/// Radene i lista med y og høyde. Får alt plass, legges SETT nederst, med en
+/// Radene i lista med y og høyde. Får alt plass, legges FERDIG nederst, med en
 /// tom rad over hintet, så det du har lagt bort står for seg selv.
 fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
     let rader = app.rader();
@@ -159,7 +182,7 @@ fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
         .iter()
         .map(|r| if let Rad::Pane(pane, _) = r { kort(app, pane).høyde() } else { 1 })
         .collect();
-    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Sett))).unwrap_or(rader.len());
+    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Ferdig))).unwrap_or(rader.len());
     let over: u16 = høyder[..sett].iter().sum();
     let under: u16 = høyder[sett..].iter().sum();
     let sett_y = if over + under < plass { plass - under - 1 } else { over };
@@ -178,11 +201,55 @@ fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
 
 /// Panen som står på rad `y` i lista.
 pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
-    let plass = app.visning.height.saturating_sub(1);
-    plasser(app, plass).into_iter().find_map(|(topp, høyde, rad)| match rad {
+    let hint_y = app.visning.bottom().saturating_sub(1);
+    if y >= hint_y {
+        return None;
+    }
+    plasser(app, hint_y).into_iter().find_map(|(topp, høyde, rad)| match rad {
         Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })
+}
+
+/// Et vindu i sesjonen, som fane i statuslinja.
+struct Fane {
+    fra: u16,
+    til: u16,
+    navn: String,
+    vindu: String,
+    vist: bool,
+}
+
+fn faner(app: &App) -> Vec<Fane> {
+    let mut x = app.visning.x + 1;
+    let mut ut = Vec::new();
+    for p in app.faner() {
+        let navn = kutt(&p.vindunavn, 20);
+        let til = x + navn.chars().count() as u16 + 2;
+        let vist = app.vist.as_ref() == Some(&p.vindu_id);
+        ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist });
+        x = til + 1;
+    }
+    ut
+}
+
+/// Vinduene i sesjonen på en strek i øverste rad, som fortsetter overskriften
+/// i lista. Vinduet som vises, har bakgrunn.
+fn tegn_faner(buf: &mut Buffer, app: &App) {
+    let v = app.visning;
+    buf.set_string(v.x, 0, "─".repeat(v.width as usize), Style::new().fg(DIM));
+    for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
+        let stil = match f.vist {
+            true => Style::new().fg(HVIT).bg(MARKERT).add_modifier(Modifier::BOLD),
+            false => Style::new().fg(GRÅ),
+        };
+        buf.set_string(f.fra, 0, format!(" {} ", f.navn), stil);
+    }
+}
+
+/// Vinduet til fanen i kolonne `x`.
+pub fn fane_på(app: &App, x: u16) -> Option<String> {
+    faner(app).into_iter().find(|f| (f.fra..f.til).contains(&x)).map(|f| f.vindu)
 }
 
 /// En boks med ramme midt på skjermen, med tittel øverst og hint nederst,
@@ -210,11 +277,11 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
     Some(boks)
 }
 
-fn tegn_hjelp(buf: &mut Buffer, område: Rect) {
+fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str) {
     const BREDDE: u16 = 58;
     let indre = (BREDDE - 4) as usize;
     let om = bryt(hjelp::OM, indre, 3);
-    let høyde = om.len() + 1 + hjelp::TASTER.len() + 1 + hjelp::MERKER.len() + 1 + 2 + 2;
+    let høyde = om.len() + 1 + hjelp::TASTER.len() + 1 + hjelp::PREFIKSTASTER.len() + 1 + hjelp::MERKER.len() + 1 + 2 + 2;
     let Some(boks) = boks(buf, område, BREDDE, høyde as u16, "nerdr", "trykk en tast for å lukke") else { return };
     let x = boks.x + 2;
     let indre = (boks.width - 4) as usize;
@@ -230,6 +297,11 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect) {
     linje("", Style::new());
     for (tast, hva) in hjelp::TASTER {
         linje(&format!("{tast:<9}{hva}"), Style::new().fg(LYS));
+    }
+    linje("", Style::new());
+    for (tast, hva) in hjelp::PREFIKSTASTER {
+        let tast = if tast == "prefiks" { format!("{prefiks} {prefiks}") } else { format!("{prefiks} {tast}") };
+        linje(&format!("{tast:<13}{hva}"), Style::new().fg(LYS));
     }
     linje("", Style::new());
     for (merke, hva) in hjelp::MERKER {
@@ -334,15 +406,108 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
         buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, Style::new().fg(GRÅ));
         return;
     }
-    for (y, linje) in app.bilde.iter().enumerate().take(v.height as usize) {
-        let y = v.y + y as u16;
-        let mut x = v.x;
+    let aktiv = app.aktiv().map(|p| p.id.as_str());
+    let bokser = app.bokser();
+    for boks in &bokser {
+        if let Some(bilde) = app.bilder.get(&boks.pane) {
+            tegn_bilde(buf, boks.innhold, bilde);
+        }
+        if let Some(ramme) = boks.ramme {
+            // Den aktive har vanlig farge når du er inne i vinduet, så du ser
+            // hvor tastene går.
+            let farge = if app.fokus == Fokus::Pane && aktiv == Some(&boks.pane) { Color::Reset } else { DIM };
+            tegn_ramme(buf, ramme, Style::new().fg(farge));
+        }
+    }
+    if app.rammer == Rammer::Linjer && bokser.len() > 1 {
+        tegn_linjer(buf, app, &bokser);
+    }
+    if let (true, Some(boks)) = (app.rull > 0, aktiv_boks(app)) {
+        let hvor = format!(" {}/{} ", app.rull, app.historie);
+        let bredde = hvor.chars().count() as u16;
+        // På toppen av rammen, eller øverst i panen når den ikke har ramme.
+        let (høyre, y) = match boks.ramme {
+            Some(r) => (r.right().saturating_sub(2), r.y),
+            None => (boks.innhold.right(), boks.innhold.y),
+        };
+        if bredde + 2 < boks.innhold.width {
+            buf.set_string(høyre - bredde, y, hvor, Style::new().fg(ORANSJE).add_modifier(Modifier::REVERSED));
+        }
+    }
+}
+
+fn aktiv_boks(app: &App) -> Option<Boks> {
+    let aktiv = app.aktiv()?;
+    app.bokser().into_iter().find(|b| b.pane == aktiv.id)
+}
+
+fn tegn_bilde(buf: &mut Buffer, område: Rect, bilde: &[Linje]) {
+    for (y, linje) in (område.top()..område.bottom()).zip(bilde) {
+        let mut x = område.x;
         for bit in linje {
-            if x >= v.right() {
+            if x >= område.right() {
                 break;
             }
-            x = buf.set_stringn(x, y, &bit.tekst, (v.right() - x) as usize, stil(bit.stil)).0;
+            x = buf.set_stringn(x, y, &bit.tekst, (område.right() - x) as usize, stil(bit.stil)).0;
         }
+    }
+}
+
+/// Rutene i vinduet som ingen pane dekker, er strekene tmux legger mellom
+/// panene. Tegnet i hver rute avhenger av hvilke naboer som også er strek, så
+/// kryss og hjørner blir riktige.
+fn tegn_linjer(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
+    let Some(oppsett) = app.oppsett() else { return };
+    let v = app.visning;
+    let (bredde, høyde) = (oppsett.bredde.min(v.width), oppsett.høyde.min(v.height));
+    let inni = |r: Rect, x: u16, y: u16| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
+    let dekket = |x: u16, y: u16| bokser.iter().any(|b| inni(b.innhold, v.x + x, v.y + y));
+    let strek = |x: i32, y: i32| x >= 0 && y >= 0 && x < bredde as i32 && y < høyde as i32 && !dekket(x as u16, y as u16);
+    let aktiv = aktiv_boks(app).filter(|_| app.fokus == Fokus::Pane).map(|b| b.innhold);
+    for y in 0..høyde {
+        for x in 0..bredde {
+            if dekket(x, y) {
+                continue;
+            }
+            let (xi, yi) = (x as i32, y as i32);
+            let tegn = rammetegn(strek(xi, yi - 1), strek(xi, yi + 1), strek(xi - 1, yi), strek(xi + 1, yi));
+            // Strekene rundt den aktive har vanlig farge, så du ser hvor tastene går.
+            let ved_aktiv = aktiv.is_some_and(|a| {
+                let (x, y) = (v.x + x, v.y + y);
+                x + 1 >= a.x && x <= a.right() && y + 1 >= a.y && y <= a.bottom()
+            });
+            let farge = if ved_aktiv { Color::Reset } else { DIM };
+            buf.set_string(v.x + x, v.y + y, tegn, Style::new().fg(farge));
+        }
+    }
+}
+
+fn rammetegn(opp: bool, ned: bool, venstre: bool, høyre: bool) -> &'static str {
+    match (opp, ned, venstre, høyre) {
+        (true, true, true, true) => "┼",
+        (true, true, false, true) => "├",
+        (true, true, true, false) => "┤",
+        (false, true, true, true) => "┬",
+        (true, false, true, true) => "┴",
+        (false, true, false, true) => "┌",
+        (false, true, true, false) => "┐",
+        (true, false, false, true) => "└",
+        (true, false, true, false) => "┘",
+        (_, _, false, false) => "│",
+        _ => "─",
+    }
+}
+
+fn tegn_ramme(buf: &mut Buffer, r: Rect, stil: Style) {
+    if r.width < 2 || r.height < 2 {
+        return;
+    }
+    let strek = "─".repeat(r.width as usize - 2);
+    buf.set_string(r.x, r.y, format!("╭{strek}╮"), stil);
+    buf.set_string(r.x, r.bottom() - 1, format!("╰{strek}╯"), stil);
+    for y in r.y + 1..r.bottom() - 1 {
+        buf.set_string(r.x, y, "│", stil);
+        buf.set_string(r.right() - 1, y, "│", stil);
     }
 }
 
@@ -376,6 +541,13 @@ fn farge(f: Farge) -> Color {
 #[cfg(test)]
 mod tester {
     use super::*;
+
+    #[test]
+    fn rammetegn_etter_naboene() {
+        assert_eq!(rammetegn(true, true, false, false), "│");
+        assert_eq!(rammetegn(false, false, true, true), "─");
+        assert_eq!(rammetegn(true, true, false, true), "├");
+    }
 
     #[test]
     fn bryter_på_ord_og_kutter_det_som_ikke_får_plass() {

@@ -6,21 +6,45 @@ use crate::ny;
 pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
 og du kan gå inn i den og skrive.";
 
-pub const TASTER: [(&str, &str); 7] = [
+pub const TASTER: [(&str, &str); 6] = [
     ("↑↓  k j", "velg Claude"),
     ("⏎", "gå inn i sesjonen"),
-    ("C-q", "tilbake til lista"),
     ("n", "ny Claude i en mappe du velger"),
     ("C-r", "fortsett en tidligere samtale"),
     ("?", "denne hjelpen"),
     ("q", "avslutt"),
 ];
 
+/// Etter prefikset, fra lista og fra panen.
+pub const PREFIKSTASTER: [(&str, &str); 21] = [
+    ("c", "nytt vindu i mappa til panen"),
+    ("n p", "neste og forrige vindu"),
+    ("0-9", "vinduet med det nummeret"),
+    ("l", "forrige vindu du var i"),
+    ("&", "lukk vinduet"),
+    ("%", "del vinduet side om side"),
+    ("\"", "del vinduet over og under"),
+    ("o ←↑↓→", "neste pane, eller i en retning"),
+    (";", "forrige aktive pane"),
+    ("z", "zoom inn og ut på panen"),
+    ("x", "lukk panen"),
+    ("{ }", "bytt plass med panen før eller etter"),
+    ("Space", "neste oppsett"),
+    ("C-o", "roter panene"),
+    ("C-←↑↓→", "endre størrelse, med M- fem om gangen"),
+    ("PgUp", "rull en side opp"),
+    ("( )", "forrige og neste Claude i lista"),
+    ("B", "bytt mellom linjer og bokser"),
+    ("w s", "tilbake til lista"),
+    ("d", "avslutt"),
+    ("prefiks", "send prefikset til panen"),
+];
+
 pub const MERKER: [(Merke, &str); 5] = [
     (Merke::Spør, "spør om noe"),
-    (Merke::Ferdig, "ferdig med noe du ikke har sett"),
+    (Merke::Ulest, "ferdig med noe du ikke har sett"),
     (Merke::Jobber, "jobber"),
-    (Merke::Sett, "sett"),
+    (Merke::Sett, "ferdig, og du har sett den"),
     (Merke::Starter, "starter"),
 ];
 
@@ -46,6 +70,10 @@ pub fn tekst() -> String {
         env!("CARGO_PKG_VERSION")
     );
     for (tast, hva) in TASTER {
+        ut += &format!("  {tast:<9}{hva}\n");
+    }
+    ut += "\nEtter prefikset fra tmux, som C-b:\n";
+    for (tast, hva) in PREFIKSTASTER {
         ut += &format!("  {tast:<9}{hva}\n");
     }
     ut += "\nMerker:\n";
