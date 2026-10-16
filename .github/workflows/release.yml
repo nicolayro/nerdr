@@ -1,0 +1,44 @@
+# Bygger nerdr for macOS og Linux når en tag som v0.1.0 pushes, og legger
+# binærene i en GitHub-release. scripts/installer.sh henter dem derfra.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  opprett:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  bygg:
+    needs: opprett
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo test --locked
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Pakk og last opp
+        run: |
+          navn=nerdr-${{ matrix.target }}.tar.gz
+          tar -czf "$navn" -C target/${{ matrix.target }}/release nerdr
+          shasum -a 256 "$navn" > "$navn.sha256"
+          gh release upload "$GITHUB_REF_NAME" "$navn" "$navn.sha256" --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}

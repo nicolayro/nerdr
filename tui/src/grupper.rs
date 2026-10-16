@@ -40,6 +40,16 @@ impl Merke {
         }
     }
 
+    pub fn glyf(self) -> &'static str {
+        match self {
+            Merke::Spør => "●",
+            Merke::Ferdig => "◆",
+            Merke::Jobber => "◐",
+            Merke::Sett => "○",
+            Merke::Starter => "◌",
+        }
+    }
+
     pub fn gruppe(self) -> Gruppe {
         match self {
             Merke::Spør | Merke::Ferdig => Gruppe::VenterPåDeg,

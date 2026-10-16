@@ -1,4 +1,5 @@
 mod grupper;
+mod hjelp;
 mod ny;
 mod taster;
 mod tegn;
@@ -96,6 +97,7 @@ struct App {
     visning: Rect,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
+    hjelp: bool,
     /// Pane-id → mappe for Claude-er nerdr har startet, til de står i
     /// registeret. Oppstarten tar flere sekunder, og så lenge vises de likevel.
     nye: HashMap<String, PathBuf>,
@@ -109,8 +111,16 @@ fn main() {
     let socket = match args.as_slice() {
         [] => None,
         [flagg, socket] if flagg == "-L" => Some(socket.as_str()),
+        [flagg] if flagg == "-h" || flagg == "--help" => {
+            print!("{}", hjelp::tekst());
+            return;
+        }
+        [flagg] if flagg == "-V" || flagg == "--version" => {
+            println!("nerdr {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
         _ => {
-            eprintln!("bruk: nerdr [-L socket]");
+            eprintln!("bruk: nerdr [-L socket], eller nerdr --help");
             std::process::exit(2);
         }
     };
@@ -125,6 +135,10 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
     let tmux_tx = tx.clone();
     let kontroll = Kontroll::start(socket, move |m| {
         let _ = tmux_tx.send(Hendelse::Tmux(m));
+    })
+    .map_err(|feil| match feil.kind() {
+        io::ErrorKind::NotFound => io::Error::other("fant ikke tmux. Installer den, for eksempel med `brew install tmux`."),
+        _ => feil,
     })?;
     thread::spawn(move || {
         while let Ok(e) = event::read() {
@@ -184,6 +198,7 @@ impl App {
             fokus: Fokus::Liste,
             visning: Rect::default(),
             velger: None,
+            hjelp: false,
             nye: HashMap::new(),
             gå_inn_i: None,
             ferdig: None,
@@ -376,7 +391,7 @@ impl App {
             Venter::NySesjon { mappe, .. } | Venter::NyPane { mappe } => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
                 // Skrevet inn i skallet heller enn kjørt av tmux, siden `claude`
-                // kan være en funksjon i .zshrc, som wrapperen til teamet.
+                // kan være en funksjon i .zshrc, som tmux ikke ser.
                 self.send(&format!("send-keys -t {} -l claude", sitat(&id)), Venter::Ingenting);
                 self.send(&format!("send-keys -t {} Enter", sitat(&id)), Venter::Ingenting);
                 self.nye.insert(id.clone(), mappe);
@@ -438,11 +453,11 @@ impl App {
     }
 
     /// Klienten får størrelsen som gjør at den valgte panen fyller visningen.
-    /// Resten av vinduet, som sidebar-kolonnene fra tmux-oppsettet, legges til.
+    /// Resten av vinduet, som paner ved siden av den, legges til.
     ///
     /// Sendes bare når visningen endres eller en ny pane velges, aldri fordi
-    /// panene i tmux har endret størrelse. `client-resized`-hooken i
-    /// sidebar-repoet endrer panene som svar, og da ble det en løkke.
+    /// panene i tmux har endret størrelse. Et tmux-oppsett med en
+    /// `client-resized`-hook som endrer panene, gir ellers en løkke.
     fn synk_størrelse(&mut self) {
         let Some(pane) = &self.valgt else { return };
         if self.størrelse_for == Some(self.visning) || self.visning.width == 0 {
@@ -456,6 +471,10 @@ impl App {
     }
 
     fn tast(&mut self, k: KeyEvent) -> bool {
+        if self.hjelp {
+            self.hjelp = false;
+            return true;
+        }
         if let Some(velger) = &mut self.velger {
             let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
             match k.code {
@@ -501,6 +520,7 @@ impl App {
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
             KeyCode::Enter => self.bytt_fokus(Fokus::Pane),
             KeyCode::Char('n') => self.velger = Some(ny::Velger::ny()),
+            KeyCode::Char('?') => self.hjelp = true,
             _ => return false,
         }
         true
@@ -518,7 +538,7 @@ impl App {
     }
 
     fn mus(&mut self, m: MouseEvent) -> bool {
-        if self.velger.is_some() {
+        if self.velger.is_some() || self.hjelp {
             return false;
         }
         let v = self.visning;
@@ -528,10 +548,12 @@ impl App {
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
+            // Via lista, så panen du forlater, merkes som sett før du går inn.
             self.bytt_fokus(Fokus::Liste);
             if self.valgt.as_ref().map(|p| &p.id) != Some(&pane.id) {
                 self.velg(pane);
             }
+            self.bytt_fokus(Fokus::Pane);
             return true;
         }
 

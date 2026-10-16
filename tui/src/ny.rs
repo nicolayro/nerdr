@@ -3,8 +3,10 @@
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-/// Mappene under `$HOME` det søkes i. Kandidatene er mappene rett under dem.
-const MAPPER: [&str; 3] = ["git", "worktree", "fagdag"];
+/// Mappene det søkes i, kolonseparert som `PATH`. Kandidatene er mappene rett
+/// under dem.
+pub const MAPPER_VARIABEL: &str = "NERDR_MAPPER";
+const STANDARD_MAPPER: &str = "~/git";
 
 pub struct Kandidat {
     pub mappe: PathBuf,
@@ -27,7 +29,7 @@ pub struct Velger {
 impl Velger {
     pub fn ny() -> Velger {
         let hjem = PathBuf::from(env::var("HOME").unwrap_or_default());
-        let kandidater = kandidater(&hjem)
+        let kandidater = kandidater(&røtter(&mapper(), &hjem))
             .into_iter()
             .map(|mappe| {
                 let vis = mappe
@@ -77,10 +79,25 @@ impl Velger {
     }
 }
 
-fn kandidater(hjem: &Path) -> Vec<PathBuf> {
+/// Verdien av `NERDR_MAPPER`, eller standarden når den ikke er satt.
+pub fn mapper() -> String {
+    env::var(MAPPER_VARIABEL).ok().filter(|v| !v.trim().is_empty()).unwrap_or_else(|| STANDARD_MAPPER.into())
+}
+
+/// Stier som ikke er absolutte, regnes fra `hjem`, med eller uten `~/` foran.
+fn røtter(mapper: &str, hjem: &Path) -> Vec<PathBuf> {
+    mapper
+        .split(':')
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .map(|m| hjem.join(m.strip_prefix('~').map_or(m, |r| r.trim_start_matches('/'))))
+        .collect()
+}
+
+fn kandidater(røtter: &[PathBuf]) -> Vec<PathBuf> {
     let mut alle = Vec::new();
-    for rot in MAPPER {
-        let Ok(filer) = fs::read_dir(hjem.join(rot)) else { continue };
+    for rot in røtter {
+        let Ok(filer) = fs::read_dir(rot) else { continue };
         let mut mapper: Vec<PathBuf> = filer
             .flatten()
             .filter(|f| !f.file_name().to_string_lossy().starts_with('.'))
@@ -155,9 +172,16 @@ mod tester {
         }
         fs::write(hjem.join("git/fil"), "").unwrap();
 
-        let navn: Vec<_> = kandidater(&hjem).iter().map(|m| m.strip_prefix(&hjem).unwrap().to_path_buf()).collect();
+        let navn: Vec<_> = kandidater(&røtter("git:fagdag", &hjem)).iter().map(|m| m.strip_prefix(&hjem).unwrap().to_path_buf()).collect();
         assert_eq!(navn, [Path::new("git/a"), Path::new("git/b"), Path::new("fagdag/c")]);
         fs::remove_dir_all(hjem).unwrap();
+    }
+
+    #[test]
+    fn røtter_fra_hjem_med_eller_uten_tilde() {
+        let hjem = Path::new("/h");
+        let røtter = røtter("~/git: kode ::/abs/sti:~", hjem);
+        assert_eq!(røtter, [Path::new("/h/git"), Path::new("/h/kode"), Path::new("/abs/sti"), Path::new("/h")]);
     }
 
     #[test]

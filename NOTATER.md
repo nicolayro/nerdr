@@ -61,8 +61,8 @@ En ny Claude startes i en tmux-sesjon som heter det samme som mappa, med punktum
 og kolon byttet ut med bindestrek, siden tmux ellers bytter dem ut selv og navnet
 ikke finner sesjonen igjen. Vinduet starter med et vanlig skall, og `claude`
 skrives inn med `send-keys`. Kjører tmux kommandoen direkte, går den gjennom
-`zsh -c`, som ikke leser `.zshrc`, og da hopper den over en `claude`-funksjon der,
-som wrapperen til teamet. Når Claude avslutter, står du i skallet i samme mappe.
+`zsh -c`, som ikke leser `.zshrc`, og da hopper den over en `claude`-funksjon der.
+Når Claude avslutter, står du i skallet i samme mappe.
 
 Mappevelgeren er nerdr sin egen, ikke fzf. nerdr står utenfor tmux, så
 `fzf --popup` virker ikke, og `fzf --height` tømmer hele radene den bruker og
@@ -71,6 +71,22 @@ for `event::poll` i crossterm leser tastene inn i sin egen buffer.
 
 Det tar flere sekunder før en ny Claude står i registeret. Panen vises derfor
 fra tmux har laget den, med `◌` og «starter …», og nerdr går inn i den.
+
+Uten sesjoner svarer `attach-session` med feilen i blokka fra selve
+oppkoblingen, som tolkeren hopper over. nerdr sjekker derfor med `has-session`
+først, og bruker `new-session` når det ikke finnes noen.
+
+## Distribusjon
+
+En tag som `v0.1.0` får `.github/workflows/release.yml` til å bygge for macOS
+(arm64 og x86_64) og Linux (x86_64) og legge binærene med sjekksum i en release.
+`scripts/installer.sh` henter dem med `gh`, siden repoet er privat og en vanlig
+`curl` ikke kommer til. Versjonen i taggen bør stemme med `version` i
+`Cargo.toml`, som `nerdr --version` viser. Bare `actions/checkout` brukes av
+tredjeparts actions, låst til en commit.
+
+`INSTALL.md` er skrevet for Claude, så en kollega kan be sin Claude installere
+og sette opp nerdr.
 
 `-L <socket>` velger tmux-server, som `tmux -L`. `scripts/tui-test.sh` bruker
 det, sammen med et falskt register i `CLAUDE_CONFIG_DIR`, til å kjøre nerdr mot
@@ -105,10 +121,6 @@ Alternativer å vurdere:
 
 **Ny mappe.** `n` starter Claude i en mappe som finnes. Neste steg er å kunne
 lage en ny, for eksempel et worktree, slik `ny-sesjon.sh` i sidebar-repoet gjør.
-
-**Mappene per bruker.** Mappene det søkes i, er faste (`MAPPER` i `tui/src/ny.rs`).
-Før nerdr deles med andre, må de kunne settes per bruker, for eksempel med en
-miljøvariabel.
 
 Branchen `full-prototype` har en første versjon av tilstand per Claude
 (venter, jobber, klar) oversatt fra `sesjoner.py` i sidebar-repoet,

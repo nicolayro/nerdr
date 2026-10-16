@@ -28,7 +28,7 @@ for linje in "alfa waiting" "gamma busy"; do
 done
 
 tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
-  "HOME=$KONFIG CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
+  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/fagdag CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
@@ -71,10 +71,11 @@ tmux -L nerdr-vert send-keys -t vert j
 sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | head -7
 
-echo "=== klikk på andre rad velger alfa igjen ==="
+echo "=== klikk på andre rad går rett inn i alfa ==="
 tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;2M\033[<0;5;2m')"
 sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | head -7
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,7p;16p'
+tmux -L nerdr-vert send-keys -t vert C-q
 
 echo "=== gamma blir ferdig og havner under VENTER PÅ DEG med ◆, og uten cwd står gamma:0 ==="
 pane=$(tmux -L nerdr-maal display-message -p -t gamma '#{pane_id}')
@@ -89,14 +90,24 @@ tmux -L nerdr-vert send-keys -t vert C-q
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert
 
-echo "=== k opp til alfa, så klikk på gamma nederst (rad 14) velger gamma ==="
+echo "=== k opp til alfa, så klikk på gamma nederst (rad 14) går inn i gamma ==="
 tmux -L nerdr-vert send-keys -t vert k
 sleep 0.3
 tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;14M\033[<0;5;14m')"
 sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p;14p'
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p;14p;16p'
+tmux -L nerdr-vert send-keys -t vert C-q
+sleep 0.2
 
-echo "=== n åpner popupen med mappene under ~/git, ~/worktree og ~/fagdag ==="
+echo "=== ? viser hjelpen, og en tast lukker den ==="
+tmux -L nerdr-vert send-keys -t vert ?
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert
+tmux -L nerdr-vert send-keys -t vert x
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | tail -1
+
+echo "=== n åpner popupen med mappene i NERDR_MAPPER, ~/git og fagdag ==="
 tmux -L nerdr-vert send-keys -t vert n
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert
@@ -104,7 +115,7 @@ tmux -L nerdr-vert capture-pane -p -t vert
 echo "=== «pny» sorterer prosjekt.ny øverst ==="
 tmux -L nerdr-vert send-keys -t vert -l pny
 sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '4,7p'
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2,4p'
 
 echo "=== Enter lager sesjonen prosjekt-ny, skriver inn claude, og nerdr er inne i den med ◌ og «starter …» ==="
 tmux -L nerdr-vert send-keys -t vert Enter
@@ -146,5 +157,16 @@ sleep 0.5
 tmux -L nerdr-maal list-clients
 
 tmux -L nerdr-maal kill-server
+
+echo "=== uten tmux-server lager nerdr en sesjon (skal være 1) ==="
+tmux -L nerdr-tom kill-server 2>/dev/null
+tmux -L nerdr-vert new-session -d -s tom "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-tom; sleep 30"
+sleep 1
+tmux -L nerdr-tom list-sessions | wc -l
+tmux -L nerdr-tom kill-server
+
+echo "=== uten tmux sier nerdr fra ==="
+PATH=/finnes-ikke "$NERDR"
+
 tmux -L nerdr-vert kill-server
 rm -r "$KONFIG"

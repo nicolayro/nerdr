@@ -9,7 +9,7 @@ use ratatui::style::{Color, Modifier, Style};
 
 use crate::grupper::{Gruppe, Merke, Rad};
 use crate::ny::Velger;
-use crate::{App, Fokus};
+use crate::{App, Fokus, hjelp};
 
 /// Bredden på lista, med skillelinja.
 pub const LISTE: u16 = 36;
@@ -38,7 +38,9 @@ pub fn alt(f: &mut Frame, app: &App) {
     tegn_liste(buf, område, app);
     tegn_pane(buf, app);
 
-    if let Some(velger) = &app.velger {
+    if app.hjelp {
+        tegn_hjelp(buf, område);
+    } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
     } else if let (Fokus::Pane, Some((x, y))) = (app.fokus, app.markør) {
@@ -78,7 +80,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     }
 
     let hint = match app.fokus {
-        Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · q avslutt",
+        Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · ? hjelp",
         Fokus::Pane => " C-q tilbake til lista",
     };
     buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(GRÅ));
@@ -125,15 +127,8 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
     for y in område.top()..område.bottom() {
         buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT));
     }
-    let (glyf, glyffarge) = match merke {
-        Merke::Spør => ("●", ORANSJE),
-        Merke::Ferdig => ("◆", ORANSJE),
-        Merke::Jobber => ("◐", GRØNN),
-        Merke::Sett => ("○", LYS),
-        Merke::Starter => ("◌", GRØNN),
-    };
     let y = område.y;
-    buf.set_stringn(1, y, glyf, 1, Style::new().fg(glyffarge));
+    buf.set_stringn(1, y, merke.glyf(), 1, Style::new().fg(glyffarge(merke)));
 
     let mappe = kutt(&kort.mappe, TEKST);
     let x = buf.set_stringn(TEKST_X, y, &mappe, TEKST, Style::new().fg(farge).add_modifier(Modifier::BOLD)).0;
@@ -145,6 +140,14 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
     let oppgavefarge = if valgt { LYS } else { GRÅ };
     for (linje, y) in kort.oppgave.iter().zip(y + 1..område.bottom()) {
         buf.set_stringn(TEKST_X, y, linje, TEKST, Style::new().fg(oppgavefarge));
+    }
+}
+
+fn glyffarge(merke: Merke) -> Color {
+    match merke {
+        Merke::Spør | Merke::Ferdig => ORANSJE,
+        Merke::Jobber | Merke::Starter => GRØNN,
+        Merke::Sett => LYS,
     }
 }
 
@@ -182,28 +185,69 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     })
 }
 
-/// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
-fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
-    let bredde = område.width.saturating_sub(4).min(64);
-    let høyde = område.height.saturating_sub(4).min(VELGER_LINJER + 4);
-    let boks = Rect::new((område.width - bredde) / 2, (område.height - høyde) / 3, bredde, høyde);
+/// En boks med ramme midt på skjermen, med tittel øverst og hint nederst,
+/// eller `None` når skjermen er for liten.
+fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str, hint: &str) -> Option<Rect> {
+    let bredde = område.width.saturating_sub(4).min(bredde);
+    let høyde = område.height.saturating_sub(2).min(høyde);
     if bredde < 12 || høyde < 5 {
-        return (boks.x, boks.y);
+        return None;
     }
-    let indre = (bredde - 4) as usize;
+    let boks = Rect::new((område.width - bredde) / 2, (område.height - høyde) / 3, bredde, høyde);
     let ramme = Style::new().fg(ORANSJE);
     buf.set_style(boks, Style::reset());
     for y in boks.top()..boks.bottom() {
-        let (v, h) = match y {
-            y if y == boks.top() => ("╭", "╮"),
-            y if y == boks.bottom() - 1 => ("╰", "╯"),
-            _ => ("│", "│"),
+        let (v, fyll, h) = match y {
+            y if y == boks.top() => ("╭", "─", "╮"),
+            y if y == boks.bottom() - 1 => ("╰", "─", "╯"),
+            _ => ("│", " ", "│"),
         };
-        let fyll = if y == boks.top() || y == boks.bottom() - 1 { "─" } else { " " };
         buf.set_string(boks.x, y, format!("{v}{}{h}", fyll.repeat(bredde as usize - 2)), ramme);
     }
-    buf.set_string(boks.x + 2, boks.y, " ny claude ", Style::new().fg(HVIT).add_modifier(Modifier::BOLD));
-    buf.set_string(boks.x + 2, boks.bottom() - 1, " ⏎ start · esc avbryt ", Style::new().fg(GRÅ));
+    let tekst = (bredde - 4) as usize;
+    buf.set_stringn(boks.x + 2, boks.y, format!(" {tittel} "), tekst, Style::new().fg(HVIT).add_modifier(Modifier::BOLD));
+    buf.set_stringn(boks.x + 2, boks.bottom() - 1, format!(" {hint} "), tekst, Style::new().fg(GRÅ));
+    Some(boks)
+}
+
+fn tegn_hjelp(buf: &mut Buffer, område: Rect) {
+    const BREDDE: u16 = 58;
+    let indre = (BREDDE - 4) as usize;
+    let om = bryt(hjelp::OM, indre, 3);
+    let høyde = om.len() + 1 + hjelp::TASTER.len() + 1 + hjelp::MERKER.len() + 1 + 2 + 2;
+    let Some(boks) = boks(buf, område, BREDDE, høyde as u16, "nerdr", "trykk en tast for å lukke") else { return };
+    let x = boks.x + 2;
+    let indre = (boks.width - 4) as usize;
+    let mut y = boks.y + 1..boks.bottom() - 1;
+    let mut linje = |tekst: &str, stil: Style| {
+        if let Some(y) = y.next() {
+            buf.set_stringn(x, y, tekst, indre, stil);
+        }
+    };
+    for l in om {
+        linje(&l, Style::new().fg(LYS));
+    }
+    linje("", Style::new());
+    for (tast, hva) in hjelp::TASTER {
+        linje(&format!("{tast:<9}{hva}"), Style::new().fg(LYS));
+    }
+    linje("", Style::new());
+    for (merke, hva) in hjelp::MERKER {
+        linje(&format!("{}  {hva}", merke.glyf()), Style::new().fg(LYS));
+    }
+    linje("", Style::new());
+    linje(hjelp::BARE_TMUX, Style::new().fg(GRÅ));
+    linje(&hjelp::mapper(), Style::new().fg(GRÅ));
+}
+
+/// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
+fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
+    let Some(boks) = boks(buf, område, 64, VELGER_LINJER + 4, "ny claude", "⏎ start · esc avbryt") else {
+        return (0, 0);
+    };
+    let bredde = boks.width;
+    let høyde = boks.height;
+    let indre = (bredde - 4) as usize;
 
     let treff = velger.treff();
     let x = boks.x + 2;

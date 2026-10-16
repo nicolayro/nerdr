@@ -91,20 +91,27 @@ pub struct Kontroll {
 
 impl Kontroll {
     /// Kobler til sesjonen tmux selv velger (sist brukte), på serveren med
-    /// navnet `socket` (som `tmux -L`) eller standardserveren. `melde` kalles
-    /// fra en egen tråd for hver melding.
+    /// navnet `socket` (som `tmux -L`) eller standardserveren. Har serveren
+    /// ingen sesjoner, eller kjører den ikke, lages en. `melde` kalles fra en
+    /// egen tråd for hver melding.
     pub fn start(
         socket: Option<&str>,
         mut melde: impl FnMut(Melding) + Send + 'static,
     ) -> io::Result<Kontroll> {
-        let mut tmux = Command::new("tmux");
-        if let Some(socket) = socket {
-            tmux.args(["-L", socket]);
-        }
-        let mut barn = tmux
-            .args(["-C", "attach-session"])
+        let tmux = || {
+            let mut tmux = Command::new("tmux");
+            if let Some(socket) = socket {
+                tmux.args(["-L", socket]);
+            }
             // Uten dette nekter tmux å koble til fra innsiden av en annen tmux.
-            .env_remove("TMUX")
+            tmux.env_remove("TMUX");
+            tmux
+        };
+        // attach-session uten sesjoner svarer i blokka fra selve oppkoblingen,
+        // som tolkeren hopper over, så feilen ville kommet uten grunn.
+        let finnes = tmux().arg("has-session").stdout(Stdio::null()).stderr(Stdio::null()).status()?.success();
+        let mut barn = tmux()
+            .args(["-C", if finnes { "attach-session" } else { "new-session" }])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
