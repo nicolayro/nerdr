@@ -292,7 +292,7 @@ impl App {
         let mut tegne = true;
         while self.ferdig.is_none() {
             if tegne {
-                self.visning = tegn::visning(terminal.size()?);
+                self.visning = tegn::visning(terminal.size()?, self.rammer);
                 // Når teksten i panen ruller, skrives nesten hver celle på nytt.
                 // Uten synkronisert oppdatering kan terminalen vise den halvveis.
                 execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
@@ -925,8 +925,9 @@ impl App {
             return false;
         }
         let v = self.visning;
-        if m.row + 1 == v.y && m.column >= v.x {
-            if m.kind == MouseEventKind::Down(MouseButton::Left)
+        if m.row < v.y && m.column >= v.x {
+            if m.row == 0
+                && m.kind == MouseEventKind::Down(MouseButton::Left)
                 && let Some(vindu) = tegn::fane_på(self, m.column)
             {
                 self.vis_vindu(vindu);

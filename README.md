@@ -45,8 +45,9 @@ blir hjulet til piltaster.
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
 hver sin boks eller med streker mellom, etter `NERDR_RAMMER`. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
-Øverst i visningen står vinduene i sesjonen som faner, med en strek under, og
-vinduet som vises, har bakgrunn. Et klikk på en fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
+Øverst i visningen står vinduene i sesjonen som faner, og vinduet som vises,
+har bakgrunn. Med linjer står en strek under fanene, og med bokser er toppen av
+boksene streken. Et klikk på en fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
 
 Prefikset er det samme som i tmux-oppsettet ditt, ellers `C-b`. Tastene etter
 det er de samme som i tmux, og virker både fra lista og fra panen:
@@ -115,7 +116,7 @@ som er ferdig, fra en du har sett.
 | | |
 | --- | --- |
 | `NERDR_MAPPER` | Mappene `n` søker i, kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
-| `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `bokser`. |
+| `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `linjer`. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |
 | `nerdr -L <socket>` | tmux-serveren, som `tmux -L`. |
 

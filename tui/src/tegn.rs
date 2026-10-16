@@ -29,9 +29,11 @@ const GRÅ: Color = Color::Indexed(245);
 const DIM: Color = Color::Indexed(240);
 const MARKERT: Color = Color::Indexed(236);
 
-/// Til høyre for lista, under statuslinja.
-pub fn visning(størrelse: Size) -> Rect {
-    Rect::new(LISTE, 1, størrelse.width.saturating_sub(LISTE), størrelse.height.saturating_sub(1))
+/// Til høyre for lista, under fanene. Med linjer står en strek under fanene,
+/// og med bokser er toppen av boksene streken.
+pub fn visning(størrelse: Size, rammer: Rammer) -> Rect {
+    let topp = if rammer == Rammer::Linjer { 2 } else { 1 };
+    Rect::new(LISTE, topp, størrelse.width.saturating_sub(LISTE), størrelse.height.saturating_sub(topp))
 }
 
 pub fn alt(f: &mut Frame, app: &App) {
@@ -220,20 +222,19 @@ fn faner(app: &App) -> Vec<Fane> {
     ut
 }
 
-/// Raden over visningen, med vinduene i sesjonen. Hele raden er understreket,
-/// så streken står under fanene uten en egen rad. Understreken har tekstfargen,
-/// så all tekst i raden har samme farge for at streken skal bli ensfarget.
+/// Vinduene i sesjonen øverst over visningen. Vinduet som vises, har
+/// bakgrunn.
 fn tegn_faner(buf: &mut Buffer, app: &App) {
     let v = app.visning;
-    let Some(y) = v.y.checked_sub(1) else { return };
-    let strek = Style::new().fg(GRÅ).add_modifier(Modifier::UNDERLINED);
-    buf.set_string(v.x, y, " ".repeat(v.width as usize), strek);
+    if v.y > 1 {
+        buf.set_string(v.x, v.y - 1, "─".repeat(v.width as usize), Style::new().fg(DIM));
+    }
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
         let stil = match f.vist {
-            true => strek.bg(MARKERT).add_modifier(Modifier::BOLD),
-            false => strek,
+            true => Style::new().fg(HVIT).bg(MARKERT).add_modifier(Modifier::BOLD),
+            false => Style::new().fg(GRÅ),
         };
-        buf.set_string(f.fra, y, format!(" {} ", f.navn), stil);
+        buf.set_string(f.fra, 0, format!(" {} ", f.navn), stil);
     }
 }
 
