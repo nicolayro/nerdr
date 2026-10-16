@@ -12,8 +12,9 @@ use crate::{App, Fokus};
 
 /// Bredden på lista, med skillelinja.
 pub const LISTE: u16 = 36;
-/// Teksten i et kort starter etter peker, glyf og et mellomrom.
-const TEKST_X: u16 = 3;
+/// Teksten i et kort starter etter peker, glyf og to mellomrom. Glyfene har
+/// tvetydig bredde i Unicode, og mange fonter tegner dem over to kolonner.
+const TEKST_X: u16 = 4;
 const TEKST: usize = (LISTE - 1 - TEKST_X - 1) as usize;
 const OPPGAVE_LINJER: usize = 2;
 
@@ -54,6 +55,11 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
         }
         match rad {
             Rad::Tom => y += 1,
+            Rad::Strek => {
+                let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
+                buf.set_stringn(TEKST_X, y, strek, TEKST, Style::new().fg(DIM));
+                y += 1;
+            }
             Rad::Overskrift(gruppe) => {
                 let x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
                 let strek = "─".repeat(bredde.saturating_sub(x + 1) as usize);

@@ -22,6 +22,7 @@ pub enum Gruppe {
 #[derive(Debug, PartialEq)]
 pub enum Rad<'a> {
     Tom,
+    Strek,
     Overskrift(Gruppe),
     Pane(&'a Pane, Merke),
 }
@@ -66,7 +67,9 @@ pub fn rader<'a>(paner: &'a [Pane], merke: impl Fn(&Pane) -> Option<Merke>) -> V
     let mut rader = Vec::new();
     let mut forrige = None;
     for (pane, m) in merket {
-        if forrige != Some(m.gruppe()) {
+        if forrige == Some(m.gruppe()) {
+            rader.push(Rad::Strek);
+        } else {
             if forrige.is_some() {
                 rader.push(Rad::Tom);
             }
@@ -94,7 +97,7 @@ mod tester {
     }
 
     #[test]
-    fn grupperer_med_overskrifter_og_hopper_over_tomme() {
+    fn grupperer_med_overskrifter_og_strek_mellom_panene() {
         let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20")).unwrap();
         let paner = [pane("%1"), pane("%2"), pane("%3")];
         let rader = rader(&paner, |p| match p.id.as_str() {
@@ -107,6 +110,7 @@ mod tester {
             [
                 Rad::Overskrift(Gruppe::VenterPåDeg),
                 Rad::Pane(&paner[1], Merke::Ferdig),
+                Rad::Strek,
                 Rad::Pane(&paner[2], Merke::Spør),
                 Rad::Tom,
                 Rad::Overskrift(Gruppe::Sett),
