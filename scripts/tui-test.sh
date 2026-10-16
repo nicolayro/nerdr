@@ -37,9 +37,9 @@ tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
-echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat, og med linjer en strek under ==="
+echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat på en strek som fortsetter overskriften med ┬, og de andre overskriftene treffer skillestreken med ┤. SETT står med 0 ==="
 tmux -L nerdr-vert capture-pane -p -t vert
-echo "=== størrelse på alfa (skal være 68x13 med bokser, 74x14 med linjer) ==="
+echo "=== størrelse på alfa (skal være 68x12 med bokser, 74x15 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
 
 echo "=== tastetrykk: Enter for fokus, så «hei æ» og Enter til alfa ==="
@@ -56,7 +56,7 @@ tmux -L nerdr-vert paste-buffer -p -d -b test -t vert
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t alfa | grep -n -e 'linje' -e 'HOME'
 
-echo "=== musehjul i kolonne 41, rad 4 (skal komme fram som ^[[<64;2;2M med bokser, ^[[<64;5;2M med linjer) ==="
+echo "=== musehjul i kolonne 41, rad 4 (skal komme fram som ^[[<64;2;1M med bokser, ^[[<64;5;3M med linjer) ==="
 tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;41;4M')"
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t alfa | grep -n '<64'
@@ -185,7 +185,7 @@ tmux -L nerdr-vert send-keys -t vert C-b
 sleep 0.3
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
 
-echo "=== % deler alfa i to bokser med luft mellom, begge i nerdr-mappa, og tmux får 64x13 (74x14 med linjer) ==="
+echo "=== % deler alfa i to bokser med luft mellom, begge i nerdr-mappa, og tmux får 64x12 (74x15 med linjer) ==="
 tmux -L nerdr-vert send-keys -t vert %
 sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,3p'
@@ -271,11 +271,11 @@ tmux -L nerdr-vert capture-pane -p -t vert | sed -n '6,10p'
 tmux -L nerdr-vert send-keys -t vert C-b x y
 sleep 1
 
-echo "=== uten split fyller Claude-en hele visningen igjen (68x13, 74x14 med linjer) ==="
+echo "=== uten split fyller Claude-en hele visningen igjen (68x12, 74x15 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'
 tmux -L nerdr-vert send-keys -t vert C-b w
 
-echo "=== C-b B bytter rammene: alfa går fra 68x13 med bokser til 74x14 med linjer, og tilbake ==="
+echo "=== C-b B bytter rammene: alfa går fra 68x12 med bokser til 74x15 med linjer, og tilbake ==="
 for i in 1 2; do
   tmux -L nerdr-vert send-keys -t vert C-b B
   sleep 0.8

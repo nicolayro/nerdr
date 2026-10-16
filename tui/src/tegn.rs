@@ -29,10 +29,10 @@ const GRÅ: Color = Color::Indexed(245);
 const DIM: Color = Color::Indexed(240);
 const MARKERT: Color = Color::Indexed(236);
 
-/// Til høyre for lista, under fanene. Med linjer står en strek under fanene,
-/// og med bokser er toppen av boksene streken.
+/// Til høyre for lista, under faneraden. Med bokser står en tom rad mellom, så
+/// streken fanene står på, ikke ligger rett over toppen av boksene.
 pub fn visning(størrelse: Size, rammer: Rammer) -> Rect {
-    let topp = if rammer == Rammer::Linjer { 2 } else { 1 };
+    let topp = if rammer == Rammer::Bokser { 2 } else { 1 };
     Rect::new(LISTE, topp, størrelse.width.saturating_sub(LISTE), størrelse.height.saturating_sub(topp))
 }
 
@@ -60,6 +60,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     let bredde = LISTE - 1;
     let hint_y = område.height.saturating_sub(1);
 
+    let mut overskrifter = Vec::new();
     for (y, høyde, rad) in plasser(app, hint_y) {
         if y >= hint_y {
             break;
@@ -70,10 +71,12 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
                 let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
                 buf.set_stringn(TEKST_X, y, strek, TEKST, Style::new().fg(DIM));
             }
-            Rad::Overskrift(gruppe) => {
+            Rad::Overskrift(gruppe, antall) => {
                 let x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
-                let strek = "─".repeat(bredde.saturating_sub(x + 1) as usize);
+                let x = buf.set_stringn(x, y, antall.to_string(), bredde as usize, Style::new().fg(DIM)).0 + 1;
+                let strek = "─".repeat(bredde.saturating_sub(x) as usize);
                 buf.set_stringn(x, y, strek, bredde as usize, Style::new().fg(DIM));
+                overskrifter.push(y);
             }
             Rad::Pane(pane, merke) => {
                 let kort = kort(app, pane);
@@ -94,8 +97,15 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     };
     buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(GRÅ));
 
+    // Overskriftene treffer skillestreken, og øverst går streken videre til
+    // fanene.
     for y in 0..område.height {
-        buf.set_stringn(bredde, y, "│", 1, Style::new().fg(DIM));
+        let tegn = match y {
+            0 => "┬",
+            _ if overskrifter.contains(&y) => "┤",
+            _ => "│",
+        };
+        buf.set_stringn(bredde, y, tegn, 1, Style::new().fg(DIM));
     }
 }
 
@@ -171,7 +181,7 @@ fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
         .iter()
         .map(|r| if let Rad::Pane(pane, _) = r { kort(app, pane).høyde() } else { 1 })
         .collect();
-    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Sett))).unwrap_or(rader.len());
+    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Sett, _))).unwrap_or(rader.len());
     let over: u16 = høyder[..sett].iter().sum();
     let under: u16 = høyder[sett..].iter().sum();
     let sett_y = if over + under < plass { plass - under - 1 } else { over };
@@ -217,18 +227,16 @@ fn faner(app: &App) -> Vec<Fane> {
         let til = x + navn.chars().count() as u16 + 2;
         let vist = app.vist.as_ref() == Some(&p.vindu_id);
         ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist });
-        x = til;
+        x = til + 1;
     }
     ut
 }
 
-/// Vinduene i sesjonen øverst over visningen. Vinduet som vises, har
-/// bakgrunn.
+/// Vinduene i sesjonen på en strek i øverste rad, som fortsetter overskriften
+/// i lista. Vinduet som vises, har bakgrunn.
 fn tegn_faner(buf: &mut Buffer, app: &App) {
     let v = app.visning;
-    if v.y > 1 {
-        buf.set_string(v.x, v.y - 1, "─".repeat(v.width as usize), Style::new().fg(DIM));
-    }
+    buf.set_string(v.x, 0, "─".repeat(v.width as usize), Style::new().fg(DIM));
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
         let stil = match f.vist {
             true => Style::new().fg(HVIT).bg(MARKERT).add_modifier(Modifier::BOLD),
