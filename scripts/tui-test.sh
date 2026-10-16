@@ -37,7 +37,7 @@ tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
-echo "=== kortene viser mappe › branch, og alfa har oppgaven under. Øverst står fanen gcat på en strek ==="
+echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat på en strek ==="
 tmux -L nerdr-vert capture-pane -p -t vert
 echo "=== størrelse på alfa (skal være 68x13 med bokser, 74x15 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'

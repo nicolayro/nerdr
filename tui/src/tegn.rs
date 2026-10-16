@@ -97,7 +97,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     }
 }
 
-/// En sesjon i lista: mappe › branch, og oppgaven under.
+/// En sesjon i lista: mappa, branchen helt til høyre, og oppgaven under.
 struct Kort {
     mappe: String,
     branch: Option<String>,
@@ -138,10 +138,13 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
     buf.set_stringn(1, y, merke.glyf(), 1, Style::new().fg(glyffarge(merke)));
 
     let mappe = kutt(&kort.mappe, TEKST);
-    let x = buf.set_stringn(TEKST_X, y, &mappe, TEKST, Style::new().fg(farge).add_modifier(Modifier::BOLD)).0;
-    if let Some(branch) = &kort.branch {
-        let rest = TEKST.saturating_sub(mappe.chars().count());
-        buf.set_stringn(x, y, kutt(&format!(" › {branch}"), rest), rest, Style::new().fg(GRÅ));
+    buf.set_stringn(TEKST_X, y, &mappe, TEKST, Style::new().fg(farge).add_modifier(Modifier::BOLD));
+    // Med mindre enn to tegn igjen blir branchen bare en …
+    let plass = TEKST.saturating_sub(mappe.chars().count() + 2);
+    if let Some(branch) = kort.branch.as_ref().filter(|_| plass >= 2) {
+        let branch = kutt(branch, plass);
+        let x = TEKST_X + TEKST as u16 - branch.chars().count() as u16;
+        buf.set_string(x, y, branch, Style::new().fg(GRÅ));
     }
 
     let oppgavefarge = if valgt { LYS } else { GRÅ };
@@ -185,8 +188,11 @@ fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
 
 /// Panen som står på rad `y` i lista.
 pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
-    let plass = app.visning.height.saturating_sub(1);
-    plasser(app, plass).into_iter().find_map(|(topp, høyde, rad)| match rad {
+    let hint_y = app.visning.bottom().saturating_sub(1);
+    if y >= hint_y {
+        return None;
+    }
+    plasser(app, hint_y).into_iter().find_map(|(topp, høyde, rad)| match rad {
         Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })

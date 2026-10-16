@@ -935,8 +935,7 @@ impl App {
             return false;
         }
         if m.column < v.x {
-            let pane = (m.row + 1 < v.height).then(|| tegn::pane_på(self, m.row)).flatten();
-            let Some(pane) = pane else { return false };
+            let Some(pane) = tegn::pane_på(self, m.row) else { return false };
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
