@@ -8,7 +8,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
-use grupper::{Merke, Rad};
+use grupper::{Gruppe, Merke, Rad};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{FELT, Pane};
 use nerdr_kjerne::git;
@@ -66,6 +66,9 @@ struct App {
     /// Pane-id → da du sist var inne i panen. En Claude nerdr ikke har sett
     /// før, regnes som sett, så ingenting havner i «venter på deg» ved oppstart.
     sett: HashMap<String, u64>,
+    /// Panen du er inne i, og gruppen den sto i da du gikk inn. Den blir stående
+    /// der til du går ut, så kortet ikke flytter seg for hver melding.
+    låst: Option<(String, Gruppe)>,
 
     /// Panen som er valgt i lista og vises til høyre.
     valgt: Option<Pane>,
@@ -153,6 +156,7 @@ impl App {
             sesjoner: HashMap::new(),
             brancher: HashMap::new(),
             sett: HashMap::new(),
+            låst: None,
             valgt: None,
             bilde: Vec::new(),
             markør: None,
@@ -461,9 +465,16 @@ impl App {
     }
 
     fn bytt_fokus(&mut self, fokus: Fokus) {
-        if fokus != self.fokus
-            && let Some(pane) = &self.valgt
-        {
+        if fokus == self.fokus {
+            return;
+        }
+        // Gruppen må tas før panen merkes som sett, ellers havner en ferdig
+        // Claude du går inn i, rett i SETT.
+        self.låst = match fokus {
+            Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.merke(p)?.gruppe()))),
+            Fokus::Liste => None,
+        };
+        if let Some(pane) = &self.valgt {
             self.sett.insert(pane.id.clone(), nå_ms());
         }
         self.fokus = fokus;
@@ -476,8 +487,17 @@ impl App {
         Some(Merke::fra(sesjon, sett))
     }
 
+    fn plass(&self, pane: &Pane) -> Option<(Gruppe, Merke)> {
+        let merke = self.merke(pane)?;
+        let gruppe = match &self.låst {
+            Some((id, gruppe)) if *id == pane.id => *gruppe,
+            _ => merke.gruppe(),
+        };
+        Some((gruppe, merke))
+    }
+
     fn rader(&self) -> Vec<Rad<'_>> {
-        grupper::rader(&self.paner, |p| self.merke(p))
+        grupper::rader(&self.paner, |p| self.plass(p))
     }
 
     fn i_rekkefølge(&self) -> Vec<Pane> {

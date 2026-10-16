@@ -88,6 +88,17 @@ Alternativer å vurdere:
 
 ## Senere iterasjoner
 
+**Ny sesjon.** En tast starter `claude` i et nytt tmux-vindu, i en mappe du
+velger med `fzf`. Å lage en ny mappe kommer etterpå. Uavhengig av beslutningen
+om terminal i samme område.
+
+- `fzf` forutsettes installert. nerdr må forlate alternativ skjerm og raw mode
+  mens den kjører, siden nerdr står utenfor tmux og ikke kan bruke
+  `display-popup`.
+- Mappene det søkes i, er faste til å begynne med, men samlet ett sted så de er
+  lette å endre. Før nerdr deles med andre, må de kunne settes per bruker, f.eks.
+  med en miljøvariabel.
+
 Branchen `full-prototype` har en første versjon av tilstand per Claude
 (venter, jobber, klar) oversatt fra `sesjoner.py` i sidebar-repoet,
 gruppering på repo og worktree, `--json`, mus og innliming.

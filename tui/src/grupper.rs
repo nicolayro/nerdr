@@ -59,22 +59,29 @@ impl Gruppe {
 
 /// Panene gruppert, med en overskrift for hver gruppe som ikke er tom. Innenfor
 /// en gruppe beholdes rekkefølgen fra tmux, så lista ikke stokkes om når bare
-/// tidene endres.
-pub fn rader<'a>(paner: &'a [Pane], merke: impl Fn(&Pane) -> Option<Merke>) -> Vec<Rad<'a>> {
-    let mut merket: Vec<(&Pane, Merke)> = paner.iter().filter_map(|p| Some((p, merke(p)?))).collect();
-    merket.sort_by_key(|(_, m)| m.gruppe());
+/// tidene endres. Gruppen gis for seg, fordi panen du er inne i, blir stående
+/// der den var selv om merket endres.
+pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<(Gruppe, Merke)>) -> Vec<Rad<'a>> {
+    let mut plassert: Vec<(&Pane, Gruppe, Merke)> = paner
+        .iter()
+        .filter_map(|p| {
+            let (g, m) = plass(p)?;
+            Some((p, g, m))
+        })
+        .collect();
+    plassert.sort_by_key(|(_, g, _)| *g);
 
     let mut rader = Vec::new();
     let mut forrige = None;
-    for (pane, m) in merket {
-        if forrige == Some(m.gruppe()) {
+    for (pane, g, m) in plassert {
+        if forrige == Some(g) {
             rader.push(Rad::Strek);
         } else {
             if forrige.is_some() {
                 rader.push(Rad::Tom);
             }
-            rader.push(Rad::Overskrift(m.gruppe()));
-            forrige = Some(m.gruppe());
+            rader.push(Rad::Overskrift(g));
+            forrige = Some(g);
         }
         rader.push(Rad::Pane(pane, m));
     }
@@ -100,10 +107,13 @@ mod tester {
     fn grupperer_med_overskrifter_og_strek_mellom_panene() {
         let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20")).unwrap();
         let paner = [pane("%1"), pane("%2"), pane("%3")];
-        let rader = rader(&paner, |p| match p.id.as_str() {
-            "%1" => Some(Merke::Sett),
-            "%2" => Some(Merke::Ferdig),
-            _ => Some(Merke::Spør),
+        let rader = rader(&paner, |p| {
+            let m = match p.id.as_str() {
+                "%1" => Merke::Sett,
+                "%2" => Merke::Ferdig,
+                _ => Merke::Spør,
+            };
+            Some((m.gruppe(), m))
         });
         assert_eq!(
             rader,
@@ -117,5 +127,12 @@ mod tester {
                 Rad::Pane(&paner[0], Merke::Sett),
             ]
         );
+    }
+
+    #[test]
+    fn gruppen_kan_avvike_fra_merket() {
+        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20").unwrap()];
+        let rader = rader(&paner, |_| Some((Gruppe::Jobber, Merke::Sett)));
+        assert_eq!(rader, [Rad::Overskrift(Gruppe::Jobber), Rad::Pane(&paner[0], Merke::Sett)]);
     }
 }

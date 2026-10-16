@@ -51,6 +51,14 @@ tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;41;4M')"
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t alfa | grep -n '<64'
 
+echo "=== alfa blir ferdig mens du er inne, og står fortsatt under VENTER PÅ DEG, med ○ ==="
+alfa=$(tmux -L nerdr-maal display-message -p -t alfa '#{pane_id}')
+for status in idle waiting; do
+  printf '{"tmux":"alfa:@0.%s","status":"%s","cwd":"%s","updatedAt":%s000}' "$alfa" "$status" "$(dirname "$HER")" "$(date +%s)" > "$KONFIG/sessions/alfa.json"
+  sleep 2.5
+  [ $status = idle ] && tmux -L nerdr-vert capture-pane -p -t vert | head -3
+done
+
 echo "=== C-] tilbake, j ned til gamma ==="
 tmux -L nerdr-vert send-keys -t vert C-]
 sleep 0.2
