@@ -283,7 +283,7 @@ for tast in n l 0; do
 done
 
 echo "=== klikk på fane 1 viser vindu 1 ==="
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;49;1M\033[<0;49;1m')"
+tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;46;1M\033[<0;46;1m')"
 sleep 0.5
 tmux -L nerdr-maal display-message -p -t alfa '#{window_index}'
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'

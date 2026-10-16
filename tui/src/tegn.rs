@@ -28,7 +28,8 @@ const LYS: Color = Color::Indexed(252);
 const GRÅ: Color = Color::Indexed(245);
 const DIM: Color = Color::Indexed(240);
 const MARKERT: Color = Color::Indexed(236);
-const LYSERE: Color = Color::Indexed(239);
+const STATUS: Color = Color::Indexed(235);
+const STATUS_AKTIV: Color = Color::Indexed(238);
 
 /// Til høyre for lista, under statuslinja.
 pub fn visning(størrelse: Size) -> Rect {
@@ -197,21 +198,21 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
 struct Fane {
     fra: u16,
     til: u16,
-    nummer: String,
     navn: String,
     vindu: String,
     vist: bool,
 }
 
+/// Fanene står med en strek mellom.
 fn faner(app: &App) -> Vec<Fane> {
     let mut x = app.visning.x;
     let mut ut = Vec::new();
     for p in app.faner() {
         let navn = kutt(&p.vindunavn, 20);
-        let til = x + (p.vindu.chars().count() + navn.chars().count() + 3) as u16;
+        let til = x + navn.chars().count() as u16 + 2;
         let vist = app.vist.as_ref() == Some(&p.vindu_id);
-        ut.push(Fane { fra: x, til, nummer: p.vindu.clone(), navn, vindu: p.vindu_id.clone(), vist });
-        x = til;
+        ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist });
+        x = til + 1;
     }
     ut
 }
@@ -221,14 +222,16 @@ fn faner(app: &App) -> Vec<Fane> {
 fn tegn_faner(buf: &mut Buffer, app: &App) {
     let v = app.visning;
     let Some(y) = v.y.checked_sub(1) else { return };
-    buf.set_style(Rect::new(v.x, y, v.width, 1), Style::new().bg(MARKERT));
+    buf.set_style(Rect::new(v.x, y, v.width, 1), Style::new().bg(STATUS));
     let mut slutt = v.x;
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
-        let (bak, fg, nummer) = if f.vist { (LYSERE, HVIT, ORANSJE) } else { (MARKERT, GRÅ, GRÅ) };
-        buf.set_style(Rect::new(f.fra, y, f.til - f.fra, 1), Style::new().bg(bak));
-        let x = buf.set_stringn(f.fra + 1, y, &f.nummer, f.nummer.len(), Style::new().fg(nummer).bg(bak)).0;
+        if f.fra > v.x {
+            buf.set_string(f.fra - 1, y, "│", Style::new().fg(DIM).bg(STATUS));
+        }
+        let (bak, fg) = if f.vist { (STATUS_AKTIV, HVIT) } else { (STATUS, GRÅ) };
         let stil = Style::new().fg(fg).bg(bak);
-        buf.set_string(x + 1, y, &f.navn, if f.vist { stil.add_modifier(Modifier::BOLD) } else { stil });
+        buf.set_style(Rect::new(f.fra, y, f.til - f.fra, 1), stil);
+        buf.set_string(f.fra + 1, y, &f.navn, if f.vist { stil.add_modifier(Modifier::BOLD) } else { stil });
         slutt = f.til;
     }
     let Some(valgt) = &app.valgt else { return };
@@ -237,8 +240,8 @@ fn tegn_faner(buf: &mut Buffer, app: &App) {
     let bredde = (kort.mappe.chars().count() + branch.chars().count() + 1) as u16;
     if slutt + bredde + 1 < v.right() {
         let x = v.right() - bredde;
-        let x = buf.set_stringn(x, y, &kort.mappe, kort.mappe.len(), Style::new().fg(LYS).bg(MARKERT)).0;
-        buf.set_string(x, y, branch, Style::new().fg(GRÅ).bg(MARKERT));
+        let x = buf.set_stringn(x, y, &kort.mappe, kort.mappe.len(), Style::new().fg(LYS).bg(STATUS)).0;
+        buf.set_string(x, y, branch, Style::new().fg(GRÅ).bg(STATUS));
     }
 }
 

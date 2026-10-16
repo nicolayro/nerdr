@@ -23,8 +23,8 @@ pub enum Rammer {
 impl Rammer {
     pub fn fra(verdi: Option<&str>) -> Rammer {
         match verdi {
-            Some("bokser") => Rammer::Bokser,
-            _ => Rammer::Linjer,
+            Some("linjer") => Rammer::Linjer,
+            _ => Rammer::Bokser,
         }
     }
 }
