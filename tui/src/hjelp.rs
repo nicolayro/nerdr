@@ -18,10 +18,22 @@ pub const TASTER: [(&str, &str); 8] = [
 ];
 
 /// Etter prefikset, fra lista og fra panen.
-pub const PREFIKSTASTER: [(&str, &str); 4] = [
+pub const PREFIKSTASTER: [(&str, &str); 16] = [
     ("%", "del vinduet side om side"),
     ("\"", "del vinduet over og under"),
     ("o ←↑↓→", "neste pane, eller i en retning"),
+    (";", "forrige aktive pane"),
+    ("z", "zoom inn og ut på panen"),
+    ("x", "lukk panen"),
+    ("{ }", "bytt plass med panen før eller etter"),
+    ("Space", "neste oppsett"),
+    ("C-o", "roter panene"),
+    ("C-←↑↓→", "endre størrelse, med M- fem om gangen"),
+    ("PgUp", "rull en side opp"),
+    ("c", "ny terminal til Claude-en"),
+    ("n p", "neste og forrige i lista"),
+    ("w s", "tilbake til lista"),
+    ("d", "avslutt"),
     ("prefiks", "send prefikset til panen"),
 ];
 

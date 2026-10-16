@@ -1,3 +1,4 @@
+mod bokser;
 mod grupper;
 mod hjelp;
 mod kommandoer;
@@ -11,10 +12,11 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
+use bokser::Boks;
 use grupper::{Gruppe, Merke, Rad};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{FELT, Pane};
-use nerdr_kjerne::{git, start, terminal, tmux};
+use nerdr_kjerne::{git, oppsett, start, terminal, tmux};
 use nerdr_kjerne::register::{self, Sesjon};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
@@ -113,13 +115,15 @@ struct App {
     /// Pane-id → slutten av forrige `%output`, i tilfelle en synkmarkør er
     /// delt over to.
     output_hale: HashMap<String, String>,
-    /// Visningen klientstørrelsen sist ble sendt for.
-    størrelse_for: Option<Rect>,
+    /// Visningen og rutene boksene trengte, da klientstørrelsen sist ble sendt.
+    størrelse_for: Option<(Rect, (u16, u16))>,
 
     fokus: Fokus,
     prefiks: taster::Prefiks,
     /// Prefikset er trykket, og neste tast er en kommando.
     etter_prefiks: bool,
+    /// Panen som lukkes hvis du svarer `y`.
+    lukke: Option<Pane>,
     visning: Rect,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
@@ -259,6 +263,7 @@ impl App {
             fokus: Fokus::Liste,
             prefiks: taster::Prefiks::default(),
             etter_prefiks: false,
+            lukke: None,
             visning: Rect::default(),
             velger: None,
             hjelp: false,
@@ -504,28 +509,70 @@ impl App {
     /// Tasten etter prefikset. Tastene er de samme som i tmux, og virker
     /// både fra lista og fra panen.
     fn prefikstast(&mut self, k: KeyEvent) {
-        let Some(aktiv) = self.aktiv().map(|p| sitat(&p.id)) else { return };
-        let kommando = match k.code {
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        let alt = k.modifiers.contains(KeyModifiers::ALT);
+        match k.code {
+            KeyCode::Char('w' | 's') if !ctrl => return self.bytt_fokus(Fokus::Liste),
+            KeyCode::Char('n') if !ctrl => return self.bla(1),
+            KeyCode::Char('p') if !ctrl => return self.bla(-1),
+            KeyCode::Char('c') if !ctrl => return self.ny_terminal(),
+            KeyCode::Char('d') if !ctrl => return self.ferdig = Some(String::new()),
+            KeyCode::Char('?') => return self.hjelp = true,
+            _ => {}
+        }
+        let (Some(aktiv), Some(vindu)) = (self.aktiv().cloned(), self.valgt.as_ref().map(|p| sitat(&p.vindu_id))) else {
+            return;
+        };
+        let id = sitat(&aktiv.id);
+        let retning = match k.code {
+            KeyCode::Left => Some("-L"),
+            KeyCode::Right => Some("-R"),
+            KeyCode::Up => Some("-U"),
+            KeyCode::Down => Some("-D"),
+            _ => None,
+        };
+        let kommando = match (k.code, retning) {
             _ if self.prefiks.er(&k) => {
                 let Some(args) = taster::send_keys(&self.prefiks.tast()) else { return };
-                format!("send-keys -t {aktiv} {args}")
+                format!("send-keys -t {id} {args}")
             }
-            KeyCode::Char('%') => format!("split-window -h -t {aktiv} -c '#{{pane_current_path}}'"),
-            KeyCode::Char('"') => format!("split-window -v -t {aktiv} -c '#{{pane_current_path}}'"),
-            KeyCode::Char('o') => {
+            (_, Some(retning)) if ctrl || alt => format!("resize-pane {retning} -t {id} {}", if alt { 5 } else { 1 }),
+            (_, Some(retning)) => format!("select-pane {retning} -t {id}"),
+            (KeyCode::Char('%'), _) => format!("split-window -h -t {id} -c '#{{pane_current_path}}'"),
+            (KeyCode::Char('"'), _) => format!("split-window -v -t {id} -c '#{{pane_current_path}}'"),
+            (KeyCode::Char('o'), _) if ctrl => format!("rotate-window -t {vindu}"),
+            (KeyCode::Char('o'), _) => {
                 let i = self.vindu.iter().position(|p| p.aktiv).unwrap_or(0);
                 if let Some(neste) = self.vindu.get((i + 1) % self.vindu.len().max(1)).map(|p| p.id.clone()) {
                     self.aktiver(&neste);
                 }
                 return;
             }
-            KeyCode::Left => format!("select-pane -L -t {aktiv}"),
-            KeyCode::Right => format!("select-pane -R -t {aktiv}"),
-            KeyCode::Up => format!("select-pane -U -t {aktiv}"),
-            KeyCode::Down => format!("select-pane -D -t {aktiv}"),
+            (KeyCode::Char(';'), _) => format!("last-pane -t {vindu}"),
+            (KeyCode::Char('z'), _) => format!("resize-pane -Z -t {id}"),
+            (KeyCode::Char('{'), _) => format!("swap-pane -U -t {id}"),
+            (KeyCode::Char('}'), _) => format!("swap-pane -D -t {id}"),
+            (KeyCode::Char(' '), _) => format!("next-layout -t {vindu}"),
+            (KeyCode::Char('x'), _) => return self.lukke = Some(aktiv),
+            (KeyCode::PageUp, _) => {
+                let side = self.bokser().iter().find(|b| b.pane == aktiv.id).map_or(1, |b| b.innhold.height.max(1));
+                return self.rull_til(self.rull.saturating_add(side as u32));
+            }
             _ => return,
         };
         self.send(&kommando, Venter::Ingenting);
+    }
+
+    /// Neste eller forrige i lista. Fra panen går du inn i den, som `n` og
+    /// `p` bytter vindu i tmux.
+    fn bla(&mut self, steg: isize) {
+        let inne = self.fokus == Fokus::Pane;
+        // Via lista, så panen du forlater, merkes som sett.
+        self.bytt_fokus(Fokus::Liste);
+        self.flytt(steg);
+        if inne {
+            self.bytt_fokus(Fokus::Pane);
+        }
     }
 
     /// Går inn i terminalen til den valgte Claude-en, eller den som hører til
@@ -540,6 +587,19 @@ impl App {
             self.bytt_fokus(Fokus::Pane);
             return;
         }
+        self.lag_terminal(claude);
+    }
+
+    /// En terminal til, til Claude-en som er valgt eller som den valgte
+    /// terminalen hører til.
+    fn ny_terminal(&mut self) {
+        let Some(valgt) = self.valgt.clone() else { return };
+        // Den nye går du inn i når den dukker opp, og det skjer fra lista.
+        self.bytt_fokus(Fokus::Liste);
+        self.lag_terminal(self.eier(&valgt).unwrap_or(&valgt.id).to_string());
+    }
+
+    fn lag_terminal(&mut self, claude: String) {
         let Some(vindu) = self.paner.iter().find(|p| p.id == claude).map(|p| p.vindu_id.clone()) else { return };
         let mappe = self.sesjoner.get(&claude).and_then(|s| s.mappe.clone()).or_else(|| self.nye.get(&claude).cloned());
         self.send(&tmux::linje(&terminal::ny(&vindu, mappe.as_deref())), Venter::NyTerminal { claude });
@@ -609,6 +669,24 @@ impl App {
         self.utdatert = true;
     }
 
+    /// Panene som vises i vinduet, og hvor. Med zoom er det bare én.
+    fn bokser(&self) -> Vec<Boks> {
+        let v = self.visning;
+        if let Some(oppsett) = self.oppsett() {
+            return bokser::plasser(&oppsett, v);
+        }
+        let boks = |p: &Pane| Boks {
+            pane: p.id.clone(),
+            ramme: None,
+            innhold: Rect::new(v.x + p.venstre, v.y + p.topp, p.bredde, p.høyde).intersection(v),
+        };
+        self.vindu.iter().map(boks).collect()
+    }
+
+    fn oppsett(&self) -> Option<oppsett::Celle> {
+        oppsett::tolk(&self.vindu.first()?.oppsett)
+    }
+
     /// Den aktive panen i vinduet, eller den valgte før vinduet er listet.
     fn aktiv(&self) -> Option<&Pane> {
         self.vindu.iter().find(|p| p.aktiv).or(self.valgt.as_ref())
@@ -633,7 +711,7 @@ impl App {
 
     fn hent(&mut self) {
         let Some(aktiv) = self.aktiv().map(|p| p.id.clone()) else { return };
-        let mut ider: Vec<String> = self.vindu.iter().map(|p| p.id.clone()).collect();
+        let mut ider: Vec<String> = self.bokser().into_iter().map(|b| b.pane).collect();
         if ider.is_empty() {
             ider.push(aktiv.clone());
         }
@@ -654,18 +732,22 @@ impl App {
         self.sist_hentet = Instant::now();
     }
 
-    /// Klienten får størrelsen til visningen, så vinduet fyller den.
+    /// Klienten får størrelsen til visningen, minus rutene rammene rundt
+    /// boksene trenger, så vinduet fyller visningen.
     ///
-    /// Sendes bare når visningen endres eller en ny pane velges, aldri fordi
-    /// panene i tmux har endret størrelse. Et tmux-oppsett med en
-    /// `client-resized`-hook som endrer panene, gir ellers en løkke.
+    /// Sendes bare når visningen endres, en ny pane velges eller vinduet deles
+    /// på en annen måte, aldri fordi panene i tmux har endret størrelse. Et
+    /// tmux-oppsett med en `client-resized`-hook som endrer panene, gir ellers
+    /// en løkke.
     fn synk_størrelse(&mut self) {
         let v = self.visning;
-        if self.valgt.is_none() || self.størrelse_for == Some(v) || v.width == 0 {
+        let ekstra = self.oppsett().map_or((0, 0), |o| bokser::ekstra(&o));
+        if self.valgt.is_none() || self.størrelse_for == Some((v, ekstra)) || v.width <= ekstra.0 || v.height <= ekstra.1 {
             return;
         }
-        self.send(&format!("refresh-client -C {}x{}", v.width, v.height), Venter::Ingenting);
-        self.størrelse_for = Some(self.visning);
+        let (bredde, høyde) = (v.width - ekstra.0, v.height - ekstra.1);
+        self.send(&format!("refresh-client -C {bredde}x{høyde}"), Venter::Ingenting);
+        self.størrelse_for = Some((v, ekstra));
         self.utdatert = true;
     }
 
@@ -695,6 +777,12 @@ impl App {
                 KeyCode::Backspace => velger.slett(),
                 KeyCode::Char(c) if !ctrl => velger.skriv(c.encode_utf8(&mut [0; 4])),
                 _ => return false,
+            }
+            return true;
+        }
+        if let Some(pane) = self.lukke.take() {
+            if k.code == KeyCode::Char('y') {
+                self.send(&format!("kill-pane -t {}", sitat(&pane.id)), Venter::Ingenting);
             }
             return true;
         }
@@ -787,11 +875,10 @@ impl App {
         if byttet {
             self.bytt_fokus(Fokus::Pane);
         }
-        let (x, y) = (m.column - v.x, m.row - v.y);
-        let inni = |p: &&Pane| (p.venstre..p.venstre + p.bredde).contains(&x) && (p.topp..p.topp + p.høyde).contains(&y);
-        let Some(pane) = self.vindu.iter().find(inni).filter(|_| x < v.width && y < v.height).cloned() else {
-            return byttet;
-        };
+        let inni = |r: Rect| (r.left()..r.right()).contains(&m.column) && (r.top()..r.bottom()).contains(&m.row);
+        let bokser = self.bokser();
+        let Some(boks) = bokser.iter().find(|b| inni(b.ramme.unwrap_or(b.innhold))) else { return byttet };
+        let Some(pane) = self.vindu.iter().find(|p| p.id == boks.pane).cloned() else { return byttet };
         if !pane.aktiv {
             if matches!(m.kind, MouseEventKind::Down(_)) {
                 self.aktiver(&pane.id);
@@ -799,7 +886,10 @@ impl App {
             }
             return byttet;
         }
-        let (id, x, y) = (sitat(&pane.id), x - pane.venstre, y - pane.topp);
+        if !inni(boks.innhold) {
+            return byttet;
+        }
+        let (id, x, y) = (sitat(&pane.id), m.column - boks.innhold.x, m.row - boks.innhold.y);
         let opp = match m.kind {
             MouseEventKind::ScrollUp => Some(true),
             MouseEventKind::ScrollDown => Some(false),

@@ -228,11 +228,12 @@ tmux -L nerdr-vert send-keys -t vert C-b
 sleep 0.3
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
 
-echo "=== % deler alfa: Claude til venstre, │ i kolonne 37, cat til høyre, i samme mappe ==="
+echo "=== % deler alfa i to bokser med luft mellom, begge i nerdr-mappa, og tmux får 70x14 ==="
 tmux -L nerdr-vert send-keys -t vert %
 sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,3p'
 tmux -L nerdr-maal list-panes -t alfa:0 -F '#{pane_index} #{pane_current_path}' | sed "s|$(dirname "$HER")|nerdr|"
+tmux -L nerdr-maal display-message -p -t alfa:0 '#{window_width}x#{window_height}'
 
 echo "=== Enter går inn i Claude-en og ikke i den nye panen, så «til venstre» havner i alfa:0.0 ==="
 tmux -L nerdr-vert send-keys -t vert Enter
@@ -258,9 +259,26 @@ tmux -L nerdr-vert send-keys -t vert C-b o
 sleep 0.5
 tmux -L nerdr-maal display-message -p -t alfa:0 '#{pane_index}'
 
-echo "=== når høyre pane lukkes, fyller Claude-en hele visningen igjen (74x16) ==="
-tmux -L nerdr-maal kill-pane -t alfa:0.1
+echo "=== C-b z zoomer Claude-en uten ramme, og C-b z igjen gir boksene tilbake ==="
+tmux -L nerdr-vert send-keys -t vert C-b z
+sleep 0.8
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
+tmux -L nerdr-vert send-keys -t vert C-b z
+sleep 0.8
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
+
+echo "=== C-b o, C-b x spør, n lar panen stå, og y lukker den (2, så 1) ==="
+tmux -L nerdr-vert send-keys -t vert C-b o C-b x
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
+tmux -L nerdr-vert send-keys -t vert n
+sleep 0.3
+tmux -L nerdr-maal list-panes -t alfa:0 | wc -l
+tmux -L nerdr-vert send-keys -t vert C-b x y
 sleep 1
+tmux -L nerdr-maal list-panes -t alfa:0 | wc -l
+
+echo "=== uten split fyller Claude-en hele visningen igjen (74x16) ==="
 tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'
 tmux -L nerdr-vert send-keys -t vert C-q
 

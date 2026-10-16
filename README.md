@@ -44,8 +44,8 @@ programmet der har slått på mus, som Claude Code i fullskjerm. Ellers ruller
 hjulet i historikken, og en tast tar deg tilbake til bunnen. I `less` og `man`
 blir hjulet til piltaster.
 
-Er vinduet delt i flere paner, viser nerdr hele vinduet. Tastene går til den
-aktive panen, og et klikk gjør en annen pane aktiv.
+Er vinduet delt i flere paner, står hver pane i en boks, der tmux har plassert
+den. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv.
 
 Prefikset er det samme som i tmux-oppsettet ditt, ellers `C-b`. Tastene etter
 det er de samme som i tmux, og virker både fra lista og fra panen:
@@ -55,6 +55,19 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `%` | Del vinduet side om side |
 | `"` | Del vinduet over og under |
 | `o` / `←` `↑` `↓` `→` | Neste pane, eller panen i den retningen |
+| `;` | Forrige aktive pane |
+| `z` | Zoom inn og ut på panen |
+| `x` | Lukk panen, etter at du har svart `y` |
+| `{` `}` | Bytt plass med panen før eller etter |
+| `Space` | Neste oppsett |
+| `C-o` | Roter panene |
+| `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
+| `PgUp` | Rull en side opp |
+| `c` | Ny terminal til Claude-en |
+| `n` `p` | Neste og forrige i lista |
+| `w` `s` | Tilbake til lista |
+| `d` | Avslutt |
+| `?` | Hjelp |
 | prefikset | Send prefikset til panen |
 
 Hver Claude viser mappen og branchen den jobber i, og oppgaven under. Lista er
