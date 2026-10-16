@@ -264,6 +264,47 @@ echo "=== uten split fyller Claude-en hele visningen igjen (68x14, 74x16 med lin
 tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'
 tmux -L nerdr-vert send-keys -t vert C-b w
 
+echo "=== C-b c fra lista lager alfa:1, nerdr er inne i det, og fanene 0 og 1 står øverst (navnet kan være tmux til tmux har gitt det navnet cat) ==="
+tmux -L nerdr-vert send-keys -t vert C-b c
+sleep 1
+tmux -L nerdr-maal list-windows -t alfa -F '#{window_index} #{window_name}'
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p;16p'
+
+echo "=== det du skriver, havner i alfa:1 ==="
+tmux -L nerdr-vert send-keys -t vert -l 'i vindu 1'
+sleep 0.5
+tmux -L nerdr-maal capture-pane -p -t alfa:1 | grep -c 'i vindu 1'
+
+echo "=== C-b n går rundt til 0, C-b l tilbake til 1, og C-b 0 til 0 (0, 1, 0) ==="
+for tast in n l 0; do
+  tmux -L nerdr-vert send-keys -t vert C-b $tast
+  sleep 0.5
+  tmux -L nerdr-maal display-message -p -t alfa '#{window_index}'
+done
+
+echo "=== klikk på fane 1 viser vindu 1 ==="
+tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;49;1M\033[<0;49;1m')"
+sleep 0.5
+tmux -L nerdr-maal display-message -p -t alfa '#{window_index}'
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
+
+echo "=== C-b w og Enter går inn i Claude-en i vindu 0 ==="
+tmux -L nerdr-vert send-keys -t vert C-b w
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert Enter
+sleep 0.5
+tmux -L nerdr-maal display-message -p -t alfa '#{window_index}'
+
+echo "=== C-b 1 og C-b & spør, y lukker vinduet, og fanene forsvinner (1 vindu) ==="
+tmux -L nerdr-vert send-keys -t vert C-b 1 C-b '&'
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
+tmux -L nerdr-vert send-keys -t vert y
+sleep 1
+tmux -L nerdr-maal list-windows -t alfa | wc -l
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
+tmux -L nerdr-vert send-keys -t vert C-b w
+
 echo "=== q avslutter ==="
 tmux -L nerdr-vert send-keys -t vert q
 sleep 0.5

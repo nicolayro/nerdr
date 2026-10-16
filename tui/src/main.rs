@@ -50,11 +50,18 @@ enum Venter {
     /// Innholdet i panen med id-en.
     Bilde(String),
     Markør,
+    /// Svaret er id-en til vinduet.
+    NyttVindu,
     /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
     NySesjon { navn: String, mappe: PathBuf, claude: String },
     NyPane { mappe: PathBuf, claude: String },
     Prefiks,
     Ingenting,
+}
+
+enum Lukke {
+    Pane(String),
+    Vindu(String),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -88,8 +95,12 @@ struct App {
     /// der til du går ut, så kortet ikke flytter seg for hver melding.
     låst: Option<(String, Gruppe)>,
 
-    /// Panen som er valgt i lista. Vinduet den står i, vises til høyre.
+    /// Claude-en som er valgt i lista.
     valgt: Option<Pane>,
+    /// Vinduet som vises til høyre: vinduet til den valgte, eller et annet
+    /// vindu i samme sesjon.
+    vist: Option<String>,
+    forrige_vindu: Option<String>,
     /// Panene i vinduet, der tmux har plassert dem.
     vindu: Vec<Pane>,
     /// Pane-id → innholdet.
@@ -121,8 +132,8 @@ struct App {
     rammer: bokser::Rammer,
     /// Prefikset er trykket, og neste tast er en kommando.
     etter_prefiks: bool,
-    /// Panen som lukkes hvis du svarer `y`.
-    lukke: Option<Pane>,
+    /// Det som lukkes hvis du svarer `y`.
+    lukke: Option<Lukke>,
     visning: Rect,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
@@ -246,6 +257,8 @@ impl App {
             sett: HashMap::new(),
             låst: None,
             valgt: None,
+            vist: None,
+            forrige_vindu: None,
             vindu: Vec::new(),
             bilder: HashMap::new(),
             markør: None,
@@ -280,6 +293,10 @@ impl App {
         while self.ferdig.is_none() {
             if tegne {
                 self.visning = tegn::visning(terminal.size()?);
+                if self.faner().len() > 1 {
+                    self.visning.y += 1;
+                    self.visning.height = self.visning.height.saturating_sub(1);
+                }
                 // Når teksten i panen ruller, skrives nesten hver celle på nytt.
                 // Uten synkronisert oppdatering kan terminalen vise den halvveis.
                 execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
@@ -494,6 +511,13 @@ impl App {
                 }
                 false
             }
+            Venter::NyttVindu => {
+                let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
+                self.vis_vindu(id);
+                self.bytt_fokus(Fokus::Pane);
+                self.list_paner();
+                true
+            }
             Venter::Ingenting => false,
         }
     }
@@ -505,13 +529,28 @@ impl App {
         let alt = k.modifiers.contains(KeyModifiers::ALT);
         match k.code {
             KeyCode::Char('w' | 's') if !ctrl => return self.bytt_fokus(Fokus::Liste),
-            KeyCode::Char('n') if !ctrl => return self.bla(1),
-            KeyCode::Char('p') if !ctrl => return self.bla(-1),
+            KeyCode::Char(')') => return self.bla(1),
+            KeyCode::Char('(') => return self.bla(-1),
+            KeyCode::Char('n') if !ctrl => return self.neste_vindu(1),
+            KeyCode::Char('p') if !ctrl => return self.neste_vindu(-1),
+            KeyCode::Char('l') if !ctrl => {
+                if let Some(forrige) = self.forrige_vindu.clone() {
+                    self.vis_vindu(forrige);
+                }
+                return;
+            }
+            KeyCode::Char(c @ '0'..='9') => {
+                let fane = self.faner().into_iter().find(|p| p.vindu == c.to_string()).map(|p| p.vindu_id.clone());
+                if let Some(vindu) = fane {
+                    self.vis_vindu(vindu);
+                }
+                return;
+            }
             KeyCode::Char('d') if !ctrl => return self.ferdig = Some(String::new()),
             KeyCode::Char('?') => return self.hjelp = true,
             _ => {}
         }
-        let (Some(aktiv), Some(vindu)) = (self.aktiv().cloned(), self.valgt.as_ref().map(|p| sitat(&p.vindu_id))) else {
+        let (Some(aktiv), Some(vindu)) = (self.aktiv().cloned(), self.vist.as_ref().map(|v| sitat(v))) else {
             return;
         };
         let id = sitat(&aktiv.id);
@@ -544,7 +583,13 @@ impl App {
             (KeyCode::Char('{'), _) => format!("swap-pane -U -t {id}"),
             (KeyCode::Char('}'), _) => format!("swap-pane -D -t {id}"),
             (KeyCode::Char(' '), _) => format!("next-layout -t {vindu}"),
-            (KeyCode::Char('x'), _) => return self.lukke = Some(aktiv),
+            (KeyCode::Char('c'), _) => {
+                let sesjon = sitat(&format!("{}:", aktiv.sesjon_id));
+                self.send(&format!("new-window -t {sesjon} -c '#{{pane_current_path}}' -P -F '#{{window_id}}'"), Venter::NyttVindu);
+                return;
+            }
+            (KeyCode::Char('x'), _) => return self.lukke = Some(Lukke::Pane(aktiv.id)),
+            (KeyCode::Char('&'), _) => return self.lukke = Some(Lukke::Vindu(aktiv.vindu_id)),
             (KeyCode::PageUp, _) => {
                 let side = self.bokser().iter().find(|b| b.pane == aktiv.id).map_or(1, |b| b.innhold.height.max(1));
                 return self.rull_til(self.rull.saturating_add(side as u32));
@@ -554,8 +599,8 @@ impl App {
         self.send(&kommando, Venter::Ingenting);
     }
 
-    /// Neste eller forrige i lista. Fra panen går du inn i den, som `n` og
-    /// `p` bytter vindu i tmux.
+    /// Neste eller forrige Claude i lista, som `(` og `)` bytter sesjon i
+    /// tmux. Fra panen går du inn i den.
     fn bla(&mut self, steg: isize) {
         let inne = self.fokus == Fokus::Pane;
         // Via lista, så panen du forlater, merkes som sett.
@@ -564,6 +609,58 @@ impl App {
         if inne {
             self.bytt_fokus(Fokus::Pane);
         }
+    }
+
+    /// Vinduene i sesjonen som vises, med én pane fra hvert, etter nummer.
+    fn faner(&self) -> Vec<&Pane> {
+        let Some(sesjon) = self.vindu.first().map(|p| &p.sesjon_id) else { return Vec::new() };
+        let mut sett = HashSet::new();
+        let mut faner: Vec<&Pane> =
+            self.alle.iter().filter(|p| &p.sesjon_id == sesjon && sett.insert(&p.vindu_id)).collect();
+        faner.sort_by_key(|p| p.vindu.parse::<u32>().unwrap_or(u32::MAX));
+        faner
+    }
+
+    fn neste_vindu(&mut self, steg: isize) {
+        let faner: Vec<String> = self.faner().iter().map(|p| p.vindu_id.clone()).collect();
+        let Some(i) = faner.iter().position(|v| Some(v) == self.vist.as_ref()) else { return };
+        let neste = (i as isize + steg).rem_euclid(faner.len() as isize) as usize;
+        self.vis_vindu(faner[neste].clone());
+    }
+
+    /// Viser et annet vindu. Står det en Claude i det, blir den valgt i lista.
+    fn vis_vindu(&mut self, vindu: String) {
+        if self.vist.as_ref() == Some(&vindu) {
+            return;
+        }
+        let inne = self.fokus == Fokus::Pane;
+        // Via lista, så Claude-en du forlater, merkes som sett.
+        self.bytt_fokus(Fokus::Liste);
+        if let Some(claude) = self.paner.iter().find(|p| p.vindu_id == vindu).cloned() {
+            self.velg(claude);
+        } else {
+            let sesjon = self.alle.iter().find(|p| p.vindu_id == vindu).map(|p| p.sesjon_id.clone());
+            if let Some(sesjon) = sesjon.filter(|s| self.vindu.first().map(|p| &p.sesjon_id) != Some(s)) {
+                self.send(&format!("switch-client -t {}", sitat(&sesjon)), Venter::Ingenting);
+            }
+            self.send(&format!("select-window -t {}", sitat(&vindu)), Venter::Ingenting);
+            self.vis(vindu, None);
+        }
+        if inne {
+            self.bytt_fokus(Fokus::Pane);
+        }
+    }
+
+    fn vis(&mut self, vindu: String, aktiv: Option<&str>) {
+        if self.vist.as_ref() != Some(&vindu) {
+            self.forrige_vindu = self.vist.replace(vindu);
+        }
+        self.bilder.clear();
+        self.synk.clear();
+        self.output_hale.clear();
+        self.størrelse_for = None;
+        self.oppdater_vindu(aktiv);
+        self.nullstill_aktiv();
     }
 
     /// Samme kommandoer som `start::start`, men gjennom control mode, så svaret
@@ -593,23 +690,30 @@ impl App {
         // klienten. Det bytter også vindu for andre klienter i samme sesjon.
         self.send(&format!("select-window -t {}", sitat(&pane.vindu_id)), Venter::Ingenting);
         self.send(&format!("select-pane -t {}", sitat(&pane.id)), Venter::Ingenting);
-        let id = pane.id.clone();
+        let (id, vindu) = (pane.id.clone(), pane.vindu_id.clone());
         self.valgt = Some(pane);
-        self.bilder.clear();
-        self.synk.clear();
-        self.output_hale.clear();
-        self.størrelse_for = None;
-        self.oppdater_vindu(Some(&id));
-        self.nullstill_aktiv();
+        self.vis(vindu, Some(&id));
     }
 
-    /// Henter panene i vinduet til den valgte fra `alle`. `aktiv` overstyrer
-    /// den aktive panen, for et svar fra tmux som kan være eldre enn
+    /// Henter panene i vinduet som vises, fra `alle`. `aktiv` overstyrer den
+    /// aktive panen, for et svar fra tmux som kan være eldre enn
     /// `select-pane`.
+    ///
+    /// Er vinduet lukket, vises det tmux har gjort til gjeldende i sesjonen,
+    /// eller vinduet til den valgte. Et vindu som ikke er listet ennå, er
+    /// nytt og blir stående.
     fn oppdater_vindu(&mut self, aktiv: Option<&str>) {
-        let Some(valgt) = &self.valgt else { return };
+        let lukket = self.vindu.first().filter(|p| {
+            Some(&p.vindu_id) == self.vist.as_ref() && !self.alle.iter().any(|a| a.vindu_id == p.vindu_id)
+        });
+        if let Some(lukket) = lukket.cloned() {
+            let gjeldende = self.alle.iter().find(|p| p.sesjon_id == lukket.sesjon_id && p.vindu_aktiv);
+            self.vist = gjeldende.or(self.valgt.as_ref()).map(|p| p.vindu_id.clone());
+            self.størrelse_for = None;
+        }
+        let Some(vist) = self.vist.clone() else { return };
         let før = self.aktiv().map(|p| p.id.clone());
-        self.vindu = self.alle.iter().filter(|p| p.vindu_id == valgt.vindu_id).cloned().collect();
+        self.vindu = self.alle.iter().filter(|p| p.vindu_id == vist).cloned().collect();
         if let Some(aktiv) = aktiv {
             for p in &mut self.vindu {
                 p.aktiv = p.id == aktiv;
@@ -639,9 +743,12 @@ impl App {
         oppsett::tolk(&self.vindu.first()?.oppsett)
     }
 
-    /// Den aktive panen i vinduet, eller den valgte før vinduet er listet.
+    /// Den aktive panen i vinduet, eller den valgte før vinduet dens er
+    /// listet. Et nytt vindu har ingen før det er listet, så tastene ikke går
+    /// til Claude-en i et annet vindu.
     fn aktiv(&self) -> Option<&Pane> {
-        self.vindu.iter().find(|p| p.aktiv).or(self.valgt.as_ref())
+        let valgt = self.valgt.as_ref().filter(|v| Some(&v.vindu_id) == self.vist.as_ref());
+        self.vindu.iter().find(|p| p.aktiv).or(valgt)
     }
 
     fn aktiver(&mut self, id: &str) {
@@ -694,7 +801,8 @@ impl App {
     fn synk_størrelse(&mut self) {
         let v = self.visning;
         let ekstra = self.oppsett().map_or((0, 0), |o| bokser::ekstra(&o, self.rammer));
-        if self.valgt.is_none() || self.størrelse_for == Some((v, ekstra)) || v.width <= ekstra.0 || v.height <= ekstra.1 {
+        let ukjent = self.valgt.is_none() || self.vindu.is_empty();
+        if ukjent || self.størrelse_for == Some((v, ekstra)) || v.width <= ekstra.0 || v.height <= ekstra.1 {
             return;
         }
         let (bredde, høyde) = (v.width - ekstra.0, v.height - ekstra.1);
@@ -732,9 +840,13 @@ impl App {
             }
             return true;
         }
-        if let Some(pane) = self.lukke.take() {
+        if let Some(lukke) = self.lukke.take() {
             if k.code == KeyCode::Char('y') {
-                self.send(&format!("kill-pane -t {}", sitat(&pane.id)), Venter::Ingenting);
+                let kommando = match lukke {
+                    Lukke::Pane(id) => format!("kill-pane -t {}", sitat(&id)),
+                    Lukke::Vindu(id) => format!("kill-window -t {}", sitat(&id)),
+                };
+                self.send(&kommando, Venter::Ingenting);
             }
             return true;
         }
@@ -761,7 +873,7 @@ impl App {
             }
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
-            KeyCode::Enter => self.bytt_fokus(Fokus::Pane),
+            KeyCode::Enter => self.gå_inn(),
             KeyCode::Char('n') => self.åpne_velger(false),
             KeyCode::Char('r') if k.modifiers.contains(KeyModifiers::CONTROL) => self.åpne_velger(true),
             KeyCode::Char('?') => self.hjelp = true,
@@ -800,6 +912,15 @@ impl App {
             return false;
         }
         let v = self.visning;
+        if m.row + 1 == v.y && m.column >= v.x {
+            if m.kind == MouseEventKind::Down(MouseButton::Left)
+                && let Some(vindu) = tegn::fane_på(self, m.column)
+            {
+                self.vis_vindu(vindu);
+                return true;
+            }
+            return false;
+        }
         if m.column < v.x {
             let pane = (m.row + 1 < v.height).then(|| tegn::pane_på(self, m.row)).flatten();
             let Some(pane) = pane else { return false };
@@ -811,7 +932,7 @@ impl App {
             if self.valgt.as_ref().map(|p| &p.id) != Some(&pane.id) {
                 self.velg(pane);
             }
-            self.bytt_fokus(Fokus::Pane);
+            self.gå_inn();
             return true;
         }
 
@@ -868,6 +989,15 @@ impl App {
         }
     }
 
+    /// Fra lista går du inn i Claude-en, også når et annet vindu i sesjonen
+    /// vises, som `choose-tree` i tmux.
+    fn gå_inn(&mut self) {
+        if let Some(valgt) = self.valgt.clone().filter(|v| Some(&v.vindu_id) != self.vist.as_ref()) {
+            self.velg(valgt);
+        }
+        self.bytt_fokus(Fokus::Pane);
+    }
+
     fn bytt_fokus(&mut self, fokus: Fokus) {
         if fokus == self.fokus {
             return;
@@ -883,7 +1013,7 @@ impl App {
         }
         // Fra lista går du inn i panen du valgte, også når en annen er aktiv
         // i vinduet.
-        let valgt = self.valgt.as_ref().map(|p| p.id.clone());
+        let valgt = self.valgt.as_ref().map(|p| p.id.clone()).filter(|id| self.vindu.iter().any(|p| &p.id == id));
         if fokus == Fokus::Pane
             && let Some(id) = valgt.filter(|id| self.aktiv().is_some_and(|a| &a.id != id))
         {

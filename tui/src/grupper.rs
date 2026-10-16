@@ -117,7 +117,7 @@ mod tester {
 
     #[test]
     fn grupperer_med_overskrifter_og_strek_mellom_panene() {
-        let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\t")).unwrap();
+        let pane = |id: &str| Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\t")).unwrap();
         let paner = [pane("%1"), pane("%2"), pane("%3")];
         let rader = rader(&paner, |p| {
             let m = match p.id.as_str() {
@@ -143,7 +143,7 @@ mod tester {
 
     #[test]
     fn gruppen_kan_avvike_fra_merket() {
-        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20\t0\t0\t1\t").unwrap()];
+        let paner = [Pane::fra_linje("$0\ts\t@0\t0\t%1\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\t").unwrap()];
         let rader = rader(&paner, |_| Some((Gruppe::Jobber, Merke::Sett)));
         assert_eq!(rader, [Rad::Overskrift(Gruppe::Jobber), Rad::Pane(&paner[0], Merke::Sett)]);
     }

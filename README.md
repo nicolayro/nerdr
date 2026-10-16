@@ -44,14 +44,20 @@ blir hjulet til piltaster.
 
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
 hver sin boks eller med streker mellom, etter `NERDR_RAMMER`. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
-terminal ved siden av Claude-en får du ved å dele vinduet, og med zoom fyller
-Claude-en visningen igjen mens terminalen kjører videre.
+terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
+Har sesjonen flere vinduer, står de som faner over visningen, og et klikk på en
+fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
 
 Prefikset er det samme som i tmux-oppsettet ditt, ellers `C-b`. Tastene etter
 det er de samme som i tmux, og virker både fra lista og fra panen:
 
 | Etter prefikset | Hva |
 | --- | --- |
+| `c` | Nytt vindu i mappa til panen |
+| `n` `p` | Neste og forrige vindu |
+| `0`–`9` | Vinduet med det nummeret |
+| `l` | Forrige vindu du var i |
+| `&` | Lukk vinduet, etter at du har svart `y` |
 | `%` | Del vinduet side om side |
 | `"` | Del vinduet over og under |
 | `o` / `←` `↑` `↓` `→` | Neste pane, eller panen i den retningen |
@@ -63,7 +69,7 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `C-o` | Roter panene |
 | `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
 | `PgUp` | Rull en side opp |
-| `n` `p` | Neste og forrige i lista |
+| `(` `)` | Forrige og neste Claude i lista |
 | `w` `s` | Tilbake til lista |
 | `d` | Avslutt |
 | `?` | Hjelp |

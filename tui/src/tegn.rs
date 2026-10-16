@@ -10,7 +10,7 @@ use ratatui::style::{Color, Modifier, Style};
 use crate::bokser::{Boks, Rammer};
 use crate::grupper::{Gruppe, Merke, Rad};
 use crate::ny::Velger;
-use crate::{App, Fokus, hjelp};
+use crate::{App, Fokus, Lukke, hjelp};
 
 /// Bredden på lista, med skillelinja.
 pub const LISTE: u16 = 36;
@@ -37,6 +37,7 @@ pub fn alt(f: &mut Frame, app: &App) {
     let område = f.area();
     let buf = f.buffer_mut();
     tegn_liste(buf, område, app);
+    tegn_faner(buf, app);
     tegn_pane(buf, app);
 
     if app.hjelp {
@@ -82,7 +83,8 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
 
     let prefiks = app.prefiks.navn();
     let hint = match app.fokus {
-        _ if app.lukke.is_some() => " lukke panen? y/n".to_string(),
+        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => " lukke panen? y/n".to_string(),
+        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => " lukke vinduet? y/n".to_string(),
         _ if app.etter_prefiks => format!(" {prefiks} … % \" del · o pane · z · x · ?"),
         Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · ? hjelp".to_string(),
         Fokus::Pane => format!(" {prefiks} w tilbake til lista"),
@@ -187,6 +189,51 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
         Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })
+}
+
+/// Et vindu i sesjonen, som fane over visningen.
+struct Fane {
+    fra: u16,
+    til: u16,
+    nummer: String,
+    navn: String,
+    vindu: String,
+    vist: bool,
+}
+
+/// Fanene når sesjonen har mer enn ett vindu.
+fn faner(app: &App) -> Vec<Fane> {
+    let faner = app.faner();
+    if faner.len() < 2 {
+        return Vec::new();
+    }
+    let mut x = app.visning.x + 1;
+    let mut ut = Vec::new();
+    for p in faner {
+        let navn = kutt(&p.vindunavn, 20);
+        let til = x + (p.vindu.chars().count() + navn.chars().count() + 3) as u16;
+        let vist = app.vist.as_ref() == Some(&p.vindu_id);
+        ut.push(Fane { fra: x, til, nummer: p.vindu.clone(), navn, vindu: p.vindu_id.clone(), vist });
+        x = til + 1;
+    }
+    ut
+}
+
+fn tegn_faner(buf: &mut Buffer, app: &App) {
+    let v = app.visning;
+    let Some(y) = v.y.checked_sub(1) else { return };
+    for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
+        let (bak, fg, nummer) = if f.vist { (MARKERT, HVIT, ORANSJE) } else { (Color::Reset, GRÅ, DIM) };
+        buf.set_style(Rect::new(f.fra, y, f.til - f.fra, 1), Style::new().bg(bak));
+        let x = buf.set_stringn(f.fra + 1, y, &f.nummer, f.nummer.len(), Style::new().fg(nummer).bg(bak)).0;
+        let stil = Style::new().fg(fg).bg(bak);
+        buf.set_string(x + 1, y, &f.navn, if f.vist { stil.add_modifier(Modifier::BOLD) } else { stil });
+    }
+}
+
+/// Vinduet til fanen i kolonne `x`.
+pub fn fane_på(app: &App, x: u16) -> Option<String> {
+    faner(app).into_iter().find(|f| (f.fra..f.til).contains(&x)).map(|f| f.vindu)
 }
 
 /// En boks med ramme midt på skjermen, med tittel øverst og hint nederst,
