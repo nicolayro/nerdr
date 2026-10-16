@@ -2,7 +2,7 @@
 //! du har sett.
 
 use nerdr_kjerne::paner::Pane;
-use nerdr_kjerne::register::{Status, Tilstand};
+use nerdr_kjerne::register::{Sesjon, Tilstand};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Merke {
@@ -28,11 +28,11 @@ pub enum Rad<'a> {
 
 impl Merke {
     /// `sett` er da du sist var inne i panen, i millisekunder siden 1970.
-    pub fn fra(status: Status, sett: u64) -> Merke {
-        match status.tilstand {
+    pub fn fra(sesjon: &Sesjon, sett: u64) -> Merke {
+        match sesjon.tilstand {
             Tilstand::Venter => Merke::Spør,
             Tilstand::Jobber => Merke::Jobber,
-            Tilstand::Klar if status.endret > sett => Merke::Ferdig,
+            Tilstand::Klar if sesjon.endret > sett => Merke::Ferdig,
             Tilstand::Klar => Merke::Sett,
         }
     }
@@ -82,16 +82,15 @@ pub fn rader<'a>(paner: &'a [Pane], merke: impl Fn(&Pane) -> Option<Merke>) -> V
 mod tester {
     use super::*;
 
-    fn klar(endret: u64) -> Status {
-        Status { tilstand: Tilstand::Klar, endret }
+    fn sesjon(tilstand: Tilstand, endret: u64) -> Sesjon {
+        Sesjon { tilstand, endret, mappe: None }
     }
 
     #[test]
     fn ferdig_etter_at_du_var_inne_venter_på_deg() {
-        assert_eq!(Merke::fra(klar(20), 10), Merke::Ferdig);
-        assert_eq!(Merke::fra(klar(10), 20), Merke::Sett);
-        let spør = Status { tilstand: Tilstand::Venter, endret: 10 };
-        assert_eq!(Merke::fra(spør, 20), Merke::Spør);
+        assert_eq!(Merke::fra(&sesjon(Tilstand::Klar, 20), 10), Merke::Ferdig);
+        assert_eq!(Merke::fra(&sesjon(Tilstand::Klar, 10), 20), Merke::Sett);
+        assert_eq!(Merke::fra(&sesjon(Tilstand::Venter, 10), 20), Merke::Spør);
     }
 
     #[test]

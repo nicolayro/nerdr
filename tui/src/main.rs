@@ -11,7 +11,8 @@ use std::{env, io, thread};
 use grupper::{Merke, Rad};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{FELT, Pane};
-use nerdr_kjerne::register::{self, Status};
+use nerdr_kjerne::git;
+use nerdr_kjerne::register::{self, Sesjon};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
@@ -58,8 +59,10 @@ struct App {
     sist_listet: Option<Instant>,
     /// Sesjonsregisteret til Claude Code.
     register: PathBuf,
-    /// Pane-id → status, for panene der en Claude kjører.
-    tilstander: HashMap<String, Status>,
+    /// Pane-id → sesjon, for panene der en Claude kjører.
+    sesjoner: HashMap<String, Sesjon>,
+    /// Pane-id → branchen mappen til sesjonen står på.
+    brancher: HashMap<String, String>,
     /// Pane-id → da du sist var inne i panen. En Claude nerdr ikke har sett
     /// før, regnes som sett, så ingenting havner i «venter på deg» ved oppstart.
     sett: HashMap<String, u64>,
@@ -147,7 +150,8 @@ impl App {
             lister: false,
             sist_listet: None,
             register: registerkatalog(),
-            tilstander: HashMap::new(),
+            sesjoner: HashMap::new(),
+            brancher: HashMap::new(),
             sett: HashMap::new(),
             valgt: None,
             bilde: Vec::new(),
@@ -272,16 +276,21 @@ impl App {
             Venter::Paner => {
                 self.lister = false;
                 self.sist_listet = Some(Instant::now());
-                self.tilstander = register::les(&self.register);
+                self.sesjoner = register::les(&self.register);
                 let nå = nå_ms();
-                self.sett.retain(|id, _| self.tilstander.contains_key(id));
-                for id in self.tilstander.keys() {
+                self.sett.retain(|id, _| self.sesjoner.contains_key(id));
+                for id in self.sesjoner.keys() {
                     self.sett.entry(id.clone()).or_insert(nå);
                 }
+                self.brancher = self
+                    .sesjoner
+                    .iter()
+                    .filter_map(|(id, s)| Some((id.clone(), git::branch(s.mappe.as_deref()?)?)))
+                    .collect();
                 self.paner = linjer
                     .iter()
                     .filter_map(|l| Pane::fra_linje(l))
-                    .filter(|p| ok && self.tilstander.contains_key(&p.id))
+                    .filter(|p| ok && self.sesjoner.contains_key(&p.id))
                     .collect();
                 let valgt = self.valgt.as_ref().and_then(|v| self.paner.iter().find(|p| p.id == v.id));
                 match valgt.cloned() {
@@ -411,9 +420,8 @@ impl App {
     fn mus(&mut self, m: MouseEvent) -> bool {
         let v = self.visning;
         if m.column < v.x {
-            let rad = (m.row + 1 < v.height).then(|| self.rader().into_iter().nth(m.row as usize)).flatten();
-            let Some(Rad::Pane(pane, _)) = rad else { return false };
-            let pane = pane.clone();
+            let pane = (m.row + 1 < v.height).then(|| tegn::pane_på(self, m.row)).flatten();
+            let Some(pane) = pane else { return false };
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
@@ -462,10 +470,10 @@ impl App {
     }
 
     fn merke(&self, pane: &Pane) -> Option<Merke> {
-        let status = *self.tilstander.get(&pane.id)?;
+        let sesjon = self.sesjoner.get(&pane.id)?;
         let inne = self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| v.id == pane.id);
         let sett = if inne { u64::MAX } else { self.sett.get(&pane.id).copied().unwrap_or(0) };
-        Some(Merke::fra(status, sett))
+        Some(Merke::fra(sesjon, sett))
     }
 
     fn rader(&self) -> Vec<Rad<'_>> {

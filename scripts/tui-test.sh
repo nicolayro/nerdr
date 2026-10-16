@@ -19,7 +19,7 @@ tmux -L nerdr-maal new-session -d -s gamma -x 80 -y 20 /bin/cat
 for linje in "alfa waiting" "gamma busy"; do
   set -- $linje
   pane=$(tmux -L nerdr-maal display-message -p -t "$1" '#{pane_id}')
-  printf '{"tmux":"%s:@0.%s","status":"%s","updatedAt":1}' "$1" "$pane" "$2" > "$KONFIG/sessions/$1.json"
+  printf '{"tmux":"%s:@0.%s","status":"%s","cwd":"%s","updatedAt":%s000}' "$1" "$pane" "$2" "$(dirname "$HER")" "$(date +%s)" > "$KONFIG/sessions/$1.json"
 done
 
 tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
@@ -27,6 +27,7 @@ tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
+echo "=== kortene viser mappe › branch, og alfa har oppgaven under ==="
 tmux -L nerdr-vert capture-pane -p -t vert
 echo "=== størrelse på alfa (skal være 74x16) ==="
 tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
@@ -55,25 +56,25 @@ tmux -L nerdr-vert send-keys -t vert C-]
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert j
 sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | head -5
+tmux -L nerdr-vert capture-pane -p -t vert | head -7
 
 echo "=== klikk på andre rad velger alfa igjen ==="
 tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;2M\033[<0;5;2m')"
 sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | head -5
+tmux -L nerdr-vert capture-pane -p -t vert | head -7
 
-echo "=== gamma blir ferdig og havner under VENTER PÅ DEG med ◆ ==="
+echo "=== gamma blir ferdig og havner under VENTER PÅ DEG med ◆, og uten cwd står gamma:0 ==="
 pane=$(tmux -L nerdr-maal display-message -p -t gamma '#{pane_id}')
 printf '{"tmux":"gamma:@0.%s","status":"idle","updatedAt":%s000}' "$pane" "$(date +%s)" > "$KONFIG/sessions/gamma.json"
 sleep 2.5
-tmux -L nerdr-vert capture-pane -p -t vert | head -5
+tmux -L nerdr-vert capture-pane -p -t vert | head -7
 
 echo "=== inn i gamma og ut igjen, så står den under SETT med ○ ==="
 tmux -L nerdr-vert send-keys -t vert j Enter
 sleep 0.3
 tmux -L nerdr-vert send-keys -t vert C-]
 sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | head -5
+tmux -L nerdr-vert capture-pane -p -t vert | head -7
 
 echo "=== q avslutter ==="
 tmux -L nerdr-vert send-keys -t vert q

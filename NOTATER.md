@@ -46,6 +46,11 @@ var inne i hver pane, og en `idle` med nyere `statusUpdatedAt` står under
 «venter på deg». Det huskes ikke mellom kjøringer, så ved oppstart regnes alle
 som sett.
 
+Oppgaven er panetittelen Claude Code setter, etter tegnet foran (`✳ Fiks
+testene`). En tittel uten et slikt tegn er satt av noe annet, som vertsnavnet,
+og vises ikke. Branchen leses fra `.git/HEAD` i `cwd`, og gjennom `gitdir:` i
+worktrees, så nerdr starter ikke git.
+
 Skjermbildet hentes med `capture-pane -e` når tmux melder `%output` for panen
 som vises, høyst 60 ganger i sekundet. Claude Code tømmer og tegner hele
 skjermen i hver oppdatering, pakket i en synkronisert oppdatering

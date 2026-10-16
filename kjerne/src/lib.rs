@@ -2,6 +2,7 @@
 //! Claude-sesjonene. Vet ikke hvordan noe vises, så en annen klient kan bygges
 //! på den samme kjernen.
 
+pub mod git;
 pub mod kontroll;
 pub mod paner;
 pub mod register;

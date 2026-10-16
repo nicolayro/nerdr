@@ -32,3 +32,6 @@ Lista er delt i tre. Under **venter på deg** står de som spør om noe (`●`) 
 som er ferdige med noe du ikke har sett (`◆`). Så kommer de som **jobber** (`◐`),
 og til slutt de du har **sett** (`○`). En ferdig Claude regnes som sett når du
 har vært inne i den.
+
+Hver Claude viser mappen og branchen den jobber i, og under det oppgaven den
+holder på med.

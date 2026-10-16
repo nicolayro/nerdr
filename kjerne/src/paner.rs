@@ -38,6 +38,16 @@ impl Pane {
             høyde: h.parse().ok()?,
         })
     }
+
+    /// Oppgaven Claude Code skriver i tittelen, etter tegnet som viser om den
+    /// jobber (`✳ Fiks testene`). Uten et slikt tegn er tittelen satt av noe
+    /// annet, som vertsnavnet.
+    pub fn oppgave(&self) -> Option<&str> {
+        let mut tegn = self.tittel.chars();
+        let første = tegn.next()?;
+        let resten = tegn.as_str().strip_prefix(' ')?.trim();
+        (!første.is_alphanumeric() && !resten.is_empty()).then_some(resten)
+    }
 }
 
 #[cfg(test)]
@@ -49,5 +59,14 @@ mod tester {
         let p = Pane::fra_linje("$0\tmain\t@0\t0\t%0\t✳ Fiks\t176\t38\t140\t38").unwrap();
         assert_eq!((p.id.as_str(), p.bredde, p.vindu_bredde), ("%0", 140, 176));
         assert_eq!(Pane::fra_linje("for\tfå"), None);
+    }
+
+    #[test]
+    fn oppgave_er_tittelen_etter_tegnet_til_claude() {
+        let med = |tittel: &str| Pane { tittel: tittel.into(), ..Pane::fra_linje("$0\ts\t@0\t0\t%0\t\t1\t1\t1\t1").unwrap() };
+        assert_eq!(med("✳ Fiks testene").oppgave(), Some("Fiks testene"));
+        assert_eq!(med("⠐ Fiks testene").oppgave(), Some("Fiks testene"));
+        assert_eq!(med("min-maskin.local").oppgave(), None);
+        assert_eq!(med("claude-mods").oppgave(), None);
     }
 }
