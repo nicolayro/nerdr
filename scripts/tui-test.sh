@@ -185,7 +185,7 @@ tmux -L nerdr-vert send-keys -t vert C-b
 sleep 0.3
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
 
-echo "=== % deler alfa i to bokser med luft mellom, begge i nerdr-mappa, og tmux får 63x14 (74x16 med linjer) ==="
+echo "=== % deler alfa i to bokser med luft mellom, begge i nerdr-mappa, og tmux får 64x14 (74x16 med linjer) ==="
 tmux -L nerdr-vert send-keys -t vert %
 sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,3p'
@@ -252,6 +252,13 @@ tmux -L nerdr-maal list-panes -t alfa:0 | wc -l
 tmux -L nerdr-vert send-keys -t vert C-b x y
 sleep 1
 tmux -L nerdr-maal list-panes -t alfa:0 | wc -l
+
+echo "=== C-b \" deler over og under, med boksene rett under hverandre, og C-b x y lukker den nye ==="
+tmux -L nerdr-vert send-keys -t vert C-b '"'
+sleep 1
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '6,10p'
+tmux -L nerdr-vert send-keys -t vert C-b x y
+sleep 1
 
 echo "=== uten split fyller Claude-en hele visningen igjen (68x14, 74x16 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'

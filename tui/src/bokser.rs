@@ -31,10 +31,10 @@ impl Rammer {
 
 /// Kolonner mellom rammen og innholdet, til venstre og høyre.
 const LUFT_INNI: u16 = 1;
-/// En rute er omtrent dobbelt så høy som bred, så to kolonner mellom boksene
-/// side om side ser ut som én rad mellom dem over hverandre.
-const MELLOM_X: u16 = 2;
-const MELLOM_Y: u16 = 1;
+/// Kolonner og rader mellom to bokser. tmux lar én stå tom, så med 0 står
+/// boksene tettere enn panene i tmux.
+const MELLOM_X: u16 = 1;
+const MELLOM_Y: u16 = 0;
 /// Kolonner mellom boksene og kantene av visningen.
 const KANT: u16 = 1;
 const BOKS_X: u16 = 2 + 2 * LUFT_INNI;
@@ -61,17 +61,21 @@ pub fn ekstra(oppsett: &Celle, rammer: Rammer) -> (u16, u16) {
 
 fn ekstra_i(c: &Celle) -> (u16, u16) {
     let barn = |celler: &[Celle]| celler.iter().map(ekstra_i).collect::<Vec<_>>();
-    let mellom = |celler: &[Celle], luft: u16| (celler.len() as u16).saturating_sub(1) * (luft - 1);
+    // Boksene trenger `luft` mellom seg der tmux har én tom.
+    let rekke = |sum: u16, celler: &[Celle], luft: u16| {
+        let mellomrom = (celler.len() as u16).saturating_sub(1);
+        (sum + mellomrom * luft).saturating_sub(mellomrom)
+    };
     match &c.innhold {
         Innhold::Pane(_) => (BOKS_X, BOKS_Y),
         Innhold::SideOmSide(celler) => {
             let e = barn(celler);
-            let x = e.iter().map(|e| e.0).sum::<u16>() + mellom(celler, MELLOM_X);
+            let x = rekke(e.iter().map(|e| e.0).sum(), celler, MELLOM_X);
             (x, e.iter().map(|e| e.1).max().unwrap_or(0))
         }
         Innhold::OverHverandre(celler) => {
             let e = barn(celler);
-            let y = e.iter().map(|e| e.1).sum::<u16>() + mellom(celler, MELLOM_Y);
+            let y = rekke(e.iter().map(|e| e.1).sum(), celler, MELLOM_Y);
             (e.iter().map(|e| e.0).max().unwrap_or(0), y)
         }
     }
@@ -173,25 +177,26 @@ mod tester {
 
     #[test]
     fn side_om_side_med_luft_mellom() {
-        // Visningen er 80x20, og tmux har fått 69x18: 34 + 1 + 34.
+        // Visningen er 80x20, og tmux har fått 70x18: 34 + 1 + 35.
         let c = Celle {
-            bredde: 69,
+            bredde: 70,
             høyde: 18,
             x: 0,
             y: 0,
-            innhold: Innhold::SideOmSide(vec![pane("%1", 34, 18, 0, 0), pane("%2", 34, 18, 35, 0)]),
+            innhold: Innhold::SideOmSide(vec![pane("%1", 34, 18, 0, 0), pane("%2", 35, 18, 35, 0)]),
         };
-        assert_eq!(ekstra(&c, Rammer::Bokser), (11, 2));
+        assert_eq!(ekstra(&c, Rammer::Bokser), (10, 2));
         let bokser = plasser(&c, Rect::new(0, 0, 80, 20), Rammer::Bokser);
         assert_eq!(bokser[0].ramme, Some(Rect::new(1, 0, 38, 20)));
         assert_eq!(bokser[0].innhold, Rect::new(3, 1, 34, 18));
-        assert_eq!(bokser[1].ramme, Some(Rect::new(41, 0, 38, 20)));
-        assert_eq!(bokser[1].innhold, Rect::new(43, 1, 34, 18));
+        assert_eq!(bokser[1].ramme, Some(Rect::new(40, 0, 39, 20)));
+        assert_eq!(bokser[1].innhold, Rect::new(42, 1, 35, 18));
     }
 
     #[test]
     fn nabo_med_færre_bokser_fyller_ut_til_samme_kant() {
-        // Venstre har to bokser over hverandre og trenger to rader mer enn høyre.
+        // Venstre har to bokser rett over hverandre og trenger én rad mer enn
+        // høyre.
         let venstre = Celle {
             bredde: 30,
             høyde: 16,
@@ -206,10 +211,11 @@ mod tester {
             y: 0,
             innhold: Innhold::SideOmSide(vec![venstre, pane("%3", 30, 16, 31, 0)]),
         };
-        assert_eq!(ekstra(&c, Rammer::Bokser), (11, 4));
-        let bokser = plasser(&c, Rect::new(0, 0, 72, 20), Rammer::Bokser);
-        assert_eq!(bokser[1].innhold, Rect::new(3, 12, 30, 7));
-        assert_eq!(bokser[2].ramme, Some(Rect::new(37, 0, 34, 20)));
-        assert_eq!(bokser[2].innhold, Rect::new(39, 1, 30, 16));
+        assert_eq!(ekstra(&c, Rammer::Bokser), (10, 3));
+        let bokser = plasser(&c, Rect::new(0, 0, 71, 19), Rammer::Bokser);
+        assert_eq!(bokser[1].ramme, Some(Rect::new(1, 10, 34, 9)));
+        assert_eq!(bokser[1].innhold, Rect::new(3, 11, 30, 7));
+        assert_eq!(bokser[2].ramme, Some(Rect::new(36, 0, 34, 19)));
+        assert_eq!(bokser[2].innhold, Rect::new(38, 1, 30, 16));
     }
 }
