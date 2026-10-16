@@ -68,8 +68,8 @@ for status in idle waiting; do
   [ $status = idle ] && tmux -L nerdr-vert capture-pane -p -t vert | head -3
 done
 
-echo "=== C-q tilbake, j ned til gamma ==="
-tmux -L nerdr-vert send-keys -t vert C-q
+echo "=== C-b w tilbake, j ned til gamma ==="
+tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert j
 sleep 1
@@ -79,7 +79,7 @@ echo "=== klikk på andre rad går rett inn i alfa ==="
 tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;2M\033[<0;5;2m')"
 sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,7p;16p'
-tmux -L nerdr-vert send-keys -t vert C-q
+tmux -L nerdr-vert send-keys -t vert C-b w
 
 echo "=== gamma blir ferdig og havner under VENTER PÅ DEG med ◆, og uten cwd står gamma:0 ==="
 pane=$(tmux -L nerdr-maal display-message -p -t gamma '#{pane_id}')
@@ -90,7 +90,7 @@ tmux -L nerdr-vert capture-pane -p -t vert | head -7
 echo "=== inn i gamma og ut igjen, så står den under SETT med ○, nederst ==="
 tmux -L nerdr-vert send-keys -t vert j Enter
 sleep 0.3
-tmux -L nerdr-vert send-keys -t vert C-q
+tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert
 
@@ -100,7 +100,7 @@ sleep 0.3
 tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;14M\033[<0;5;14m')"
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p;14p;16p'
-tmux -L nerdr-vert send-keys -t vert C-q
+tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.2
 
 echo "=== ? viser hjelpen, og en tast lukker den ==="
@@ -135,7 +135,7 @@ sleep 2.5
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '5,8p;16p'
 
 echo "=== samme mappe igjen gir et nytt vindu i prosjekt-ny (skal være 2) ==="
-tmux -L nerdr-vert send-keys -t vert C-q
+tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert n
 sleep 0.3
@@ -146,7 +146,7 @@ sleep 0.8
 tmux -L nerdr-maal list-windows -t prosjekt-ny | wc -l
 
 echo "=== C-r i lista viser tidligere samtaler: bare «annet  Fiks testene», 1/1 ==="
-tmux -L nerdr-vert send-keys -t vert C-q
+tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert C-r
 sleep 0.3
@@ -166,7 +166,7 @@ sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t annet | grep -m1 'claude --resume'
 
 echo "=== Esc i popupen går tilbake til lista uten ny sesjon (skal være 5 sesjoner) ==="
-tmux -L nerdr-vert send-keys -t vert C-q
+tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert n
 sleep 0.3
@@ -175,53 +175,9 @@ sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '4p;16p'
 tmux -L nerdr-maal list-sessions | wc -l
 
-echo "=== t på alfa lager et vindu rett etter alfa:0, merket med alfa, og nerdr er inne i det ==="
+echo "=== k opp til alfa ==="
 tmux -L nerdr-vert send-keys -t vert k k k k k k k k
 sleep 0.3
-tmux -L nerdr-vert send-keys -t vert t
-sleep 1
-tmux -L nerdr-maal list-panes -s -t alfa -F '#{window_index} #{pane_current_command} #{@nerdr-claude}' | sed "s/$alfa/alfa/"
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,4p;16p'
-
-echo "=== det du skriver, går til terminalen (cat skriver «i terminalen» tilbake) ==="
-tmux -L nerdr-vert send-keys -t vert -l 'i terminalen'
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.8
-tmux -L nerdr-maal capture-pane -p -t alfa:1 | grep -c 'i terminalen'
-
-echo "=== 30 linjer i terminalen, og bunnen viser linje 30 ==="
-for i in $(seq 1 30); do tmux -L nerdr-maal send-keys -t alfa:1 "linje $i" Enter; done
-sleep 0.8
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '15p'
-
-echo "=== ti hakk opp er 30 linjer, og cat med ekko gir linje 8 og 9 øverst, med 30/47 oppe til høyre ==="
-for i in $(seq 1 10); do tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;41;4M')"; done
-sleep 0.8
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
-
-echo "=== to hakk ned gir linje 11 og 24/47, og Enter går tilbake til bunnen uten teller, med to tomme linjer nederst ==="
-for i in 1 2; do tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<65;41;4M')"; done
-sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p;14,15p'
-
-echo "=== C-q, k opp til alfa, og t går inn i samme terminal (skal være 2 vinduer) ==="
-tmux -L nerdr-vert send-keys -t vert C-q
-sleep 0.2
-tmux -L nerdr-vert send-keys -t vert k
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert t
-sleep 0.8
-tmux -L nerdr-maal list-windows -t alfa | wc -l
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
-
-echo "=== C-d avslutter cat, vinduet lukkes, og nerdr står i lista med alfa valgt ==="
-tmux -L nerdr-vert send-keys -t vert C-d
-sleep 1.5
-tmux -L nerdr-maal list-windows -t alfa | wc -l
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,4p;16p'
 
 echo "=== C-b viser prefikstastene i hintlinja ==="
 tmux -L nerdr-vert send-keys -t vert C-b
@@ -250,6 +206,24 @@ sleep 0.5
 tmux -L nerdr-maal capture-pane -p -t alfa:0.1 | grep -c 'til høyre'
 tmux -L nerdr-maal display-message -p -t alfa:0 '#{pane_index}'
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
+
+echo "=== 30 linjer i høyre pane, og bunnen av boksen viser linje 30 ==="
+for i in $(seq 1 30); do tmux -L nerdr-maal send-keys -t alfa:0.1 "linje $i" Enter; done
+sleep 0.8
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '15p'
+
+echo "=== fire hakk opp med hjulet over høyre pane gir 12/… på toppen av rammen ==="
+for i in 1 2 3 4; do tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;90;6M')"; done
+sleep 0.8
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
+
+echo "=== to hakk ned gir 6/…, og Enter går tilbake til bunnen uten teller ==="
+for i in 1 2; do tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<65;90;6M')"; done
+sleep 0.5
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
+tmux -L nerdr-vert send-keys -t vert Enter
+sleep 0.5
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
 
 echo "=== C-b C-b sender ^B til cat, og C-b o gjør Claude-en aktiv igjen (0) ==="
 tmux -L nerdr-vert send-keys -t vert C-b C-b
@@ -280,7 +254,7 @@ tmux -L nerdr-maal list-panes -t alfa:0 | wc -l
 
 echo "=== uten split fyller Claude-en hele visningen igjen (74x16) ==="
 tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'
-tmux -L nerdr-vert send-keys -t vert C-q
+tmux -L nerdr-vert send-keys -t vert C-b w
 
 echo "=== q avslutter ==="
 tmux -L nerdr-vert send-keys -t vert q

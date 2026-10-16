@@ -2,12 +2,6 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-/// Ctrl-Q bytter mellom lista og panen. Claude Code bruker den ikke, og den
-/// ligger lett til også på nordiske tastatur, der `]` krever Option.
-pub fn er_bytt_fokus(k: &KeyEvent) -> bool {
-    k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('q')
-}
-
 /// Prefikset fra tmux-oppsettet, så tastene er de samme som i tmux.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prefiks {

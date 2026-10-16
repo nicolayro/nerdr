@@ -4,8 +4,7 @@
 pub const FELT: &str = "#{session_id}\t#{session_name}\t#{window_id}\t#{window_index}\t\
 #{pane_id}\t#{pane_title}\t\
 #{window_width}\t#{window_height}\t#{pane_width}\t#{pane_height}\t\
-#{pane_left}\t#{pane_top}\t#{pane_active}\t#{window_visible_layout}\t\
-#{pane_current_command}\t#{@nerdr-claude}";
+#{pane_left}\t#{pane_top}\t#{pane_active}\t#{window_visible_layout}";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pane {
@@ -27,18 +26,12 @@ pub struct Pane {
     /// Oppsettet til vinduet, til `oppsett::tolk`. Paner som er skjult av
     /// zoom, er ikke med.
     pub oppsett: String,
-    /// Programmet som kjører i forgrunnen, som `zsh` eller `vim`.
-    pub kommando: String,
-    /// Claude-panen en terminal hører til, fra `terminal::OPSJON`.
-    pub claude: Option<String>,
 }
 
 impl Pane {
     pub fn fra_linje(linje: &str) -> Option<Pane> {
         let f: Vec<&str> = linje.split('\t').collect();
-        let [sesjon_id, sesjon, vindu_id, vindu, id, tittel, vb, vh, b, h, x, y, aktiv, oppsett, kommando, claude] =
-            f.as_slice()
-        else {
+        let [sesjon_id, sesjon, vindu_id, vindu, id, tittel, vb, vh, b, h, x, y, aktiv, oppsett] = f.as_slice() else {
             return None;
         };
         Some(Pane {
@@ -56,8 +49,6 @@ impl Pane {
             topp: y.parse().ok()?,
             aktiv: *aktiv == "1",
             oppsett: oppsett.to_string(),
-            kommando: kommando.to_string(),
-            claude: (!claude.is_empty()).then(|| claude.to_string()),
         })
     }
 
@@ -75,26 +66,18 @@ impl Pane {
 #[cfg(test)]
 mod tester {
     use super::*;
-    use crate::terminal;
 
     #[test]
     fn leser_list_panes_linje() {
-        let p = Pane::fra_linje("$0\tmain\t@0\t0\t%0\t✳ Fiks\t176\t38\t140\t38\t0\t0\t1\t\tzsh\t").unwrap();
+        let p = Pane::fra_linje("$0\tmain\t@0\t0\t%0\t✳ Fiks\t176\t38\t140\t38\t36\t0\t1\tb25d,176x38,0,0,0").unwrap();
         assert_eq!((p.id.as_str(), p.bredde, p.vindu_bredde), ("%0", 140, 176));
-        assert_eq!((p.kommando.as_str(), p.claude, p.aktiv), ("zsh", None, true));
-        let t = Pane::fra_linje("$0\tmain\t@1\t1\t%4\t\t176\t38\t176\t38\t0\t0\t1\t\tzsh\t%0").unwrap();
-        assert_eq!(t.claude.as_deref(), Some("%0"));
+        assert_eq!((p.venstre, p.aktiv, p.oppsett.as_str()), (36, true, "b25d,176x38,0,0,0"));
         assert_eq!(Pane::fra_linje("for\tfå"), None);
     }
 
     #[test]
-    fn felt_leser_opsjonen_terminalen_merkes_med() {
-        assert!(FELT.ends_with(&format!("#{{{}}}", terminal::OPSJON)));
-    }
-
-    #[test]
     fn oppgave_er_tittelen_etter_tegnet_til_claude() {
-        let med = |tittel: &str| Pane { tittel: tittel.into(), ..Pane::fra_linje("$0\ts\t@0\t0\t%0\t\t1\t1\t1\t1\t0\t0\t1\t\t\t").unwrap() };
+        let med = |tittel: &str| Pane { tittel: tittel.into(), ..Pane::fra_linje("$0\ts\t@0\t0\t%0\t\t1\t1\t1\t1\t0\t0\t1\t").unwrap() };
         assert_eq!(med("✳ Fiks testene").oppgave(), Some("Fiks testene"));
         assert_eq!(med("⠐ Fiks testene").oppgave(), Some("Fiks testene"));
         assert_eq!(med("min-maskin.local").oppgave(), None);

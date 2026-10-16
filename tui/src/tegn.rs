@@ -76,22 +76,15 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
                 tegn_kort(buf, område, &kort, merke, valgt, app.fokus);
             }
-            Rad::Terminal(pane) => {
-                let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
-                tegn_terminal(buf, Rect::new(0, y, bredde, 1), pane, valgt, app.fokus);
-            }
         }
     }
 
-    let prefiks;
+    let prefiks = app.prefiks.navn();
     let hint = match app.fokus {
-        _ if app.lukke.is_some() => " lukke panen? y/n",
-        _ if app.etter_prefiks => {
-            prefiks = format!(" {} … % \" del · o pane · z · x · ?", app.prefiks.navn());
-            &prefiks
-        }
-        Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · ? hjelp",
-        Fokus::Pane => " C-q tilbake til lista",
+        _ if app.lukke.is_some() => " lukke panen? y/n".to_string(),
+        _ if app.etter_prefiks => format!(" {prefiks} … % \" del · o pane · z · x · ?"),
+        Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · ? hjelp".to_string(),
+        Fokus::Pane => format!(" {prefiks} w tilbake til lista"),
     };
     buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(GRÅ));
 
@@ -130,8 +123,13 @@ fn kort(app: &App, pane: &Pane) -> Kort {
 }
 
 fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus) {
-    tegn_peker(buf, område, valgt, fokus);
-    let farge = if valgt { HVIT } else { LYS };
+    if valgt && fokus == Fokus::Liste {
+        buf.set_style(område, Style::new().bg(MARKERT));
+    }
+    let (peker, farge) = if valgt { ("▎", HVIT) } else { (" ", LYS) };
+    for y in område.top()..område.bottom() {
+        buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT));
+    }
     let y = område.y;
     buf.set_stringn(1, y, merke.glyf(), 1, Style::new().fg(glyffarge(merke)));
 
@@ -145,25 +143,6 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
     let oppgavefarge = if valgt { LYS } else { GRÅ };
     for (linje, y) in kort.oppgave.iter().zip(y + 1..område.bottom()) {
         buf.set_stringn(TEKST_X, y, linje, TEKST, Style::new().fg(oppgavefarge));
-    }
-}
-
-/// Programmet som kjører i terminalen, under kortet til Claude-en.
-fn tegn_terminal(buf: &mut Buffer, område: Rect, pane: &Pane, valgt: bool, fokus: Fokus) {
-    tegn_peker(buf, område, valgt, fokus);
-    let x = buf.set_stringn(TEKST_X, område.y, "└ ", TEKST, Style::new().fg(DIM)).0;
-    let rest = TEKST.saturating_sub(2);
-    let farge = if valgt { LYS } else { GRÅ };
-    buf.set_stringn(x, område.y, kutt(&pane.kommando, rest), rest, Style::new().fg(farge));
-}
-
-fn tegn_peker(buf: &mut Buffer, område: Rect, valgt: bool, fokus: Fokus) {
-    if valgt && fokus == Fokus::Liste {
-        buf.set_style(område, Style::new().bg(MARKERT));
-    }
-    let peker = if valgt { "▎" } else { " " };
-    for y in område.top()..område.bottom() {
-        buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT));
     }
 }
 
@@ -204,7 +183,7 @@ fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
 pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     let plass = app.visning.height.saturating_sub(1);
     plasser(app, plass).into_iter().find_map(|(topp, høyde, rad)| match rad {
-        Rad::Pane(pane, _) | Rad::Terminal(pane) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
+        Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })
 }

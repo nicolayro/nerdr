@@ -32,8 +32,6 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | --- | --- |
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
-| `C-q` | Tilbake til lista |
-| `t` | Terminal i mappa til Claude-en |
 | `n` | Ny Claude i en mappe du velger |
 | `C-r` | Fortsett en tidligere samtale |
 | `?` | Hjelp |
@@ -45,7 +43,9 @@ hjulet i historikken, og en tast tar deg tilbake til bunnen. I `less` og `man`
 blir hjulet til piltaster.
 
 Er vinduet delt i flere paner, står hver pane i en boks, der tmux har plassert
-den. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv.
+den. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
+terminal ved siden av Claude-en får du ved å dele vinduet, og med zoom fyller
+Claude-en visningen igjen mens terminalen kjører videre.
 
 Prefikset er det samme som i tmux-oppsettet ditt, ellers `C-b`. Tastene etter
 det er de samme som i tmux, og virker både fra lista og fra panen:
@@ -63,7 +63,6 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `C-o` | Roter panene |
 | `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
 | `PgUp` | Rull en side opp |
-| `c` | Ny terminal til Claude-en |
 | `n` `p` | Neste og forrige i lista |
 | `w` `s` | Tilbake til lista |
 | `d` | Avslutt |
@@ -89,14 +88,6 @@ fortsetter den du velger, i mappa den hørte til. Samtaler som kjører, står ik
 der. `C-r` i popupen bytter mellom samtalene og mappene.
 
 I begge tilfeller er du inne i den nye Claude-en med en gang.
-
-### Terminal
-
-`t` går inn i terminalen til Claude-en du har valgt, og lager den første gang.
-Den er et skall i et eget tmux-vindu rett etter Claude-vinduet, i samme mappe,
-og står under Claude-en i lista med programmet som kjører. Avslutter du skallet,
-lukkes vinduet, og du er tilbake i lista. Terminalen kjører videre når nerdr
-avslutter, og står der igjen neste gang.
 
 ## Kommandoer
 
