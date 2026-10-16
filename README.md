@@ -43,8 +43,9 @@ holder på med.
 `n` åpner en popup der du søker fram en mappe under `~/git`, og `⏎` starter
 `claude` der i en tmux-sesjon med samme navn som mappa. Finnes sesjonen
 allerede, får den et nytt vindu. Du er inne i den med en gang, og kortet står
-med `◌` til Claude er klar. Andre mapper settes kolonseparert i
-`NERDR_MAPPER`, som `NERDR_MAPPER=~/git:~/kode`.
+med `◌` til Claude er klar. `C-r` i stedet for `⏎` starter `claude --resume`,
+så du kan fortsette en tidligere samtale i mappa. Andre mapper settes
+kolonseparert i `NERDR_MAPPER`, som `NERDR_MAPPER=~/git:~/kode`.
 
 ## Utvikle
 

@@ -44,8 +44,8 @@ enum Venter {
     Bilde,
     Markør,
     /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
-    NySesjon { navn: String, mappe: PathBuf },
-    NyPane { mappe: PathBuf },
+    NySesjon { navn: String, mappe: PathBuf, claude: &'static str },
+    NyPane { mappe: PathBuf, claude: &'static str },
     Ingenting,
 }
 
@@ -381,18 +381,18 @@ impl App {
                 self.pane_mus = felt.get(3) == Some(&"1");
                 true
             }
-            Venter::NySesjon { navn, mappe } if !ok => {
+            Venter::NySesjon { navn, mappe, claude } if !ok => {
                 let mål = sitat(&format!("={navn}:"));
                 let kommando =
                     format!("new-window -t {mål} -c {} -P -F {}", sitat(&mappe.to_string_lossy()), sitat("#{pane_id}"));
-                self.send(&kommando, Venter::NyPane { mappe });
+                self.send(&kommando, Venter::NyPane { mappe, claude });
                 false
             }
-            Venter::NySesjon { mappe, .. } | Venter::NyPane { mappe } => {
+            Venter::NySesjon { mappe, claude, .. } | Venter::NyPane { mappe, claude } => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
                 // Skrevet inn i skallet heller enn kjørt av tmux, siden `claude`
                 // kan være en funksjon i .zshrc, som tmux ikke ser.
-                self.send(&format!("send-keys -t {} -l claude", sitat(&id)), Venter::Ingenting);
+                self.send(&format!("send-keys -t {} -l {}", sitat(&id), sitat(claude)), Venter::Ingenting);
                 self.send(&format!("send-keys -t {} Enter", sitat(&id)), Venter::Ingenting);
                 self.nye.insert(id.clone(), mappe);
                 self.gå_inn_i = Some(id);
@@ -403,7 +403,8 @@ impl App {
         }
     }
 
-    fn start_claude(&mut self, mappe: PathBuf) {
+    /// `claude` er kommandolinja som skrives inn, som `claude --resume`.
+    fn start_claude(&mut self, mappe: PathBuf, claude: &'static str) {
         let navn = ny::sesjonsnavn(&mappe);
         let kommando = format!(
             "new-session -d -s {} -c {} -P -F {}",
@@ -411,7 +412,7 @@ impl App {
             sitat(&mappe.to_string_lossy()),
             sitat("#{pane_id}")
         );
-        self.send(&kommando, Venter::NySesjon { navn, mappe });
+        self.send(&kommando, Venter::NySesjon { navn, mappe, claude });
     }
 
     /// Er en liste alt på vei, kan den være bestilt før endringen, så det
@@ -483,7 +484,14 @@ impl App {
                 KeyCode::Enter => {
                     if let Some(mappe) = velger.valgt_mappe() {
                         self.velger = None;
-                        self.start_claude(mappe);
+                        self.start_claude(mappe, "claude");
+                    }
+                }
+                // Claude viser selv de tidligere samtalene i mappa å velge mellom.
+                KeyCode::Char('r') if ctrl => {
+                    if let Some(mappe) = velger.valgt_mappe() {
+                        self.velger = None;
+                        self.start_claude(mappe, "claude --resume");
                     }
                 }
                 KeyCode::Up => velger.flytt(-1),

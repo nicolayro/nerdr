@@ -242,7 +242,7 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect) {
 
 /// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
 fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
-    let Some(boks) = boks(buf, område, 64, VELGER_LINJER + 4, "ny claude", "⏎ start · esc avbryt") else {
+    let Some(boks) = boks(buf, område, 64, VELGER_LINJER + 4, "ny claude", "⏎ ny · C-r fortsett en tidligere · esc avbryt") else {
         return (0, 0);
     };
     let bredde = boks.width;

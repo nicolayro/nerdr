@@ -141,7 +141,18 @@ tmux -L nerdr-vert send-keys -t vert Enter
 sleep 0.8
 tmux -L nerdr-maal list-windows -t prosjekt-ny | wc -l
 
-echo "=== Esc i popupen går tilbake til lista uten ny sesjon (skal være 4 sesjoner) ==="
+echo "=== C-r i popupen lager sesjonen annet og skriver inn claude --resume ==="
+tmux -L nerdr-vert send-keys -t vert C-q
+sleep 0.2
+tmux -L nerdr-vert send-keys -t vert n
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert -l annet
+sleep 0.3
+tmux -L nerdr-vert send-keys -t vert C-r
+sleep 0.8
+tmux -L nerdr-maal capture-pane -p -t annet | grep -m1 'claude --resume'
+
+echo "=== Esc i popupen går tilbake til lista uten ny sesjon (skal være 5 sesjoner) ==="
 tmux -L nerdr-vert send-keys -t vert C-q
 sleep 0.2
 tmux -L nerdr-vert send-keys -t vert n
