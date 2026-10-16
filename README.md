@@ -76,19 +76,14 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
 
-Lista har fire grupper, og en gruppe uten noen i seg har ingen overskrift:
+Hver Claude viser mappen og branchen den jobber i, og oppgaven under. Lista er
+delt i tre:
 
 | | |
 | --- | --- |
-| **spør** | `●` spør om noe, som et tillatelsesspørsmål |
-| **ferdig** | `◆` er ferdig med noe du ikke har sett |
+| **venter på deg** | `●` spør om noe, `◆` er ferdig med noe du ikke har sett |
 | **jobber** | `◐` jobber, `◌` starter |
 | **sett** | `○` er ferdig, og du har vært inne i den siden |
-
-De som spør eller er ferdige, står med mappe, branch og oppgave, og resten med
-én linje hver. Mens du er i panen, står den du er i, øverst under **her**, så de
-som spør eller er ferdige, og bare antallet av resten. Et klikk på antallet tar
-deg til lista.
 
 ### Starte og fortsette
 

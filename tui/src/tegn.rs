@@ -8,7 +8,7 @@ use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::bokser::{Boks, Rammer};
-use crate::grupper::{Merke, Rad};
+use crate::grupper::{Gruppe, Merke, Rad};
 use crate::ny::Velger;
 use crate::{App, Fokus, Lukke, hjelp};
 
@@ -61,36 +61,24 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     let hint_y = område.height.saturating_sub(1);
 
     let mut overskrifter = Vec::new();
-    for (y, høyde, rad) in plasser(app) {
+    for (y, høyde, rad) in plasser(app, hint_y) {
         if y >= hint_y {
             break;
         }
         match rad {
             Rad::Tom => {}
+            Rad::Strek => {
+                let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
+                buf.set_stringn(TEKST_X, y, strek, TEKST, Style::new().fg(DIM));
+            }
             Rad::Overskrift(gruppe) => {
                 let x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
                 let strek = "─".repeat(bredde.saturating_sub(x) as usize);
                 buf.set_stringn(x, y, strek, bredde as usize, Style::new().fg(DIM));
                 overskrifter.push(y);
             }
-            Rad::Antall { jobber, sett } => {
-                let mut x = 1;
-                for (antall, merke, navn) in [(jobber, Merke::Jobber, "jobber"), (sett, Merke::Sett, "sett")] {
-                    if antall == 0 {
-                        continue;
-                    }
-                    if x > 1 {
-                        x = buf.set_stringn(x, y, " · ", 3, Style::new().fg(DIM)).0;
-                    }
-                    x = buf.set_stringn(x, y, merke.glyf(), 1, Style::new().fg(glyffarge(merke))).0;
-                    x = buf.set_stringn(x, y, format!(" {antall} {navn}"), TEKST, Style::new().fg(GRÅ)).0;
-                }
-            }
-            Rad::Kort(pane, merke) | Rad::Linje(pane, merke) => {
-                let mut kort = kort(app, pane);
-                if matches!(rad, Rad::Linje(..)) {
-                    kort.oppgave.clear();
-                }
+            Rad::Pane(pane, merke) => {
+                let kort = kort(app, pane);
                 let område = Rect::new(0, y, bredde, høyde.min(hint_y - y));
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
                 tegn_kort(buf, område, &kort, merke, valgt, app.fokus);
@@ -149,17 +137,11 @@ fn kort(app: &App, pane: &Pane) -> Kort {
     Kort { mappe, branch: app.brancher.get(&pane.id).cloned(), oppgave }
 }
 
-/// Den valgte har bakgrunn. Er du inne i den, er streken til venstre tykkere,
-/// så du ser hvor du er mens du jobber.
 fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus) {
-    if valgt {
+    if valgt && fokus == Fokus::Liste {
         buf.set_style(område, Style::new().bg(MARKERT));
     }
-    let (peker, farge) = match (valgt, fokus) {
-        (true, Fokus::Pane) => ("▌", HVIT),
-        (true, Fokus::Liste) => ("▎", HVIT),
-        (false, _) => (" ", LYS),
-    };
+    let (peker, farge) = if valgt { ("▎", HVIT) } else { (" ", LYS) };
     for y in område.top()..område.bottom() {
         buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT));
     }
@@ -190,21 +172,29 @@ fn glyffarge(merke: Merke) -> Color {
     }
 }
 
-/// Radene i lista med y og høyde.
-fn plasser<'a>(app: &'a App) -> Vec<(u16, u16, Rad<'a>)> {
+/// Radene i lista med y og høyde. Får alt plass, legges SETT nederst, med en
+/// tom rad over hintet, så det du har lagt bort står for seg selv.
+fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
+    let rader = app.rader();
+    let høyder: Vec<u16> = rader
+        .iter()
+        .map(|r| if let Rad::Pane(pane, _) = r { kort(app, pane).høyde() } else { 1 })
+        .collect();
+    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Sett))).unwrap_or(rader.len());
+    let over: u16 = høyder[..sett].iter().sum();
+    let under: u16 = høyder[sett..].iter().sum();
+    let sett_y = if over + under < plass { plass - under - 1 } else { over };
+
     let mut y = 0;
-    let mut plassert = Vec::new();
-    for rad in app.rader() {
-        let høyde = if let Rad::Kort(pane, _) = rad { kort(app, pane).høyde() } else { 1 };
+    let mut plassert = Vec::with_capacity(rader.len());
+    for (i, (rad, høyde)) in rader.into_iter().zip(høyder).enumerate() {
+        if i == sett {
+            y = sett_y;
+        }
         plassert.push((y, høyde, rad));
         y += høyde;
     }
     plassert
-}
-
-/// Om rad `y` i lista er linja med hvor mange som jobber og er sett.
-pub fn antall_på(app: &App, y: u16) -> bool {
-    plasser(app).into_iter().any(|(topp, _, rad)| topp == y && matches!(rad, Rad::Antall { .. }))
 }
 
 /// Panen som står på rad `y` i lista.
@@ -213,8 +203,8 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     if y >= hint_y {
         return None;
     }
-    plasser(app).into_iter().find_map(|(topp, høyde, rad)| match rad {
-        Rad::Kort(pane, _) | Rad::Linje(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
+    plasser(app, hint_y).into_iter().find_map(|(topp, høyde, rad)| match rad {
+        Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })
 }

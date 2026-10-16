@@ -944,10 +944,6 @@ impl App {
             return false;
         }
         if m.column < v.x {
-            if m.kind == MouseEventKind::Down(MouseButton::Left) && tegn::antall_på(self, m.row) {
-                self.bytt_fokus(Fokus::Liste);
-                return true;
-            }
             let Some(pane) = tegn::pane_på(self, m.row) else { return false };
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
@@ -1028,7 +1024,7 @@ impl App {
             return;
         }
         // Gruppen må tas før panen merkes som sett, ellers havner en ferdig
-        // Claude du går inn i, rett i RESTEN.
+        // Claude du går inn i, rett i SETT.
         self.låst = match fokus {
             Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.merke(p)?.gruppe()))),
             Fokus::Liste => None,
@@ -1066,8 +1062,7 @@ impl App {
     }
 
     fn rader(&self) -> Vec<Rad<'_>> {
-        let her = self.valgt.as_ref().map(|p| p.id.as_str());
-        grupper::rader(&self.paner, |p| self.plass(p), her, self.fokus == Fokus::Liste)
+        grupper::rader(&self.paner, |p| self.plass(p))
     }
 
     fn i_rekkefølge(&self) -> Vec<Pane> {
@@ -1075,7 +1070,7 @@ impl App {
         rader
             .into_iter()
             .filter_map(|r| match r {
-                Rad::Kort(p, _) | Rad::Linje(p, _) => Some(p.clone()),
+                Rad::Pane(p, _) => Some(p.clone()),
                 _ => None,
             })
             .collect()

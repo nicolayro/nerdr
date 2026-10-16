@@ -36,7 +36,7 @@ tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
   "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=${NERDR_RAMMER:-bokser} CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
 sleep 2
 
-echo "=== nerdr etter oppstart (alfa ● under SPØR, gamma ◐ under JOBBER, ingen beta) ==="
+echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
 echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat på en strek som fortsetter overskriften med ┬, og JOBBER treffer skillestreken med ┤ ==="
 tmux -L nerdr-vert capture-pane -p -t vert
 echo "=== størrelse på alfa (skal være 68x12 med bokser, 74x15 med linjer) ==="
@@ -61,7 +61,7 @@ tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;41;4M')"
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t alfa | grep -n '<64'
 
-echo "=== mens du er inne, står alfa under HER med tykk strek, og med ○ når den blir ferdig ==="
+echo "=== alfa blir ferdig mens du er inne, og står fortsatt under VENTER PÅ DEG, med ○ ==="
 alfa=$(tmux -L nerdr-maal display-message -p -t alfa '#{pane_id}')
 for status in idle waiting; do
   printf '{"tmux":"alfa:@0.%s","status":"%s","cwd":"%s","updatedAt":%s000}' "$alfa" "$status" "$(dirname "$HER")" "$(date +%s)" > "$KONFIG/sessions/alfa.json"
@@ -82,25 +82,25 @@ sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,7p;16p'
 tmux -L nerdr-vert send-keys -t vert C-b w
 
-echo "=== gamma blir ferdig og havner under FERDIG med ◆, og uten cwd står gamma:0 ==="
+echo "=== gamma blir ferdig og havner under VENTER PÅ DEG med ◆, og uten cwd står gamma:0 ==="
 pane=$(tmux -L nerdr-maal display-message -p -t gamma '#{pane_id}')
 printf '{"tmux":"gamma:@0.%s","status":"idle","updatedAt":%s000}' "$pane" "$(date +%s)" > "$KONFIG/sessions/gamma.json"
 sleep 2.5
 tmux -L nerdr-vert capture-pane -p -t vert | head -7
 
-echo "=== inn i gamma og ut igjen, så står den under SETT med ○ ==="
+echo "=== inn i gamma og ut igjen, så står den under SETT med ○, nederst ==="
 tmux -L nerdr-vert send-keys -t vert j Enter
 sleep 0.3
 tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert
 
-echo "=== k opp til alfa, så klikk på gamma under SETT (rad 6) går inn i gamma, som står under HER, med alfa under SPØR ==="
+echo "=== k opp til alfa, så klikk på gamma nederst (rad 14) går inn i gamma ==="
 tmux -L nerdr-vert send-keys -t vert k
 sleep 0.3
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;6M\033[<0;5;6m')"
+tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;14M\033[<0;5;14m')"
 sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,8p;16p'
+tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p;14p;16p'
 tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.2
 
