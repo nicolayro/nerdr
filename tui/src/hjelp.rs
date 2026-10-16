@@ -36,7 +36,7 @@ pub fn tekst() -> String {
          bruk: nerdr [-L socket]\n\n  \
          -L socket      tmux-serveren, som tmux -L\n  \
          -h, --help     denne hjelpen\n  \
-         -V, --version  versjonen\n\n\
+         -v, --version  versjonen\n\n\
          Kjør nerdr i en vanlig terminalfane, utenfor tmux.\n\nTaster:\n",
         env!("CARGO_PKG_VERSION")
     );

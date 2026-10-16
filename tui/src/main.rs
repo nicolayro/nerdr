@@ -115,7 +115,7 @@ fn main() {
             print!("{}", hjelp::tekst());
             return;
         }
-        [flagg] if flagg == "-V" || flagg == "--version" => {
+        [flagg] if matches!(flagg.as_str(), "-v" | "-V" | "--version") => {
             println!("nerdr {}", env!("CARGO_PKG_VERSION"));
             return;
         }
