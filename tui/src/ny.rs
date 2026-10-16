@@ -214,13 +214,13 @@ mod tester {
     #[test]
     fn kandidater_er_mappene_rett_under_hver_rot() {
         let hjem = env::temp_dir().join(format!("nerdr-ny-{}", std::process::id()));
-        for m in ["git/b", "git/a/dypere", "git/.skjult", "fagdag/c"] {
+        for m in ["git/b", "git/a/dypere", "git/.skjult", "kode/c"] {
             fs::create_dir_all(hjem.join(m)).unwrap();
         }
         fs::write(hjem.join("git/fil"), "").unwrap();
 
-        let navn: Vec<_> = kandidater(&røtter("git:fagdag", &hjem)).iter().map(|m| m.strip_prefix(&hjem).unwrap().to_path_buf()).collect();
-        assert_eq!(navn, [Path::new("git/a"), Path::new("git/b"), Path::new("fagdag/c")]);
+        let navn: Vec<_> = kandidater(&røtter("git:kode", &hjem)).iter().map(|m| m.strip_prefix(&hjem).unwrap().to_path_buf()).collect();
+        assert_eq!(navn, [Path::new("git/a"), Path::new("git/b"), Path::new("kode/c")]);
         fs::remove_dir_all(hjem).unwrap();
     }
 
@@ -247,7 +247,7 @@ mod tester {
     #[test]
     fn ordstart_og_sammenhengende_bokstaver_vinner() {
         let p = |søk, tekst| poeng(søk, tekst).unwrap().0;
-        assert!(p("ner", "~/fagdag/nerdr") > p("ner", "~/git/annet-er"));
+        assert!(p("ner", "~/kode/nerdr") > p("ner", "~/git/annet-er"));
         // Første n står i «annet», men det beste treffet er i «nerdr».
         assert_eq!(poeng("nerdr", "~/git/annet-nerdr").map(|(_, t)| t[0]), Some(12));
     }

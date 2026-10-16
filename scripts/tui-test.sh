@@ -8,7 +8,7 @@ FALSK=$HER/falsk-claude.sh
 KONFIG=$(mktemp -d)
 mkdir "$KONFIG/sessions"
 # HOME for nerdr, så mappevelgeren viser disse mappene og ikke brukerens egne.
-mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/fagdag/tredje"
+mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/kode/tredje"
 # En tidligere samtale i annet, og en tom en som ikke skal vises.
 mkdir -p "$KONFIG/projects/annet"
 printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
@@ -32,7 +32,7 @@ for linje in "alfa waiting" "gamma busy"; do
 done
 
 tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
-  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/fagdag CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
+  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
@@ -111,7 +111,7 @@ tmux -L nerdr-vert send-keys -t vert x
 sleep 0.3
 tmux -L nerdr-vert capture-pane -p -t vert | tail -1
 
-echo "=== n åpner popupen med mappene i NERDR_MAPPER, ~/git og fagdag ==="
+echo "=== n åpner popupen med mappene i NERDR_MAPPER, ~/git og kode ==="
 tmux -L nerdr-vert send-keys -t vert n
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert
