@@ -37,7 +37,7 @@ tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
-echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat på en strek ==="
+echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat, understreket ut til kanten ==="
 tmux -L nerdr-vert capture-pane -p -t vert
 echo "=== størrelse på alfa (skal være 68x13 med bokser, 74x15 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
@@ -275,7 +275,7 @@ echo "=== uten split fyller Claude-en hele visningen igjen (68x13, 74x15 med lin
 tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'
 tmux -L nerdr-vert send-keys -t vert C-b w
 
-echo "=== C-b c fra lista lager alfa:1, nerdr er inne i det, og fanene står på streken øverst (navnet kan være tmux til tmux har gitt det navnet cat) ==="
+echo "=== C-b c fra lista lager alfa:1, nerdr er inne i det, og fanene gcat og tmux står øverst (navnet kan være tmux til tmux har gitt det navnet cat) ==="
 tmux -L nerdr-vert send-keys -t vert C-b c
 sleep 1
 tmux -L nerdr-maal list-windows -t alfa -F '#{window_index} #{window_name}'

@@ -207,7 +207,6 @@ struct Fane {
     vist: bool,
 }
 
-/// Fanene står på en strek, med ett tegn av streken mellom seg.
 fn faner(app: &App) -> Vec<Fane> {
     let mut x = app.visning.x + 1;
     let mut ut = Vec::new();
@@ -216,22 +215,22 @@ fn faner(app: &App) -> Vec<Fane> {
         let til = x + navn.chars().count() as u16 + 2;
         let vist = app.vist.as_ref() == Some(&p.vindu_id);
         ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist });
-        x = til + 1;
+        x = til;
     }
     ut
 }
 
-/// Raden over visningen: vinduene i sesjonen på en strek, i samme stil som
-/// overskriftene i lista. Vinduet som vises, har bakgrunn.
+/// Raden over visningen, med vinduene i sesjonen. Hele raden er understreket,
+/// så streken står under fanene uten en egen rad.
 fn tegn_faner(buf: &mut Buffer, app: &App) {
     let v = app.visning;
     let Some(y) = v.y.checked_sub(1) else { return };
-    let strek = Style::new().fg(DIM);
-    buf.set_string(v.x, y, "─".repeat(v.width as usize), strek);
+    let strek = Style::new().fg(DIM).add_modifier(Modifier::UNDERLINED);
+    buf.set_string(v.x, y, " ".repeat(v.width as usize), strek);
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
         let stil = match f.vist {
-            true => Style::new().fg(HVIT).bg(MARKERT).add_modifier(Modifier::BOLD),
-            false => Style::new().fg(GRÅ),
+            true => strek.fg(HVIT).bg(MARKERT).add_modifier(Modifier::BOLD),
+            false => strek.fg(GRÅ),
         };
         buf.set_string(f.fra, y, format!(" {} ", f.navn), stil);
     }
