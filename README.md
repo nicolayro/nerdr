@@ -81,9 +81,9 @@ delt i tre:
 
 | | |
 | --- | --- |
-| **venter på deg** | `●` spør om noe, `◆` er ferdig med noe du ikke har sett |
+| **venter** | `●` spør om noe, `◆` er ferdig med noe du ikke har sett |
 | **jobber** | `◐` jobber, `◌` starter |
-| **sett** | `○` er ferdig, og du har vært inne i den siden |
+| **ferdig** | `○` er ferdig, og du har vært inne i den siden |
 
 ### Starte og fortsette
 

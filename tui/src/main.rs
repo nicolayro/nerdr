@@ -1024,7 +1024,7 @@ impl App {
             return;
         }
         // Gruppen må tas før panen merkes som sett, ellers havner en ferdig
-        // Claude du går inn i, rett i SETT.
+        // Claude du går inn i, rett i FERDIG.
         self.låst = match fokus {
             Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.merke(p)?.gruppe()))),
             Fokus::Liste => None,

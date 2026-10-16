@@ -166,13 +166,13 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
 
 fn glyffarge(merke: Merke) -> Color {
     match merke {
-        Merke::Spør | Merke::Ferdig => ORANSJE,
+        Merke::Spør | Merke::Ulest => ORANSJE,
         Merke::Jobber | Merke::Starter => GRØNN,
         Merke::Sett => LYS,
     }
 }
 
-/// Radene i lista med y og høyde. Får alt plass, legges SETT nederst, med en
+/// Radene i lista med y og høyde. Får alt plass, legges FERDIG nederst, med en
 /// tom rad over hintet, så det du har lagt bort står for seg selv.
 fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
     let rader = app.rader();
@@ -180,7 +180,7 @@ fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
         .iter()
         .map(|r| if let Rad::Pane(pane, _) = r { kort(app, pane).høyde() } else { 1 })
         .collect();
-    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Sett))).unwrap_or(rader.len());
+    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Ferdig))).unwrap_or(rader.len());
     let over: u16 = høyder[..sett].iter().sum();
     let under: u16 = høyder[sett..].iter().sum();
     let sett_y = if over + under < plass { plass - under - 1 } else { over };

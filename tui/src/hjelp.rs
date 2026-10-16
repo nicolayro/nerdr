@@ -42,9 +42,9 @@ pub const PREFIKSTASTER: [(&str, &str); 21] = [
 
 pub const MERKER: [(Merke, &str); 5] = [
     (Merke::Spør, "spør om noe"),
-    (Merke::Ferdig, "ferdig med noe du ikke har sett"),
+    (Merke::Ulest, "ferdig med noe du ikke har sett"),
     (Merke::Jobber, "jobber"),
-    (Merke::Sett, "sett"),
+    (Merke::Sett, "ferdig, og du har sett den"),
     (Merke::Starter, "starter"),
 ];
 
