@@ -1024,7 +1024,7 @@ impl App {
             return;
         }
         // Gruppen må tas før panen merkes som sett, ellers havner en ferdig
-        // Claude du går inn i, rett i SETT.
+        // Claude du går inn i, rett i RESTEN.
         self.låst = match fokus {
             Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.merke(p)?.gruppe()))),
             Fokus::Liste => None,
@@ -1070,7 +1070,7 @@ impl App {
         rader
             .into_iter()
             .filter_map(|r| match r {
-                Rad::Pane(p, _) => Some(p.clone()),
+                Rad::Kort(p, _) | Rad::Linje(p, _) => Some(p.clone()),
                 _ => None,
             })
             .collect()

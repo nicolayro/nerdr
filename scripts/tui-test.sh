@@ -36,8 +36,8 @@ tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
   "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=${NERDR_RAMMER:-bokser} CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
 sleep 2
 
-echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
-echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat på en strek som fortsetter overskriften med ┬, og de andre overskriftene treffer skillestreken med ┤. SETT står med 0 ==="
+echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ nederst under RESTEN, ingen beta) ==="
+echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat på en strek som fortsetter overskriften med ┬, og RESTEN treffer skillestreken med ┤ ==="
 tmux -L nerdr-vert capture-pane -p -t vert
 echo "=== størrelse på alfa (skal være 68x12 med bokser, 74x15 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
@@ -88,7 +88,7 @@ printf '{"tmux":"gamma:@0.%s","status":"idle","updatedAt":%s000}' "$pane" "$(dat
 sleep 2.5
 tmux -L nerdr-vert capture-pane -p -t vert | head -7
 
-echo "=== inn i gamma og ut igjen, så står den under SETT med ○, nederst ==="
+echo "=== inn i gamma og ut igjen, så står den under RESTEN med ○, nederst ==="
 tmux -L nerdr-vert send-keys -t vert j Enter
 sleep 0.3
 tmux -L nerdr-vert send-keys -t vert C-b w

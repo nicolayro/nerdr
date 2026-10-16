@@ -67,19 +67,17 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
         }
         match rad {
             Rad::Tom => {}
-            Rad::Strek => {
-                let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
-                buf.set_stringn(TEKST_X, y, strek, TEKST, Style::new().fg(DIM));
-            }
-            Rad::Overskrift(gruppe, antall) => {
+            Rad::Overskrift(gruppe) => {
                 let x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
-                let x = buf.set_stringn(x, y, antall.to_string(), bredde as usize, Style::new().fg(DIM)).0 + 1;
                 let strek = "─".repeat(bredde.saturating_sub(x) as usize);
                 buf.set_stringn(x, y, strek, bredde as usize, Style::new().fg(DIM));
                 overskrifter.push(y);
             }
-            Rad::Pane(pane, merke) => {
-                let kort = kort(app, pane);
+            Rad::Kort(pane, merke) | Rad::Linje(pane, merke) => {
+                let mut kort = kort(app, pane);
+                if matches!(rad, Rad::Linje(..)) {
+                    kort.oppgave.clear();
+                }
                 let område = Rect::new(0, y, bredde, høyde.min(hint_y - y));
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
                 tegn_kort(buf, område, &kort, merke, valgt, app.fokus);
@@ -173,24 +171,25 @@ fn glyffarge(merke: Merke) -> Color {
     }
 }
 
-/// Radene i lista med y og høyde. Får alt plass, legges SETT nederst, med en
-/// tom rad over hintet, så det du har lagt bort står for seg selv.
+/// Radene i lista med y og høyde. Får alt plass, legges RESTEN nederst, med en
+/// tom rad over hintet, så den står stille når noe kommer inn i eller går ut
+/// av det som venter på deg.
 fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
     let rader = app.rader();
     let høyder: Vec<u16> = rader
         .iter()
-        .map(|r| if let Rad::Pane(pane, _) = r { kort(app, pane).høyde() } else { 1 })
+        .map(|r| if let Rad::Kort(pane, _) = r { kort(app, pane).høyde() } else { 1 })
         .collect();
-    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Sett, _))).unwrap_or(rader.len());
-    let over: u16 = høyder[..sett].iter().sum();
-    let under: u16 = høyder[sett..].iter().sum();
-    let sett_y = if over + under < plass { plass - under - 1 } else { over };
+    let resten = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Resten))).unwrap_or(rader.len());
+    let over: u16 = høyder[..resten].iter().sum();
+    let under: u16 = høyder[resten..].iter().sum();
+    let resten_y = if over + under < plass { plass - under - 1 } else { over };
 
     let mut y = 0;
     let mut plassert = Vec::with_capacity(rader.len());
     for (i, (rad, høyde)) in rader.into_iter().zip(høyder).enumerate() {
-        if i == sett {
-            y = sett_y;
+        if i == resten {
+            y = resten_y;
         }
         plassert.push((y, høyde, rad));
         y += høyde;
@@ -205,7 +204,7 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
         return None;
     }
     plasser(app, hint_y).into_iter().find_map(|(topp, høyde, rad)| match rad {
-        Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
+        Rad::Kort(pane, _) | Rad::Linje(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })
 }

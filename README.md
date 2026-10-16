@@ -76,14 +76,10 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
 
-Hver Claude viser mappen og branchen den jobber i, og oppgaven under. Lista er
-delt i tre, og alle tre står alltid, med antall:
-
-| | |
-| --- | --- |
-| **venter på deg** | `●` spør om noe, `◆` er ferdig med noe du ikke har sett |
-| **jobber** | `◐` jobber, `◌` starter |
-| **sett** | `○` er ferdig, og du har vært inne i den siden |
+Lista er delt i to. Øverst, under **venter på deg**, står de som spør om noe
+(`●`) eller er ferdige med noe du ikke har sett (`◆`), med mappe, branch og
+oppgaven. Nederst, under **resten**, står de andre med én linje hver, i samme
+rekkefølge hele tiden: `◐` jobber, `◌` starter og `○` er ferdig og sett.
 
 ### Starte og fortsette
 
