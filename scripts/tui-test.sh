@@ -104,6 +104,13 @@ tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p;14p;16p'
 tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.2
 
+echo "=== klikk på «? hjelp» nederst til venstre viser hjelpen, og en tast lukker den ==="
+tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;3;16M\033[<0;3;16m')"
+sleep 0.3
+tmux -L nerdr-vert capture-pane -p -t vert | grep -c 'trykk en tast for å lukke'
+tmux -L nerdr-vert send-keys -t vert x
+sleep 0.3
+
 echo "=== ? viser hjelpen, og en tast lukker den ==="
 tmux -L nerdr-vert send-keys -t vert ?
 sleep 0.3

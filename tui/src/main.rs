@@ -943,6 +943,15 @@ impl App {
             }
             return false;
         }
+        // Hintet nederst i lista er veien til hjelpen.
+        let hint = m.row + 1 == v.bottom() && self.lukke.is_none() && !self.etter_prefiks;
+        if m.column < v.x && hint {
+            if m.kind == MouseEventKind::Down(MouseButton::Left) {
+                self.hjelp = true;
+                return true;
+            }
+            return false;
+        }
         if m.column < v.x {
             let Some(pane) = tegn::pane_på(self, m.row) else { return false };
             if m.kind != MouseEventKind::Down(MouseButton::Left) {

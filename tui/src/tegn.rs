@@ -86,15 +86,17 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
         }
     }
 
+    // Hintet sier noe bare når du har trykket prefikset eller nerdr spør. Ellers
+    // står bare veien til hjelpen der, dempet.
     let prefiks = app.prefiks.navn();
-    let hint = match app.fokus {
-        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => " lukke panen? y/n".to_string(),
-        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => " lukke vinduet? y/n".to_string(),
-        _ if app.etter_prefiks => format!(" {prefiks} … % \" del · o pane · z · x · ?"),
-        Fokus::Liste => " ↑↓ velg · ⏎ inn · n ny · ? hjelp".to_string(),
-        Fokus::Pane => format!(" {prefiks} w tilbake til lista"),
+    let (hint, farge) = match app.fokus {
+        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => (" lukke panen? y/n".to_string(), LYS),
+        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => (" lukke vinduet? y/n".to_string(), LYS),
+        _ if app.etter_prefiks => (format!(" {prefiks} … w lista · c vindu · ? mer"), LYS),
+        Fokus::Liste => (" ? hjelp".to_string(), DIM),
+        Fokus::Pane => (format!(" {prefiks} ? hjelp"), DIM),
     };
-    buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(GRÅ));
+    buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(farge));
 
     // Overskriftene treffer skillestreken, og øverst går streken videre til
     // fanene.
