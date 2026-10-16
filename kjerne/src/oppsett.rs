@@ -12,6 +12,9 @@ use serde::Deserialize;
 pub struct Celle {
     pub bredde: u16,
     pub høyde: u16,
+    /// Plassen i vinduet, fra øverst til venstre.
+    pub x: u16,
+    pub y: u16,
     pub innhold: Innhold,
 }
 
@@ -44,6 +47,10 @@ struct JsonCelle {
     t: String,
     w: u16,
     h: u16,
+    #[serde(default)]
+    x: u16,
+    #[serde(default)]
+    y: u16,
     #[serde(rename = "I")]
     id: Option<String>,
     #[serde(default)]
@@ -58,7 +65,7 @@ fn fra_json(c: &JsonCelle) -> Option<Celle> {
         "v" => Innhold::OverHverandre(barn()?),
         _ => return None,
     };
-    Some(Celle { bredde: c.w, høyde: c.h, innhold })
+    Some(Celle { bredde: c.w, høyde: c.h, x: c.x, y: c.y, innhold })
 }
 
 type Tegn<'a> = std::iter::Peekable<std::str::Chars<'a>>;
@@ -67,17 +74,17 @@ fn celle(tegn: &mut Tegn) -> Option<Celle> {
     let bredde = tall(tegn)?;
     (tegn.next()? == 'x').then_some(())?;
     let høyde = tall(tegn)?;
-    for _ in 0..2 {
-        (tegn.next()? == ',').then_some(())?;
-        tall(tegn)?;
-    }
+    (tegn.next()? == ',').then_some(())?;
+    let x = tall(tegn)?;
+    (tegn.next()? == ',').then_some(())?;
+    let y = tall(tegn)?;
     let innhold = match tegn.next()? {
         ',' => Innhold::Pane(format!("%{}", tall(tegn)?)),
         '{' => Innhold::SideOmSide(celler(tegn, '}')?),
         '[' => Innhold::OverHverandre(celler(tegn, ']')?),
         _ => return None,
     };
-    Some(Celle { bredde, høyde, innhold })
+    Some(Celle { bredde, høyde, x, y, innhold })
 }
 
 fn celler(tegn: &mut Tegn, slutt: char) -> Option<Vec<Celle>> {
@@ -103,13 +110,13 @@ fn tall(tegn: &mut Tegn) -> Option<u16> {
 mod tester {
     use super::*;
 
-    fn pane(id: &str, bredde: u16, høyde: u16) -> Celle {
-        Celle { bredde, høyde, innhold: Innhold::Pane(id.into()) }
+    fn pane(id: &str, bredde: u16, høyde: u16, x: u16, y: u16) -> Celle {
+        Celle { bredde, høyde, x, y, innhold: Innhold::Pane(id.into()) }
     }
 
     #[test]
     fn én_pane() {
-        assert_eq!(tolk("b25d,80x24,0,0,3"), Some(pane("%3", 80, 24)));
+        assert_eq!(tolk("b25d,80x24,0,0,3"), Some(pane("%3", 80, 24, 0, 0)));
     }
 
     #[test]
@@ -118,9 +125,11 @@ mod tester {
         let høyre = Celle {
             bredde: 79,
             høyde: 48,
-            innhold: Innhold::OverHverandre(vec![pane("%2", 79, 24), pane("%3", 79, 23)]),
+            x: 80,
+            y: 0,
+            innhold: Innhold::OverHverandre(vec![pane("%2", 79, 24, 80, 0), pane("%3", 79, 23, 80, 25)]),
         };
-        assert_eq!(t.innhold, Innhold::SideOmSide(vec![pane("%1", 79, 48), høyre]));
+        assert_eq!(t.innhold, Innhold::SideOmSide(vec![pane("%1", 79, 48, 0, 0), høyre]));
     }
 
     #[test]
@@ -129,10 +138,12 @@ mod tester {
         let høyre = Celle {
             bredde: 59,
             høyde: 30,
-            innhold: Innhold::OverHverandre(vec![pane("%1", 59, 15), pane("%2", 59, 14)]),
+            x: 61,
+            y: 0,
+            innhold: Innhold::OverHverandre(vec![pane("%1", 59, 15, 61, 0), pane("%2", 59, 14, 61, 16)]),
         };
-        assert_eq!(tolk(t).unwrap().innhold, Innhold::SideOmSide(vec![pane("%0", 60, 30), høyre]));
-        assert_eq!(tolk(r#"{"V":2,"L":{"t":"p","w":120,"h":30,"I":"%1"}}"#), Some(pane("%1", 120, 30)));
+        assert_eq!(tolk(t).unwrap().innhold, Innhold::SideOmSide(vec![pane("%0", 60, 30, 0, 0), høyre]));
+        assert_eq!(tolk(r#"{"V":2,"L":{"t":"p","w":120,"h":30,"I":"%1"}}"#), Some(pane("%1", 120, 30, 0, 0)));
     }
 
     #[test]

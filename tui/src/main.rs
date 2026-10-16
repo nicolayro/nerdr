@@ -118,6 +118,7 @@ struct App {
 
     fokus: Fokus,
     prefiks: taster::Prefiks,
+    rammer: bokser::Rammer,
     /// Prefikset er trykket, og neste tast er en kommando.
     etter_prefiks: bool,
     /// Panen som lukkes hvis du svarer `y`.
@@ -260,6 +261,7 @@ impl App {
             størrelse_for: None,
             fokus: Fokus::Liste,
             prefiks: taster::Prefiks::default(),
+            rammer: bokser::Rammer::fra(env::var(bokser::RAMMER_VARIABEL).ok().as_deref()),
             etter_prefiks: false,
             lukke: None,
             visning: Rect::default(),
@@ -623,7 +625,7 @@ impl App {
     fn bokser(&self) -> Vec<Boks> {
         let v = self.visning;
         if let Some(oppsett) = self.oppsett() {
-            return bokser::plasser(&oppsett, v);
+            return bokser::plasser(&oppsett, v, self.rammer);
         }
         let boks = |p: &Pane| Boks {
             pane: p.id.clone(),
@@ -691,7 +693,7 @@ impl App {
     /// en løkke.
     fn synk_størrelse(&mut self) {
         let v = self.visning;
-        let ekstra = self.oppsett().map_or((0, 0), |o| bokser::ekstra(&o));
+        let ekstra = self.oppsett().map_or((0, 0), |o| bokser::ekstra(&o, self.rammer));
         if self.valgt.is_none() || self.størrelse_for == Some((v, ekstra)) || v.width <= ekstra.0 || v.height <= ekstra.1 {
             return;
         }

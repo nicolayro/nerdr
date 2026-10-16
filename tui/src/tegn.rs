@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::bokser::{Boks, Rammer};
 use crate::grupper::{Gruppe, Merke, Rad};
 use crate::ny::Velger;
 use crate::{App, Fokus, hjelp};
@@ -343,7 +344,8 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
         return;
     }
     let aktiv = app.aktiv().map(|p| p.id.as_str());
-    for boks in app.bokser() {
+    let bokser = app.bokser();
+    for boks in &bokser {
         if let Some(bilde) = app.bilder.get(&boks.pane) {
             tegn_bilde(buf, boks.innhold, bilde);
         }
@@ -353,6 +355,9 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
             let farge = if app.fokus == Fokus::Pane && aktiv == Some(&boks.pane) { Color::Reset } else { DIM };
             tegn_ramme(buf, ramme, Style::new().fg(farge));
         }
+    }
+    if app.rammer == Rammer::Linjer && bokser.len() > 1 {
+        tegn_linjer(buf, app, &bokser);
     }
     if let (true, Some(boks)) = (app.rull > 0, aktiv_boks(app)) {
         let hvor = format!(" {}/{} ", app.rull, app.historie);
@@ -368,7 +373,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
     }
 }
 
-fn aktiv_boks(app: &App) -> Option<crate::Boks> {
+fn aktiv_boks(app: &App) -> Option<Boks> {
     let aktiv = app.aktiv()?;
     app.bokser().into_iter().find(|b| b.pane == aktiv.id)
 }
@@ -382,6 +387,51 @@ fn tegn_bilde(buf: &mut Buffer, område: Rect, bilde: &[Linje]) {
             }
             x = buf.set_stringn(x, y, &bit.tekst, (område.right() - x) as usize, stil(bit.stil)).0;
         }
+    }
+}
+
+/// Rutene i vinduet som ingen pane dekker, er strekene tmux legger mellom
+/// panene. Tegnet i hver rute avhenger av hvilke naboer som også er strek, så
+/// kryss og hjørner blir riktige.
+fn tegn_linjer(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
+    let Some(oppsett) = app.oppsett() else { return };
+    let v = app.visning;
+    let (bredde, høyde) = (oppsett.bredde.min(v.width), oppsett.høyde.min(v.height));
+    let inni = |r: Rect, x: u16, y: u16| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
+    let dekket = |x: u16, y: u16| bokser.iter().any(|b| inni(b.innhold, v.x + x, v.y + y));
+    let strek = |x: i32, y: i32| x >= 0 && y >= 0 && x < bredde as i32 && y < høyde as i32 && !dekket(x as u16, y as u16);
+    let aktiv = aktiv_boks(app).filter(|_| app.fokus == Fokus::Pane).map(|b| b.innhold);
+    for y in 0..høyde {
+        for x in 0..bredde {
+            if dekket(x, y) {
+                continue;
+            }
+            let (xi, yi) = (x as i32, y as i32);
+            let tegn = rammetegn(strek(xi, yi - 1), strek(xi, yi + 1), strek(xi - 1, yi), strek(xi + 1, yi));
+            // Strekene rundt den aktive har vanlig farge, så du ser hvor tastene går.
+            let ved_aktiv = aktiv.is_some_and(|a| {
+                let (x, y) = (v.x + x, v.y + y);
+                x + 1 >= a.x && x <= a.right() && y + 1 >= a.y && y <= a.bottom()
+            });
+            let farge = if ved_aktiv { Color::Reset } else { DIM };
+            buf.set_string(v.x + x, v.y + y, tegn, Style::new().fg(farge));
+        }
+    }
+}
+
+fn rammetegn(opp: bool, ned: bool, venstre: bool, høyre: bool) -> &'static str {
+    match (opp, ned, venstre, høyre) {
+        (true, true, true, true) => "┼",
+        (true, true, false, true) => "├",
+        (true, true, true, false) => "┤",
+        (false, true, true, true) => "┬",
+        (true, false, true, true) => "┴",
+        (false, true, false, true) => "┌",
+        (false, true, true, false) => "┐",
+        (true, false, false, true) => "└",
+        (true, false, true, false) => "┘",
+        (_, _, false, false) => "│",
+        _ => "─",
     }
 }
 
@@ -428,6 +478,13 @@ fn farge(f: Farge) -> Color {
 #[cfg(test)]
 mod tester {
     use super::*;
+
+    #[test]
+    fn rammetegn_etter_naboene() {
+        assert_eq!(rammetegn(true, true, false, false), "│");
+        assert_eq!(rammetegn(false, false, true, true), "─");
+        assert_eq!(rammetegn(true, true, false, true), "├");
+    }
 
     #[test]
     fn bryter_på_ord_og_kutter_det_som_ikke_får_plass() {

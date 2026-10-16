@@ -42,8 +42,8 @@ programmet der har slått på mus, som Claude Code i fullskjerm. Ellers ruller
 hjulet i historikken, og en tast tar deg tilbake til bunnen. I `less` og `man`
 blir hjulet til piltaster.
 
-Er vinduet delt i flere paner, står hver pane i en boks, der tmux har plassert
-den. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
+Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
+hver sin boks eller med streker mellom, etter `NERDR_RAMMER`. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
 terminal ved siden av Claude-en får du ved å dele vinduet, og med zoom fyller
 Claude-en visningen igjen mens terminalen kjører videre.
 
@@ -109,6 +109,7 @@ som er ferdig, fra en du har sett.
 | | |
 | --- | --- |
 | `NERDR_MAPPER` | Mappene `n` søker i, kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
+| `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `bokser`. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |
 | `nerdr -L <socket>` | tmux-serveren, som `tmux -L`. |
 

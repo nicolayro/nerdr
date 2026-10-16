@@ -1,7 +1,8 @@
 #!/bin/sh
 # Kjører nerdr inne i én tmux-server og lar den vise en annen, med et falskt
 # sesjonsregister. Ingenting av det er brukerens eget. Bygg med `cargo build`
-# først.
+# først. Forventningene gjelder bokser, og NERDR_RAMMER=linjer foran kjører
+# den med linjer.
 HER=$(cd "$(dirname "$0")" && pwd)
 NERDR=$HER/../target/debug/nerdr
 FALSK=$HER/falsk-claude.sh
@@ -32,13 +33,13 @@ for linje in "alfa waiting" "gamma busy"; do
 done
 
 tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
-  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
+  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=${NERDR_RAMMER:-bokser} CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER PÅ DEG, gamma ◐ under JOBBER, ingen beta) ==="
 echo "=== kortene viser mappe › branch, og alfa har oppgaven under ==="
 tmux -L nerdr-vert capture-pane -p -t vert
-echo "=== størrelse på alfa (skal være 74x16) ==="
+echo "=== størrelse på alfa (skal være 68x14 med bokser, 74x16 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
 
 echo "=== tastetrykk: Enter for fokus, så «hei æ» og Enter til alfa ==="
@@ -55,7 +56,7 @@ tmux -L nerdr-vert paste-buffer -p -d -b test -t vert
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t alfa | grep -n -e 'linje' -e 'HOME'
 
-echo "=== musehjul i kolonne 41, rad 4 (skal komme fram som ^[[<64;5;4M) ==="
+echo "=== musehjul i kolonne 41, rad 4 (skal komme fram som ^[[<64;2;3M med bokser, ^[[<64;5;4M med linjer) ==="
 tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;41;4M')"
 sleep 0.8
 tmux -L nerdr-maal capture-pane -p -t alfa | grep -n '<64'
@@ -184,7 +185,7 @@ tmux -L nerdr-vert send-keys -t vert C-b
 sleep 0.3
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
 
-echo "=== % deler alfa i to bokser med luft mellom, begge i nerdr-mappa, og tmux får 70x14 ==="
+echo "=== % deler alfa i to bokser med luft mellom, begge i nerdr-mappa, og tmux får 63x14 (74x16 med linjer) ==="
 tmux -L nerdr-vert send-keys -t vert %
 sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,3p'
@@ -233,7 +234,7 @@ tmux -L nerdr-vert send-keys -t vert C-b o
 sleep 0.5
 tmux -L nerdr-maal display-message -p -t alfa:0 '#{pane_index}'
 
-echo "=== C-b z zoomer Claude-en uten ramme, og C-b z igjen gir boksene tilbake ==="
+echo "=== C-b z viser bare Claude-en, og C-b z igjen gir begge panene tilbake ==="
 tmux -L nerdr-vert send-keys -t vert C-b z
 sleep 0.8
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
@@ -252,7 +253,7 @@ tmux -L nerdr-vert send-keys -t vert C-b x y
 sleep 1
 tmux -L nerdr-maal list-panes -t alfa:0 | wc -l
 
-echo "=== uten split fyller Claude-en hele visningen igjen (74x16) ==="
+echo "=== uten split fyller Claude-en hele visningen igjen (68x14, 74x16 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'
 tmux -L nerdr-vert send-keys -t vert C-b w
 
