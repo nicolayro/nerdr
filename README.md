@@ -45,8 +45,8 @@ blir hjulet til piltaster.
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
 hver sin boks eller med streker mellom, etter `NERDR_RAMMER`. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
-Øverst i visningen står en statuslinje med vinduene i sesjonen som faner, og
-mappa og branchen til Claude-en til høyre. Et klikk på en fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
+Øverst i visningen står vinduene i sesjonen som faner på en strek, og vinduet
+som vises, har bakgrunn. Et klikk på en fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
 
 Prefikset er det samme som i tmux-oppsettet ditt, ellers `C-b`. Tastene etter
 det er de samme som i tmux, og virker både fra lista og fra panen:

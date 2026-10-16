@@ -28,7 +28,6 @@ const LYS: Color = Color::Indexed(252);
 const GRÅ: Color = Color::Indexed(245);
 const DIM: Color = Color::Indexed(240);
 const MARKERT: Color = Color::Indexed(236);
-const STATUS: Color = Color::Indexed(235);
 
 /// Til høyre for lista, under statuslinja.
 pub fn visning(størrelse: Size) -> Rect {
@@ -202,9 +201,9 @@ struct Fane {
     vist: bool,
 }
 
-/// Fanene står med en strek mellom.
+/// Fanene står på en strek, med ett tegn av streken mellom seg.
 fn faner(app: &App) -> Vec<Fane> {
-    let mut x = app.visning.x;
+    let mut x = app.visning.x + 1;
     let mut ut = Vec::new();
     for p in app.faner() {
         let navn = kutt(&p.vindunavn, 20);
@@ -216,32 +215,19 @@ fn faner(app: &App) -> Vec<Fane> {
     ut
 }
 
-/// Raden over visningen, som statuslinja i tmux: vinduene i sesjonen til
-/// venstre, og mappe › branch til Claude-en til høyre.
+/// Raden over visningen: vinduene i sesjonen på en strek, i samme stil som
+/// overskriftene i lista. Vinduet som vises, har bakgrunn.
 fn tegn_faner(buf: &mut Buffer, app: &App) {
     let v = app.visning;
     let Some(y) = v.y.checked_sub(1) else { return };
-    buf.set_style(Rect::new(v.x, y, v.width, 1), Style::new().bg(STATUS));
-    let mut slutt = v.x;
+    let strek = Style::new().fg(DIM);
+    buf.set_string(v.x, y, "─".repeat(v.width as usize), strek);
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
-        if f.fra > v.x {
-            buf.set_string(f.fra - 1, y, "│", Style::new().fg(DIM).bg(STATUS));
-        }
         let stil = match f.vist {
-            true => Style::new().fg(HVIT).bg(STATUS).add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-            false => Style::new().fg(GRÅ).bg(STATUS),
+            true => Style::new().fg(HVIT).bg(MARKERT).add_modifier(Modifier::BOLD),
+            false => Style::new().fg(GRÅ),
         };
-        buf.set_string(f.fra + 1, y, &f.navn, stil);
-        slutt = f.til;
-    }
-    let Some(valgt) = &app.valgt else { return };
-    let kort = kort(app, valgt);
-    let branch = kort.branch.map(|b| format!(" › {b}")).unwrap_or_default();
-    let bredde = (kort.mappe.chars().count() + branch.chars().count() + 1) as u16;
-    if slutt + bredde + 1 < v.right() {
-        let x = v.right() - bredde;
-        let x = buf.set_stringn(x, y, &kort.mappe, kort.mappe.len(), Style::new().fg(LYS).bg(STATUS)).0;
-        buf.set_string(x, y, branch, Style::new().fg(GRÅ).bg(STATUS));
+        buf.set_string(f.fra, y, format!(" {} ", f.navn), stil);
     }
 }
 
