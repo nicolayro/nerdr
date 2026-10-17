@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Rect, Size};
+use ratatui::layout::{Margin, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::bokser::{Boks, Rammer};
@@ -385,9 +385,11 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
         };
         buf.set_string(boks.x, y, format!("{v}{}{h}", fyll.repeat(bredde as usize - 2)), ramme);
     }
+    // Teksten inni har ingen forgrunn selv, og ville ellers arvet den fra rammen.
+    buf.set_style(boks.inner(Margin::new(1, 1)), Style::reset());
     let tekst = (bredde - 4) as usize;
-    buf.set_stringn(boks.x + 2, boks.y, format!(" {tittel} "), tekst, STERK);
-    buf.set_stringn(boks.x + 2, boks.bottom() - 1, format!(" {hint} "), tekst, SVAK);
+    buf.set_stringn(boks.x + 2, boks.y, format!(" {tittel} "), tekst, STERK.fg(Color::Reset));
+    buf.set_stringn(boks.x + 2, boks.bottom() - 1, format!(" {hint} "), tekst, SVAK.fg(Color::Reset));
     Some(boks)
 }
 
