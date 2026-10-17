@@ -1,4 +1,4 @@
-//! Tilstanden til Claude-sesjonene, lest fra registeret Claude Code selv
+//! Claude-ene som kjører, og tilstanden deres, lest fra registeret Claude Code selv
 //! skriver i `~/.claude/sessions/<pid>.json`.
 //!
 //! Formatet er internt i Claude Code og ikke dokumentert. Felt som mangler
@@ -12,13 +12,13 @@ use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tilstand {
-    Venter,
+    Spør,
     Jobber,
     Klar,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Sesjon {
+pub struct Claude {
     pub tilstand: Tilstand,
     /// Millisekunder siden 1970.
     pub endret: u64,
@@ -30,7 +30,7 @@ pub struct Sesjon {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Oppføring {
-    /// `sesjon:@vindu.%pane`, satt når sesjonen kjører i tmux.
+    /// `sesjon:@vindu.%pane`, satt når Claude kjører i tmux.
     tmux: Option<String>,
     status: Option<String>,
     #[serde(default)]
@@ -40,39 +40,39 @@ struct Oppføring {
     session_id: Option<String>,
 }
 
-/// Pane-id → sesjon for hver Claude som kjører i tmux.
-pub fn les(katalog: &Path) -> HashMap<String, Sesjon> {
-    let mut nyest: HashMap<String, (u64, Sesjon)> = HashMap::new();
+/// Pane-id → Claude for hver Claude som kjører i tmux.
+pub fn les(katalog: &Path) -> HashMap<String, Claude> {
+    let mut nyest: HashMap<String, (u64, Claude)> = HashMap::new();
     let Ok(filer) = fs::read_dir(katalog) else { return HashMap::new() };
     for fil in filer.flatten() {
         let sti = fil.path();
         if sti.extension().is_none_or(|e| e != "json") {
             continue;
         }
-        let Some((pane, oppdatert, sesjon)) = fs::read_to_string(&sti).ok().and_then(|t| tolk(&t)) else {
+        let Some((pane, oppdatert, claude)) = fs::read_to_string(&sti).ok().and_then(|t| tolk(&t)) else {
             continue;
         };
-        // En sesjon som krasjet, lar fila ligge igjen, og pane-id-en kan være
+        // En Claude som krasjet, lar fila ligge igjen, og pane-id-en kan være
         // tatt i bruk på nytt. Den sist oppdaterte vinner.
         if nyest.get(&pane).is_none_or(|(t, _)| oppdatert > *t) {
-            nyest.insert(pane, (oppdatert, sesjon));
+            nyest.insert(pane, (oppdatert, claude));
         }
     }
-    nyest.into_iter().map(|(pane, (_, sesjon))| (pane, sesjon)).collect()
+    nyest.into_iter().map(|(pane, (_, claude))| (pane, claude)).collect()
 }
 
-fn tolk(tekst: &str) -> Option<(String, u64, Sesjon)> {
+fn tolk(tekst: &str) -> Option<(String, u64, Claude)> {
     let o: Oppføring = serde_json::from_str(tekst).ok()?;
     let tmux = o.tmux?;
     let (_, pane) = tmux.rsplit_once('.')?;
     let tilstand = match o.status?.as_str() {
-        "waiting" => Tilstand::Venter,
+        "waiting" => Tilstand::Spør,
         "busy" => Tilstand::Jobber,
         "idle" => Tilstand::Klar,
         _ => return None,
     };
     let endret = o.status_updated_at.unwrap_or(o.updated_at);
-    Some((pane.to_string(), o.updated_at, Sesjon { tilstand, endret, mappe: o.cwd, samtale: o.session_id }))
+    Some((pane.to_string(), o.updated_at, Claude { tilstand, endret, mappe: o.cwd, samtale: o.session_id }))
 }
 
 #[cfg(test)]
@@ -82,9 +82,9 @@ mod tester {
     #[test]
     fn leser_pane_og_tilstand() {
         let t = r#"{"pid":1,"tmux":"nerdr:@7.%37","status":"waiting","cwd":"/a/nerdr","updatedAt":5,"statusUpdatedAt":3,"sessionId":"abc"}"#;
-        let sesjon =
-            Sesjon { tilstand: Tilstand::Venter, endret: 3, mappe: Some("/a/nerdr".into()), samtale: Some("abc".into()) };
-        assert_eq!(tolk(t), Some(("%37".into(), 5, sesjon)));
+        let claude =
+            Claude { tilstand: Tilstand::Spør, endret: 3, mappe: Some("/a/nerdr".into()), samtale: Some("abc".into()) };
+        assert_eq!(tolk(t), Some(("%37".into(), 5, claude)));
         let uten = r#"{"tmux":"a:@1.%2","status":"idle","updatedAt":5}"#;
         assert_eq!(tolk(uten).map(|(_, _, s)| s.endret), Some(5));
     }
@@ -104,7 +104,7 @@ mod tester {
         fs::write(katalog.join("2.json"), r#"{"tmux":"b:@3.%2","status":"busy","updatedAt":20}"#).unwrap();
         fs::write(katalog.join("2.key"), "hemmelig").unwrap();
 
-        let jobber = Sesjon { tilstand: Tilstand::Jobber, endret: 20, mappe: None, samtale: None };
+        let jobber = Claude { tilstand: Tilstand::Jobber, endret: 20, mappe: None, samtale: None };
         assert_eq!(les(&katalog), HashMap::from([("%2".to_string(), jobber)]));
         fs::remove_dir_all(katalog).unwrap();
     }

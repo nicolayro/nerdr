@@ -65,7 +65,8 @@ uten_klienter() { [ -z "$(maal list-clients)" ]; }
 i_lista() { linje_har 16 '^ \? hjelp'; }
 i_panen() { linje_har 16 '^ C-b \? hjelp'; }
 nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
-tilstander() { nerdr -L nerdr-maal liste | cut -d' ' -f1 | tr '\n' ' '; }
+gruppert() { nerdr -L nerdr-maal liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
+fra_json() { nerdr -L nerdr-maal liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
 sett_i_json() { nerdr -L nerdr-maal liste --json | grep -o '"sett":[0-9]' | wc -l | tr -d ' '; }
 
 # registrer <fil> <sesjon> <status> [flere JSON-felt]
@@ -324,7 +325,11 @@ tast C-b w
 tast q
 sjekk "q avslutter" uten_klienter
 
-sjekk "nerdr liste: alfa venter, gamma og prosjekt.ny er klare" er 'venter klar klar ' tilstander
+sjekk "nerdr liste grupperer som TUI-et: alfa venter, og prosjekt.ny og gamma er sett, nyest først" \
+  er 'VENTER: ● nerdr, FERDIG: ○ prosjekt.ny, ○ gamma:0, ' gruppert
+sjekk "nerdr liste --json har tilstanden fra Claude" er 'venter klar klar ' fra_json tilstand
+sjekk "nerdr liste --json har merket" er 'spør sett sett ' fra_json merke
+sjekk "nerdr liste --json har gruppen" er 'venter ferdig ferdig ' fra_json gruppe
 sjekk "nerdr liste --json har versjon" inneholder "$(nerdr -L nerdr-maal liste --json)" '"versjon":1'
 sjekk "alle tre har sett med et tall" er 3 sett_i_json
 sjekk "nerdr samtaler viser Fiks testene i annet, med id" inneholder "$(nerdr samtaler)" 'abc-123  annet  Fiks testene'

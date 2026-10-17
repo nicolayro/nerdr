@@ -7,11 +7,20 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
 
 - `kjerne/` vet ikke hvordan noe vises: control mode (`kontroll`), enkeltstående
   tmux-kommandoer (`tmux`), panene (`paner`), hvordan et vindu er delt
-  (`oppsett`), registeret (`register`), tidligere
-  samtaler (`samtaler`), branchen (`git`), farger fra `capture-pane -e` (`sgr`)
-  og å starte en Claude (`start`).
+  (`oppsett`), registeret (`register`), hva som venter på deg (`merke`),
+  tidligere samtaler (`samtaler`), branchen (`git`), farger fra
+  `capture-pane -e` (`sgr`) og å starte en Claude (`start`).
 - `tui/` er binæren. `main.rs` har TUI-et og argumentene, `kommandoer.rs`
   `liste`, `samtaler` og `ny`, `ny.rs` mappevelgeren og `tegn.rs` tegningen.
+
+## Begreper
+
+- **Sesjon**, **vindu** og **pane** er alltid tmux sine.
+- **Claude** er en Claude Code som kjører i en pane (`register::Claude`), og
+  **samtale** er den Claude Code kaller `sessionId`.
+- **Tilstand** er det Claude melder selv: spør, jobber eller klar.
+- **Merke** og **gruppe** er det lista viser. VENTER er det som venter på deg:
+  en Claude som spør, eller som er ferdig med noe du ikke har sett.
 
 ## Før commit
 

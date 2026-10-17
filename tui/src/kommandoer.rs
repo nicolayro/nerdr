@@ -10,46 +10,50 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::paner::{FELT, Pane};
-use nerdr_kjerne::register::{self, Sesjon, Tilstand};
-use nerdr_kjerne::{git, samtaler, start, tmux};
+use nerdr_kjerne::register::{self, Claude, Tilstand};
+use nerdr_kjerne::{git, konfigkatalog, samtaler, start, tmux};
 use serde_json::json;
 
-use crate::{konfigkatalog, ny};
+use crate::grupper::{self, Plass, Rad, glyf, tittel};
+use crate::ny;
 
 const VERSJON: u32 = 1;
 
+/// Gruppert og sortert som lista i TUI-et.
 pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
-    let sesjoner = register::les(&konfigkatalog().join("sessions"));
-    let paner = match tmux::kjør(socket, &["list-panes", "-a", "-F", FELT]) {
-        Ok(ut) => ut.lines().filter_map(Pane::fra_linje).collect(),
+    let claude = register::les(&konfigkatalog().join("sessions"));
+    let paner: Vec<Pane> = match tmux::kjør(socket, &["list-panes", "-a", "-F", FELT]) {
+        Ok(ut) => ut.lines().filter_map(Pane::fra_linje).filter(|p| claude.contains_key(&p.id)).collect(),
         Err(feil) if feil.kind() == io::ErrorKind::NotFound => return Err(feil),
         // Uten server er det ingen sesjoner.
         Err(_) => Vec::new(),
     };
-    let mut claude: Vec<(Pane, &Sesjon)> = paner
-        .into_iter()
-        .filter_map(|p| {
-            let sesjon = sesjoner.get(&p.id)?;
-            Some((p, sesjon))
-        })
-        .collect();
-    claude.sort_by_key(|(_, s)| rekkefølge(s.tilstand));
+    // En Claude ingen nerdr har vært inne i, regnes som sett, som i TUI-et.
+    let merke = |p: &Pane| Some(Merke::fra(claude.get(&p.id)?, p.sett.unwrap_or(u64::MAX)));
+    let rader = grupper::rader(&paner, |p| Some(Plass::fra(merke(p)?, claude.get(&p.id).map(|c| c.endret))));
 
     if som_json {
-        let sesjoner: Vec<_> = claude
+        let sesjoner: Vec<_> = rader
             .iter()
-            .map(|(p, s)| {
+            .filter_map(|r| match r {
+                Rad::Pane(p, m) => Some((p, m, claude.get(&p.id)?)),
+                _ => None,
+            })
+            .map(|(p, m, c)| {
                 json!({
                     "pane": p.id,
                     "sesjon": p.sesjon,
                     "vindu": p.vindu,
-                    "tilstand": tilstand(s.tilstand),
-                    "endret": s.endret,
-                    "mappe": s.mappe,
-                    "branch": s.mappe.as_deref().and_then(git::branch),
+                    "tilstand": tilstand(c.tilstand),
+                    "merke": m.navn(),
+                    "gruppe": m.gruppe().navn(),
+                    "endret": c.endret,
+                    "mappe": c.mappe,
+                    "branch": c.mappe.as_deref().and_then(git::branch),
                     "oppgave": p.oppgave(),
-                    "samtale": s.samtale,
+                    "samtale": c.samtale,
                     "sett": p.sett,
                 })
             })
@@ -57,14 +61,22 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
         return skriv(&format!("{}\n", json!({ "versjon": VERSJON, "sesjoner": sesjoner })));
     }
     let mut ut = String::new();
-    if claude.is_empty() {
+    if rader.is_empty() {
         ut += "Ingen Claude-sesjoner i tmux.\n";
     }
-    for (p, s) in &claude {
-        let mappe = s.mappe.as_deref().map_or_else(|| format!("{}:{}", p.sesjon, p.vindu), navn);
-        let branch = s.mappe.as_deref().and_then(git::branch).map(|b| format!(" › {b}")).unwrap_or_default();
-        let oppgave = p.oppgave().map(|o| format!("  {o}")).unwrap_or_default();
-        let _ = writeln!(ut, "{:<6}  {:<5}  {mappe}{branch}{oppgave}", tilstand(s.tilstand), p.id);
+    for rad in &rader {
+        match rad {
+            Rad::Tom => ut.push('\n'),
+            Rad::Strek => {}
+            Rad::Overskrift(gruppe) => ut += &format!("{}\n", tittel(*gruppe)),
+            Rad::Pane(p, m) => {
+                let mappe = claude.get(&p.id).and_then(|c| c.mappe.as_deref());
+                let navn = mappe.map_or_else(|| format!("{}:{}", p.sesjon, p.vindu), navn);
+                let branch = mappe.and_then(git::branch).map(|b| format!(" › {b}")).unwrap_or_default();
+                let oppgave = p.oppgave().map(|o| format!("  {o}")).unwrap_or_default();
+                let _ = writeln!(ut, "{}  {:<5}  {navn}{branch}{oppgave}", glyf(*m), p.id);
+            }
+        }
     }
     skriv(&ut)
 }
@@ -94,9 +106,9 @@ pub fn samtaler(som_json: bool) -> io::Result<()> {
 
 /// Uten `mappe` fortsettes samtalen i mappa den hørte til.
 pub fn ny(socket: Option<&str>, mappe: Option<&str>, fortsett: Option<&str>, som_json: bool) -> io::Result<()> {
-    let sesjoner = register::les(&konfigkatalog().join("sessions"));
+    let claude = register::les(&konfigkatalog().join("sessions"));
     if let Some(id) = fortsett
-        && let Some(pane) = sesjoner.iter().find(|(_, s)| s.samtale.as_deref() == Some(id)).map(|(p, _)| p)
+        && let Some(pane) = claude.iter().find(|(_, c)| c.samtale.as_deref() == Some(id)).map(|(p, _)| p)
     {
         return Err(io::Error::other(format!("samtalen {id} kjører alt, i {pane}")));
     }
@@ -129,23 +141,16 @@ fn skriv(tekst: &str) -> io::Result<()> {
     }
 }
 
-fn kjører(sesjoner: &HashMap<String, Sesjon>) -> HashSet<String> {
-    sesjoner.values().filter_map(|s| s.samtale.clone()).collect()
+fn kjører(claude: &HashMap<String, Claude>) -> HashSet<String> {
+    claude.values().filter_map(|c| c.samtale.clone()).collect()
 }
 
+/// Verdiene står i JSON og endres ikke, så `Spør` er fortsatt «venter» her.
 fn tilstand(t: Tilstand) -> &'static str {
     match t {
-        Tilstand::Venter => "venter",
+        Tilstand::Spør => "venter",
         Tilstand::Jobber => "jobber",
         Tilstand::Klar => "klar",
-    }
-}
-
-fn rekkefølge(t: Tilstand) -> u8 {
-    match t {
-        Tilstand::Venter => 0,
-        Tilstand::Jobber => 1,
-        Tilstand::Klar => 2,
     }
 }
 

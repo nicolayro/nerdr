@@ -1,26 +1,8 @@
 //! Rekkefølgen i lista: de som venter på deg først, så de som jobber, så de
 //! som er ferdige og sett.
 
+use nerdr_kjerne::merke::{Gruppe, Merke};
 use nerdr_kjerne::paner::Pane;
-use nerdr_kjerne::register::{Sesjon, Tilstand};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Merke {
-    Spør,
-    /// Ferdig med noe du ikke har sett.
-    Ulest,
-    Jobber,
-    Sett,
-    /// Startet av nerdr og ikke i registeret ennå.
-    Starter,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Gruppe {
-    Venter,
-    Jobber,
-    Ferdig,
-}
 
 #[derive(Debug, PartialEq)]
 pub enum Rad<'a> {
@@ -30,43 +12,21 @@ pub enum Rad<'a> {
     Pane(&'a Pane, Merke),
 }
 
-impl Merke {
-    /// `sett` er da du sist var inne i panen, i millisekunder siden 1970.
-    pub fn fra(sesjon: &Sesjon, sett: u64) -> Merke {
-        match sesjon.tilstand {
-            Tilstand::Venter => Merke::Spør,
-            Tilstand::Jobber => Merke::Jobber,
-            Tilstand::Klar if sesjon.endret > sett => Merke::Ulest,
-            Tilstand::Klar => Merke::Sett,
-        }
-    }
-
-    pub fn glyf(self) -> &'static str {
-        match self {
-            Merke::Spør => "●",
-            Merke::Ulest => "◆",
-            Merke::Jobber => "◐",
-            Merke::Sett => "○",
-            Merke::Starter => "◌",
-        }
-    }
-
-    pub fn gruppe(self) -> Gruppe {
-        match self {
-            Merke::Spør | Merke::Ulest => Gruppe::Venter,
-            Merke::Jobber | Merke::Starter => Gruppe::Jobber,
-            Merke::Sett => Gruppe::Ferdig,
-        }
+pub fn glyf(merke: Merke) -> &'static str {
+    match merke {
+        Merke::Spør => "●",
+        Merke::Ulest => "◆",
+        Merke::Jobber => "◐",
+        Merke::Sett => "○",
+        Merke::Starter => "◌",
     }
 }
 
-impl Gruppe {
-    pub fn tittel(self) -> &'static str {
-        match self {
-            Gruppe::Venter => "VENTER",
-            Gruppe::Jobber => "JOBBER",
-            Gruppe::Ferdig => "FERDIG",
-        }
+pub fn tittel(gruppe: Gruppe) -> &'static str {
+    match gruppe {
+        Gruppe::Venter => "VENTER",
+        Gruppe::Jobber => "JOBBER",
+        Gruppe::Ferdig => "FERDIG",
     }
 }
 
@@ -77,6 +37,12 @@ pub struct Plass {
     pub merke: Merke,
     /// Da panen kom inn i gruppen, i millisekunder siden 1970.
     pub siden: Option<u64>,
+}
+
+impl Plass {
+    pub fn fra(merke: Merke, siden: Option<u64>) -> Plass {
+        Plass { gruppe: merke.gruppe(), merke, siden }
+    }
 }
 
 /// Panene gruppert, med en overskrift for hver gruppe som ikke er tom. I
@@ -114,17 +80,6 @@ pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> V
 #[cfg(test)]
 mod tester {
     use super::*;
-
-    fn sesjon(tilstand: Tilstand, endret: u64) -> Sesjon {
-        Sesjon { tilstand, endret, mappe: None, samtale: None }
-    }
-
-    #[test]
-    fn ferdig_etter_at_du_var_inne_venter_på_deg() {
-        assert_eq!(Merke::fra(&sesjon(Tilstand::Klar, 20), 10), Merke::Ulest);
-        assert_eq!(Merke::fra(&sesjon(Tilstand::Klar, 10), 20), Merke::Sett);
-        assert_eq!(Merke::fra(&sesjon(Tilstand::Venter, 10), 20), Merke::Spør);
-    }
 
     fn pane(id: &str) -> Pane {
         Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\t\t")).unwrap()

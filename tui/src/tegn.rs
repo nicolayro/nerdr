@@ -1,5 +1,6 @@
 //! Lista over paner til venstre og den valgte panen til høyre.
 
+use nerdr_kjerne::merke::{Gruppe, Merke};
 use nerdr_kjerne::paner::Pane;
 use nerdr_kjerne::sgr::{Farge, Linje, Stil};
 use std::ops::Range;
@@ -10,7 +11,7 @@ use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::bokser::{Boks, Rammer};
-use crate::grupper::{Gruppe, Merke, Rad};
+use crate::grupper::{Rad, glyf, tittel};
 use crate::ny::Velger;
 use crate::{App, Fokus, Lukke, hjelp};
 
@@ -75,7 +76,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
                 buf.set_stringn(TEKST_X, y, strek, TEKST, Style::new().fg(DIM));
             }
             Rad::Overskrift(gruppe) => {
-                let mut x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
+                let mut x = buf.set_stringn(1, y, tittel(gruppe), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
                 if gruppe == Gruppe::Ferdig && skjult > 0 {
                     x = buf.set_stringn(x, y, format!("+{skjult}"), bredde as usize, Style::new().fg(DIM)).0 + 1;
                 }
@@ -139,7 +140,7 @@ impl Kort {
 fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
     let ny = app.nye.get(&pane.id);
     let mappe = app
-        .sesjoner
+        .claude
         .get(&pane.id)
         .and_then(|s| s.mappe.as_deref())
         .or(ny.map(|m| m.as_path()))
@@ -147,7 +148,7 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
         .map_or_else(|| format!("{}:{}", pane.sesjon, pane.vindu), str::to_string);
     let tid = match merke {
         Merke::Spør | Merke::Ulest | Merke::Jobber => {
-            app.sesjoner.get(&pane.id).map(|s| varighet(crate::nå_ms().saturating_sub(s.endret)))
+            app.claude.get(&pane.id).map(|s| varighet(crate::nå_ms().saturating_sub(s.endret)))
         }
         Merke::Sett | Merke::Starter => None,
     };
@@ -182,7 +183,7 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
         buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT));
     }
     let y = område.y;
-    buf.set_stringn(1, y, merke.glyf(), 1, Style::new().fg(glyffarge(merke)));
+    buf.set_stringn(1, y, glyf(merke), 1, Style::new().fg(glyffarge(merke)));
 
     let mut slutt = TEKST_X + TEKST as u16;
     if let Some(tid) = kort.tid.as_ref().filter(|_| kort.oppgave.is_empty()) {
@@ -401,7 +402,7 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str) {
     }
     linje("", Style::new());
     for (merke, hva) in hjelp::MERKER {
-        linje(&format!("{}  {hva}", merke.glyf()), Style::new().fg(LYS));
+        linje(&format!("{}  {hva}", glyf(merke)), Style::new().fg(LYS));
     }
     linje("", Style::new());
     linje(hjelp::BARE_TMUX, Style::new().fg(GRÅ));

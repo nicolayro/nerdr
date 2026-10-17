@@ -112,13 +112,16 @@ med et `versjon`-felt.
 
 | | |
 | --- | --- |
-| `nerdr liste` | Claude-ene i tmux, med tilstand (`venter`, `jobber` eller `klar`), pane, mappe, branch og oppgave |
+| `nerdr liste` | Claude-ene i tmux, gruppert som i TUI-et, med pane, mappe, branch og oppgave |
 | `nerdr samtaler` | Tidligere samtaler, nyest først, med id, mappe og tittel |
 | `nerdr ny <mappe>` | Start en Claude i mappa, som `n` |
 | `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som `C-r` |
 
-`sett` i JSON fra `liste` er da du sist var inne i Claude-en i nerdr, i
-millisekunder som `endret`, eller `null` når nerdr ikke har sett den.
+I JSON fra `liste` er `tilstand` det Claude melder selv (`venter`, `jobber`
+eller `klar`). `merke` er det lista viser (`spør`, `ulest`, `jobber` eller
+`sett`), og `gruppe` er der den står (`venter`, `jobber` eller `ferdig`).
+`sett` er da du sist var inne i Claude-en i nerdr, i millisekunder som
+`endret`, eller `null` når nerdr ikke har sett den.
 
 ## Innstillinger
 

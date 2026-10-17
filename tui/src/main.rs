@@ -13,11 +13,12 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
 use bokser::Boks;
-use grupper::{Merke, Plass, Rad};
+use grupper::{Plass, Rad};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{self, FELT, Pane};
-use nerdr_kjerne::{git, oppsett, start, tmux};
-use nerdr_kjerne::register::{self, Sesjon};
+use nerdr_kjerne::{git, konfigkatalog, oppsett, start, tmux};
+use nerdr_kjerne::merke::Merke;
+use nerdr_kjerne::register::{self, Claude};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
@@ -45,7 +46,7 @@ enum Hendelse {
 
 /// Hva neste svar fra tmux gjelder. Svarene kommer i samme rekkefølge som
 /// kommandoene, så køen holder rede på dem.
-enum Venter {
+enum Svar {
     Paner,
     /// Innholdet i panen med id-en.
     Bilde(String),
@@ -53,8 +54,8 @@ enum Venter {
     /// Svaret er id-en til vinduet.
     NyttVindu,
     /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
-    NySesjon { navn: String, mappe: PathBuf, claude: String },
-    NyPane { mappe: PathBuf, claude: String },
+    NySesjon { navn: String, mappe: PathBuf, claude_kommando: String },
+    NyPane { mappe: PathBuf, claude_kommando: String },
     Prefiks,
     Ingenting,
 }
@@ -64,6 +65,7 @@ enum Lukke {
     Vindu(String),
 }
 
+/// Om tastene går til lista eller til den aktive panen i vinduet som vises.
 #[derive(Clone, Copy, PartialEq)]
 enum Fokus {
     Liste,
@@ -72,10 +74,10 @@ enum Fokus {
 
 struct App {
     kontroll: Kontroll,
-    kø: VecDeque<Venter>,
+    kø: VecDeque<Svar>,
 
-    /// Claude-ene, i lista.
-    paner: Vec<Pane>,
+    /// Panene der en Claude kjører eller starter, i lista.
+    claude_paner: Vec<Pane>,
     /// Alle panene på serveren.
     alle: Vec<Pane>,
     lister: bool,
@@ -84,9 +86,9 @@ struct App {
     /// Konfigurasjonskatalogen til Claude Code, med registeret i `sessions`
     /// og samtalene i `projects`.
     konfig: PathBuf,
-    /// Pane-id → sesjon, for panene der en Claude kjører.
-    sesjoner: HashMap<String, Sesjon>,
-    /// Pane-id → branchen mappen til sesjonen står på.
+    /// Pane-id → Claude-en som kjører i panen.
+    claude: HashMap<String, Claude>,
+    /// Pane-id → branchen mappa til Claude-en står på.
     brancher: HashMap<String, String>,
     /// Pane-id → da du sist var inne i panen, også skrevet til panen i tmux.
     /// En Claude nerdr ikke har sett før, regnes som sett, så ingenting havner
@@ -235,25 +237,18 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
     }
 }
 
-/// Samme katalog som Claude Code bruker: `$CLAUDE_CONFIG_DIR`, ellers `~/.claude`.
-pub fn konfigkatalog() -> PathBuf {
-    env::var("CLAUDE_CONFIG_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(env::var("HOME").unwrap_or_default()).join(".claude"))
-}
-
 impl App {
     fn ny(kontroll: Kontroll) -> App {
         App {
             kontroll,
             kø: VecDeque::new(),
-            paner: Vec::new(),
+            claude_paner: Vec::new(),
             alle: Vec::new(),
             lister: false,
             list_igjen: false,
             sist_listet: None,
             konfig: konfigkatalog(),
-            sesjoner: HashMap::new(),
+            claude: HashMap::new(),
             brancher: HashMap::new(),
             sett: HashMap::new(),
             låst: None,
@@ -288,7 +283,7 @@ impl App {
     }
 
     fn løkke(&mut self, terminal: &mut DefaultTerminal, rx: &Receiver<Hendelse>) -> io::Result<()> {
-        self.send("show-options -gv prefix", Venter::Prefiks);
+        self.send("show-options -gv prefix", Svar::Prefiks);
         self.list_paner();
         let mut tegne = true;
         while self.ferdig.is_none() {
@@ -336,9 +331,9 @@ impl App {
         Some(intervall.max(synk))
     }
 
-    fn send(&mut self, kommando: &str, venter: Venter) {
+    fn send(&mut self, kommando: &str, svar: Svar) {
         match self.kontroll.send(kommando) {
-            Ok(()) => self.kø.push_back(venter),
+            Ok(()) => self.kø.push_back(svar),
             Err(feil) => self.ferdig = Some(format!("tmux: {feil}")),
         }
     }
@@ -346,7 +341,7 @@ impl App {
     fn håndter(&mut self, h: Hendelse) -> bool {
         match h {
             Hendelse::Tmux(Melding::Svar { ok, linjer }) => match self.kø.pop_front() {
-                Some(venter) => self.svar(venter, ok, linjer),
+                Some(svar) => self.håndter_svar(svar, ok, linjer),
                 None => false,
             },
             Hendelse::Tmux(Melding::Output { pane, data }) => {
@@ -398,32 +393,32 @@ impl App {
         self.output_hale.insert(pane, søk[fra..].to_string());
     }
 
-    fn svar(&mut self, venter: Venter, ok: bool, linjer: Vec<String>) -> bool {
-        match venter {
-            Venter::Paner => {
+    fn håndter_svar(&mut self, svar: Svar, ok: bool, linjer: Vec<String>) -> bool {
+        match svar {
+            Svar::Paner => {
                 self.lister = false;
                 self.sist_listet = Some(Instant::now());
-                self.sesjoner = register::les(&self.konfig.join("sessions"));
+                self.claude = register::les(&self.konfig.join("sessions"));
                 let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
                 self.husk_sett(&alle);
                 if ok {
-                    self.nye.retain(|id, _| !self.sesjoner.contains_key(id) && alle.iter().any(|p| &p.id == id));
+                    self.nye.retain(|id, _| !self.claude.contains_key(id) && alle.iter().any(|p| &p.id == id));
                 }
                 self.brancher = self
-                    .sesjoner
+                    .claude
                     .iter()
                     .filter_map(|(id, s)| Some((id, s.mappe.as_deref()?)))
                     .chain(self.nye.iter().map(|(id, m)| (id, m.as_path())))
                     .filter_map(|(id, mappe)| Some((id.clone(), git::branch(mappe)?)))
                     .collect();
-                self.paner = alle
+                self.claude_paner = alle
                     .iter()
-                    .filter(|p| ok && (self.sesjoner.contains_key(&p.id) || self.nye.contains_key(&p.id)))
+                    .filter(|p| ok && (self.claude.contains_key(&p.id) || self.nye.contains_key(&p.id)))
                     .cloned()
                     .collect();
                 self.størrelser.retain(|vindu, _| alle.iter().any(|p| &p.vindu_id == vindu));
                 self.alle = alle;
-                let valgt = self.valgt.as_ref().and_then(|v| self.paner.iter().find(|p| p.id == v.id));
+                let valgt = self.valgt.as_ref().and_then(|v| self.claude_paner.iter().find(|p| p.id == v.id));
                 match valgt.cloned() {
                     // Oppdatert, så størrelsen regnes fra det tmux sier nå.
                     Some(pane) => {
@@ -441,7 +436,7 @@ impl App {
                         }
                     }
                 }
-                let ny = self.gå_inn_i.as_ref().and_then(|id| self.paner.iter().find(|p| &p.id == id));
+                let ny = self.gå_inn_i.as_ref().and_then(|id| self.claude_paner.iter().find(|p| &p.id == id));
                 if let Some(pane) = ny.cloned() {
                     self.gå_inn_i = None;
                     // Er du inne i en annen Claude, skal ikke tastene dine gå et
@@ -456,13 +451,13 @@ impl App {
                 }
                 true
             }
-            Venter::Bilde(id) => {
+            Svar::Bilde(id) => {
                 if ok && self.vindu.iter().any(|p| p.id == id) {
                     self.bilder.insert(id, sgr::tolk(&linjer));
                 }
                 false
             }
-            Venter::Markør => {
+            Svar::Markør => {
                 self.henter = false;
                 let felt: Vec<&str> = linjer.first().map_or("", |l| l.as_str()).split('\t').collect();
                 self.markør = match felt.as_slice() {
@@ -485,34 +480,34 @@ impl App {
                 }
                 true
             }
-            Venter::NySesjon { navn, mappe, claude } if !ok => {
-                self.send(&tmux::linje(&start::nytt_vindu(&navn, &mappe)), Venter::NyPane { mappe, claude });
+            Svar::NySesjon { navn, mappe, claude_kommando } if !ok => {
+                self.send(&tmux::linje(&start::nytt_vindu(&navn, &mappe)), Svar::NyPane { mappe, claude_kommando });
                 false
             }
-            Venter::NySesjon { mappe, claude, .. } | Venter::NyPane { mappe, claude } => {
+            Svar::NySesjon { mappe, claude_kommando, .. } | Svar::NyPane { mappe, claude_kommando } => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
-                for kommando in start::skriv_inn(&id, &claude) {
-                    self.send(&tmux::linje(&kommando), Venter::Ingenting);
+                for kommando in start::skriv_inn(&id, &claude_kommando) {
+                    self.send(&tmux::linje(&kommando), Svar::Ingenting);
                 }
                 self.nye.insert(id.clone(), mappe);
                 self.gå_inn_i = Some(id);
                 self.list_paner();
                 false
             }
-            Venter::Prefiks => {
+            Svar::Prefiks => {
                 if let Some(prefiks) = linjer.first().filter(|_| ok).and_then(|l| taster::Prefiks::fra_tmux(l)) {
                     self.prefiks = prefiks;
                 }
                 false
             }
-            Venter::NyttVindu => {
+            Svar::NyttVindu => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
                 self.vis_vindu(id);
                 self.bytt_fokus(Fokus::Pane);
                 self.list_paner();
                 true
             }
-            Venter::Ingenting => false,
+            Svar::Ingenting => false,
         }
     }
 
@@ -587,7 +582,7 @@ impl App {
             (KeyCode::Char(' '), _) => format!("next-layout -t {vindu}"),
             (KeyCode::Char('c'), _) => {
                 let sesjon = sitat(&format!("{}:", aktiv.sesjon_id));
-                self.send(&format!("new-window -t {sesjon} -c '#{{pane_current_path}}' -P -F '#{{window_id}}'"), Venter::NyttVindu);
+                self.send(&format!("new-window -t {sesjon} -c '#{{pane_current_path}}' -P -F '#{{window_id}}'"), Svar::NyttVindu);
                 return;
             }
             (KeyCode::Char('x'), _) => return self.lukke = Some(Lukke::Pane(aktiv.id)),
@@ -598,7 +593,7 @@ impl App {
             }
             _ => return,
         };
-        self.send(&kommando, Venter::Ingenting);
+        self.send(&kommando, Svar::Ingenting);
     }
 
     /// Neste eller forrige Claude i lista, som `(` og `)` bytter sesjon i
@@ -638,15 +633,15 @@ impl App {
         let inne = self.fokus == Fokus::Pane;
         // Via lista, så Claude-en du forlater, merkes som sett.
         self.bytt_fokus(Fokus::Liste);
-        if let Some(claude) = self.paner.iter().find(|p| p.vindu_id == vindu).cloned() {
+        if let Some(claude) = self.claude_paner.iter().find(|p| p.vindu_id == vindu).cloned() {
             self.velg(claude);
         } else {
             let sesjon = self.alle.iter().find(|p| p.vindu_id == vindu).map(|p| p.sesjon_id.clone());
             self.synk_størrelse_for(&vindu);
             if let Some(sesjon) = sesjon.filter(|s| self.vindu.first().map(|p| &p.sesjon_id) != Some(s)) {
-                self.send(&format!("switch-client -t {}", sitat(&sesjon)), Venter::Ingenting);
+                self.send(&format!("switch-client -t {}", sitat(&sesjon)), Svar::Ingenting);
             }
-            self.send(&format!("select-window -t {}", sitat(&vindu)), Venter::Ingenting);
+            self.send(&format!("select-window -t {}", sitat(&vindu)), Svar::Ingenting);
             self.vis(vindu, None);
         }
         if inne {
@@ -669,8 +664,8 @@ impl App {
     /// kommer som en melding.
     fn start_claude(&mut self, mappe: PathBuf, samtale: Option<&str>) {
         let navn = start::sesjonsnavn(&mappe);
-        let claude = start::claude(samtale);
-        self.send(&tmux::linje(&start::ny_sesjon(&navn, &mappe)), Venter::NySesjon { navn, mappe, claude });
+        let claude_kommando = start::claude(samtale);
+        self.send(&tmux::linje(&start::ny_sesjon(&navn, &mappe)), Svar::NySesjon { navn, mappe, claude_kommando });
     }
 
     /// Er en liste alt på vei, kan den være bestilt før endringen, så det
@@ -680,19 +675,19 @@ impl App {
             self.list_igjen = true;
         } else {
             self.lister = true;
-            self.send(&format!("list-panes -a -F {}", sitat(FELT)), Venter::Paner);
+            self.send(&format!("list-panes -a -F {}", sitat(FELT)), Svar::Paner);
         }
     }
 
     fn velg(&mut self, pane: Pane) {
         self.synk_størrelse_for(&pane.vindu_id);
         if self.valgt.as_ref().map(|p| &p.sesjon_id) != Some(&pane.sesjon_id) {
-            self.send(&format!("switch-client -t {}", sitat(&pane.sesjon_id)), Venter::Ingenting);
+            self.send(&format!("switch-client -t {}", sitat(&pane.sesjon_id)), Svar::Ingenting);
         }
         // Vinduet må være sesjonens aktive for å få størrelsen fra denne
         // klienten. Det bytter også vindu for andre klienter i samme sesjon.
-        self.send(&format!("select-window -t {}", sitat(&pane.vindu_id)), Venter::Ingenting);
-        self.send(&format!("select-pane -t {}", sitat(&pane.id)), Venter::Ingenting);
+        self.send(&format!("select-window -t {}", sitat(&pane.vindu_id)), Svar::Ingenting);
+        self.send(&format!("select-pane -t {}", sitat(&pane.id)), Svar::Ingenting);
         let (id, vindu) = (pane.id.clone(), pane.vindu_id.clone());
         self.valgt = Some(pane);
         self.vis(vindu, Some(&id));
@@ -754,7 +749,7 @@ impl App {
     }
 
     fn aktiver(&mut self, id: &str) {
-        self.send(&format!("select-pane -t {}", sitat(id)), Venter::Ingenting);
+        self.send(&format!("select-pane -t {}", sitat(id)), Svar::Ingenting);
         for p in &mut self.vindu {
             p.aktiv = p.id == id;
         }
@@ -784,14 +779,14 @@ impl App {
             // Fra -S og ned til bunnen er flere linjer enn panen, og tegningen
             // tar de øverste.
             let fra = if id == aktiv && self.rull > 0 { format!(" -S -{}", self.rull) } else { String::new() };
-            self.send(&format!("capture-pane -p -e -N -t {}{fra}", sitat(&id)), Venter::Bilde(id));
+            self.send(&format!("capture-pane -p -e -N -t {}{fra}", sitat(&id)), Svar::Bilde(id));
         }
         let id = sitat(&aktiv);
         let felt = sitat(
             "#{cursor_x}\t#{cursor_y}\t#{cursor_flag}\t#{&&:#{mouse_any_flag},#{mouse_sgr_flag}}\t\
              #{alternate_on}\t#{history_size}",
         );
-        self.send(&format!("display-message -p -t {id} {felt}"), Venter::Markør);
+        self.send(&format!("display-message -p -t {id} {felt}"), Svar::Markør);
         self.utdatert = false;
         self.henter = true;
         self.sist_hentet = Instant::now();
@@ -827,8 +822,8 @@ impl App {
             return;
         }
         let (bredde, høyde) = størrelse;
-        self.send(&format!("refresh-client -C {}", sitat(&format!("{vindu}:{bredde}x{høyde}"))), Venter::Ingenting);
-        self.send(&format!("refresh-client -C {bredde}x{høyde}"), Venter::Ingenting);
+        self.send(&format!("refresh-client -C {}", sitat(&format!("{vindu}:{bredde}x{høyde}"))), Svar::Ingenting);
+        self.send(&format!("refresh-client -C {bredde}x{høyde}"), Svar::Ingenting);
         self.størrelser.insert(vindu.to_string(), størrelse);
         self.utdatert = true;
     }
@@ -868,7 +863,7 @@ impl App {
                     Lukke::Pane(id) => format!("kill-pane -t {}", sitat(&id)),
                     Lukke::Vindu(id) => format!("kill-window -t {}", sitat(&id)),
                 };
-                self.send(&kommando, Venter::Ingenting);
+                self.send(&kommando, Svar::Ingenting);
             }
             return true;
         }
@@ -883,7 +878,7 @@ impl App {
         if self.fokus == Fokus::Pane {
             if let (Some(pane), Some(args)) = (self.aktiv(), taster::send_keys(&k)) {
                 let kommando = format!("send-keys -t {} {args}", sitat(&pane.id));
-                self.send(&kommando, Venter::Ingenting);
+                self.send(&kommando, Svar::Ingenting);
                 self.rull_til(0);
             }
             return false;
@@ -905,7 +900,7 @@ impl App {
     }
 
     fn åpne_velger(&mut self, fortsett: bool) {
-        let kjører: HashSet<String> = self.sesjoner.values().filter_map(|s| s.samtale.clone()).collect();
+        let kjører: HashSet<String> = self.claude.values().filter_map(|s| s.samtale.clone()).collect();
         self.velger = Some(ny::Velger::ny(fortsett, &self.konfig.join("projects"), &kjører));
     }
 
@@ -916,8 +911,8 @@ impl App {
         let id = sitat(&pane.id);
         // paste-buffer gjør LF om til CR, så CRLF ville blitt to linjeskift.
         let tekst = tekst.replace("\r\n", "\n");
-        self.send(&format!("set-buffer -b nerdr {}", dobbelt_sitat(&tekst)), Venter::Ingenting);
-        self.send(&format!("paste-buffer -p -d -b nerdr -t {id}"), Venter::Ingenting);
+        self.send(&format!("set-buffer -b nerdr {}", dobbelt_sitat(&tekst)), Svar::Ingenting);
+        self.send(&format!("paste-buffer -p -d -b nerdr -t {id}"), Svar::Ingenting);
         self.rull_til(0);
     }
 
@@ -994,12 +989,12 @@ impl App {
         match opp {
             _ if self.pane_mus => {
                 if let Some(args) = taster::mus(&m, x, y) {
-                    self.send(&format!("send-keys -t {id} {args}"), Venter::Ingenting);
+                    self.send(&format!("send-keys -t {id} {args}"), Svar::Ingenting);
                 }
             }
             Some(opp) if self.alternativ => {
                 let tast = if opp { "Up" } else { "Down" };
-                self.send(&format!("send-keys -t {id} -N {RULL_STEG} {tast}"), Venter::Ingenting);
+                self.send(&format!("send-keys -t {id} -N {RULL_STEG} {tast}"), Svar::Ingenting);
             }
             Some(true) => self.rull_til(self.rull.saturating_add(RULL_STEG)),
             Some(false) => self.rull_til(self.rull.saturating_sub(RULL_STEG)),
@@ -1054,19 +1049,19 @@ impl App {
     }
 
     fn merke(&self, pane: &Pane) -> Option<Merke> {
-        let Some(sesjon) = self.sesjoner.get(&pane.id) else {
+        let Some(claude) = self.claude.get(&pane.id) else {
             return self.nye.contains_key(&pane.id).then_some(Merke::Starter);
         };
         let inne = self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| v.id == pane.id);
         let sett = if inne { u64::MAX } else { self.sett.get(&pane.id).copied().unwrap_or(0) };
-        Some(Merke::fra(sesjon, sett))
+        Some(Merke::fra(claude, sett))
     }
 
     fn plass(&self, pane: &Pane) -> Option<Plass> {
         let merke = self.merke(pane)?;
         Some(match &self.låst {
             Some((id, låst)) if *id == pane.id => Plass { merke, ..*låst },
-            _ => Plass { gruppe: merke.gruppe(), merke, siden: self.sesjoner.get(&pane.id).map(|s| s.endret) },
+            _ => Plass::fra(merke, self.claude.get(&pane.id).map(|c| c.endret)),
         })
     }
 
@@ -1074,10 +1069,10 @@ impl App {
     /// ingen nerdr har sett før, får tiden nå, også i tmux, så det den blir
     /// ferdig med mens nerdr er lukket, venter på deg neste gang.
     fn husk_sett(&mut self, alle: &[Pane]) {
-        self.sett.retain(|id, _| self.sesjoner.contains_key(id));
+        self.sett.retain(|id, _| self.claude.contains_key(id));
         let nå = nå_ms();
         for pane in alle {
-            if !self.sesjoner.contains_key(&pane.id) {
+            if !self.claude.contains_key(&pane.id) {
                 continue;
             }
             match (self.sett.get(&pane.id).copied(), pane.sett) {
@@ -1091,11 +1086,11 @@ impl App {
 
     fn merk_sett(&mut self, id: &str, tid: u64) {
         self.sett.insert(id.to_string(), tid);
-        self.send(&format!("set-option -p -t {} {} {tid}", sitat(id), paner::SETT), Venter::Ingenting);
+        self.send(&format!("set-option -p -t {} {} {tid}", sitat(id), paner::SETT), Svar::Ingenting);
     }
 
     fn rader(&self) -> Vec<Rad<'_>> {
-        grupper::rader(&self.paner, |p| self.plass(p))
+        grupper::rader(&self.claude_paner, |p| self.plass(p))
     }
 
     fn i_rekkefølge(&self) -> Vec<Pane> {

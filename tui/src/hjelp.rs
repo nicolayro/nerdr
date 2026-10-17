@@ -1,6 +1,8 @@
 //! Det nerdr kan, vist med `?` og `nerdr --help`.
 
-use crate::grupper::Merke;
+use nerdr_kjerne::merke::Merke;
+
+use crate::grupper::glyf;
 use crate::ny;
 
 pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
@@ -78,7 +80,7 @@ pub fn tekst() -> String {
     }
     ut += "\nMerker:\n";
     for (merke, hva) in MERKER {
-        ut += &format!("  {}  {hva}\n", merke.glyf());
+        ut += &format!("  {}  {hva}\n", glyf(merke));
     }
     ut += &format!(
         "\n{BARE_TMUX}\n{}\nFlere mapper settes kolonseparert, som {}=~/git:~/kode.\n",
