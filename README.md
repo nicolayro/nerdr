@@ -39,8 +39,9 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 
 Klikk i lista går inn i en Claude. Klikk og musehjul i sesjonen går videre når
 programmet der har slått på mus, som Claude Code i fullskjerm. Ellers ruller
-hjulet i historikken, og en tast tar deg tilbake til bunnen. I `less` og `man`
-blir hjulet til piltaster.
+hjulet i historikken, og en tast tar deg tilbake til bunnen. Det du drar over,
+kopieres når du slipper, med `pbcopy`, `wl-copy`, `xclip` eller `xsel`. I `less`
+og `man` blir hjulet til piltaster.
 
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
 hver sin boks eller med streker mellom, etter `NERDR_RAMMER`. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En

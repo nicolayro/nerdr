@@ -21,6 +21,8 @@ vert() { tmux -L "$VERT" "$@"; }
 tast() { tmux -L "$VERT" send-keys -t vert "$@"; }
 klikk() { tast -l "$(printf '\033[<0;%s;%sM\033[<0;%s;%sm' "$1" "$2" "$1" "$2")"; }
 hjul() { tast -l "$(printf '\033[<%s;%s;%sM' "$1" "$2" "$3")"; }
+# dra <fra x> <fra y> <til x> <til y>, med venstre knapp.
+dra() { tast -l "$(printf '\033[<0;%s;%sM\033[<32;%s;%sM\033[<0;%s;%sm' "$1" "$2" "$3" "$4" "$3" "$4")"; }
 skjerm() { vert capture-pane -p -t vert; }
 
 # Kjører resten av argumentene på nytt til de lykkes, i opptil fire sekunder.
@@ -90,6 +92,10 @@ list_straks() {
 }
 
 mkdir "$KONFIG/sessions"
+# Først i PATH for nerdr, så det testen kopierer, ikke havner på utklippstavla.
+mkdir "$KONFIG/bin"
+printf '#!/bin/sh\ncat > "%s/kopiert"\n' "$KONFIG" > "$KONFIG/bin/pbcopy"
+chmod +x "$KONFIG/bin/pbcopy"
 # HOME for nerdr, så mappevelgeren viser disse mappene og ikke brukerens egne.
 mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/kode/tredje"
 # En tidligere samtale i annet, og en tom en som ikke skal vises.
@@ -125,7 +131,7 @@ registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
 
 vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
-  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
+  "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
 sjekk "alfa står under VENTER med ●, med oppgaven som tittel" linje_har 2 '^▎●  Fiks testene +│'
 sjekk "under står mappa og branchen, og <1m til høyre" linje_har 3 '^▎   nerdr · main +<1m │'
@@ -271,6 +277,9 @@ for i in 1 2; do hjul 65 90 6; done
 sjekk "to hakk ned gir 6/…" linje_har 2 ' 6/[0-9]+ '
 tast Enter
 sjekk "Enter går tilbake til bunnen uten teller" linje_mangler 2 '[0-9]+/[0-9]+'
+dra 85 4 100 6
+sjekk "å dra i en pane uten mus kopierer linjene" grep -q '^linje [0-9]*$' "$KONFIG/kopiert"
+sjekk "kopiert står på rammen" linje_har 2 ' kopiert '
 
 tast C-b C-b
 sjekk "C-b C-b sender ^B til panen" i_pane alfa:0.1 '^B'

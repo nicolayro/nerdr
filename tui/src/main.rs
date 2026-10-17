@@ -2,6 +2,7 @@ mod bokser;
 mod grupper;
 mod hjelp;
 mod kommandoer;
+mod markering;
 mod ny;
 mod palett;
 mod taster;
@@ -22,6 +23,7 @@ use nerdr_kjerne::{git, konfigkatalog, oppsett, start, tmux};
 use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::register::{self, Claude};
 use nerdr_kjerne::sgr::{self, Linje};
+use markering::{Markering, Punkt};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
     self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
@@ -45,6 +47,7 @@ const STARTER_MAKS: Duration = Duration::from_secs(5 * 60);
 /// Linjer per hakk på hjulet, som piltaster i alternativ skjerm og som linjer
 /// i historikken.
 const RULL_STEG: u32 = 3;
+const KOPIERT_VISES: Duration = Duration::from_millis(1500);
 
 enum Hendelse {
     Tmux(Melding),
@@ -161,6 +164,10 @@ struct App {
     /// Kolonne og rad, til terminalen mister fokus. Terminalen sier ikke fra
     /// når musen forlater vinduet.
     musen: Option<(u16, u16)>,
+    /// I den aktive panen, når den ikke har slått på mus selv.
+    markering: Option<Markering>,
+    /// Da markeringen sist ble kopiert, så det kan stå en liten stund.
+    kopiert: Option<Instant>,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
     hjelp: bool,
@@ -301,6 +308,8 @@ impl App {
             lukke: None,
             visning: Rect::default(),
             musen: None,
+            markering: None,
+            kopiert: None,
             velger: None,
             hjelp: false,
             nye: HashMap::new(),
@@ -335,6 +344,10 @@ impl App {
             // %output gir én henting og ikke én per linje.
             for h in første.into_iter().chain(rx.try_iter()) {
                 tegne |= self.håndter(h);
+            }
+            if self.kopiert.is_some_and(|t| t.elapsed() >= KOPIERT_VISES) {
+                self.kopiert = None;
+                tegne = true;
             }
 
             if self.sist_listet.is_some_and(|t| t.elapsed() >= LISTE_INTERVALL) {
@@ -791,6 +804,7 @@ impl App {
     }
 
     fn nullstill_aktiv(&mut self) {
+        self.markering = None;
         self.markør = None;
         self.pane_mus = false;
         self.pane_bevegelse = false;
@@ -916,7 +930,7 @@ impl App {
                 self.send(&kommando, Svar::Ingenting);
                 self.rull_til(0);
             }
-            return false;
+            return self.markering.take().is_some();
         }
         match k.code {
             KeyCode::Char('q') => self.ferdig = Some(String::new()),
@@ -963,7 +977,9 @@ impl App {
         let før = self.under_musen();
         self.musen = Some((m.column, m.row));
         let flyttet = self.under_musen() != før;
-        self.håndter_mus(m) || flyttet
+        // Et nytt klikk fjerner markeringen, også når det starter en ny.
+        let fjernet = matches!(m.kind, MouseEventKind::Down(_)) && self.markering.take().is_some();
+        self.håndter_mus(m) || flyttet || fjernet
     }
 
     /// Regnes ut på nytt hver gang, så det følger med når lista flytter seg
@@ -989,6 +1005,11 @@ impl App {
     fn håndter_mus(&mut self, m: MouseEvent) -> bool {
         if self.velger.is_some() || self.hjelp {
             return false;
+        }
+        if self.markering.as_ref().is_some_and(|m| m.drar)
+            && matches!(m.kind, MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left))
+        {
+            return self.dra_markering(m);
         }
         let v = self.visning;
         if m.row < v.y && m.column >= v.x {
@@ -1043,6 +1064,10 @@ impl App {
             return byttet;
         }
         let (id, x, y) = (sitat(&pane.id), m.column - boks.innhold.x, m.row - boks.innhold.y);
+        if !self.pane_mus && m.kind == MouseEventKind::Down(MouseButton::Left) {
+            self.markering = Some(Markering::ny(pane.id, self.punkt(x, y)));
+            return true;
+        }
         let opp = match m.kind {
             MouseEventKind::ScrollUp => Some(true),
             MouseEventKind::ScrollDown => Some(false),
@@ -1064,6 +1089,42 @@ impl App {
             None => {}
         }
         byttet
+    }
+
+    /// Markeringen følger musen også utenfor panen, men stopper ved kanten.
+    fn dra_markering(&mut self, m: MouseEvent) -> bool {
+        let pane = self.markering.as_ref().map(|m| m.pane.clone());
+        let Some(boks) = self.bokser().into_iter().find(|b| Some(&b.pane) == pane.as_ref()) else {
+            self.markering = None;
+            return true;
+        };
+        let i = boks.innhold;
+        let x = m.column.clamp(i.x, i.right().saturating_sub(1)) - i.x;
+        let y = m.row.clamp(i.y, i.bottom().saturating_sub(1)) - i.y;
+        let punkt = self.punkt(x, y);
+        let Some(markering) = &mut self.markering else { return false };
+        markering.dra(punkt);
+        if m.kind != MouseEventKind::Up(MouseButton::Left) {
+            return true;
+        }
+        markering.drar = false;
+        if markering.tom() {
+            self.markering = None;
+            return true;
+        }
+        let topp = self.punkt(0, 0).0;
+        if let (Some(markering), Some(bilde)) = (&self.markering, self.bilder.get(&boks.pane))
+            && markering::kopier(&markering.tekst(bilde, topp, i.width))
+        {
+            self.kopiert = Some(Instant::now());
+        }
+        true
+    }
+
+    /// Der `x` og `y` i den aktive panen er, med linja regnet fra toppen av
+    /// historikken.
+    fn punkt(&self, x: u16, y: u16) -> Punkt {
+        (self.historie as i64 - self.rull as i64 + y as i64, x)
     }
 
     fn flytt(&mut self, steg: isize) {

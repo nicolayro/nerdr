@@ -12,6 +12,7 @@ use ratatui::layout::{Margin, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::bokser::{Boks, Rammer};
+use crate::markering;
 use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf, tittel};
 use crate::ny::Velger;
@@ -554,6 +555,19 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
         if let Some(bilde) = app.bilder.get(&boks.pane) {
             tegn_bilde(buf, boks.innhold, bilde);
         }
+        if let (Some(markering), Some(bilde)) =
+            (app.markering.as_ref().filter(|m| m.pane == boks.pane), app.bilder.get(&boks.pane))
+        {
+            let i = boks.innhold;
+            let topp = app.historie as i64 - app.rull as i64;
+            for (y, rad) in (0..i.height).zip(bilde) {
+                let innhold = markering::innhold(rad);
+                for x in markering.kolonner(topp + y as i64, i.width).into_iter().flatten().filter(|&x| x < innhold) {
+                    // Snudd, så det som allerede er invertert, også synes markert.
+                    buf[(i.x + x, i.y + y)].modifier.toggle(Modifier::REVERSED);
+                }
+            }
+        }
         if let Some(ramme) = boks.ramme {
             let stil = if lyse.iter().any(|b| b.pane == boks.pane) { VANLIG } else { SVAK };
             tegn_ramme(buf, ramme, stil);
@@ -562,8 +576,12 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
     if app.rammer == Rammer::Linjer && bokser.len() > 1 {
         tegn_linjer(buf, app, bokser, &lyse);
     }
-    if let (true, Some(boks)) = (app.rull > 0, aktiv_boks(app, bokser)) {
-        let hvor = format!(" {}/{} ", app.rull, app.historie);
+    let merkelapp = match () {
+        _ if app.kopiert.is_some() => Some(" kopiert ".to_string()),
+        _ if app.rull > 0 => Some(format!(" {}/{} ", app.rull, app.historie)),
+        _ => None,
+    };
+    if let (Some(hvor), Some(boks)) = (merkelapp, aktiv_boks(app, bokser)) {
         let bredde = hvor.chars().count() as u16;
         // På toppen av rammen, eller øverst i panen når den ikke har ramme.
         let (høyre, y) = match boks.ramme {
