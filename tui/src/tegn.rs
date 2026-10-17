@@ -2,6 +2,8 @@
 
 use nerdr_kjerne::paner::Pane;
 use nerdr_kjerne::sgr::{Farge, Linje, Stil};
+use std::ops::Range;
+
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
@@ -61,7 +63,8 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     let hint_y = område.height.saturating_sub(1);
 
     let mut overskrifter = Vec::new();
-    for (y, høyde, rad) in plasser(app, hint_y) {
+    let (rader, skjult) = plasser(app, hint_y);
+    for (y, høyde, rad) in rader {
         if y >= hint_y {
             break;
         }
@@ -72,13 +75,16 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
                 buf.set_stringn(TEKST_X, y, strek, TEKST, Style::new().fg(DIM));
             }
             Rad::Overskrift(gruppe) => {
-                let x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
+                let mut x = buf.set_stringn(1, y, gruppe.tittel(), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
+                if gruppe == Gruppe::Ferdig && skjult > 0 {
+                    x = buf.set_stringn(x, y, format!("+{skjult}"), bredde as usize, Style::new().fg(DIM)).0 + 1;
+                }
                 let strek = "─".repeat(bredde.saturating_sub(x) as usize);
                 buf.set_stringn(x, y, strek, bredde as usize, Style::new().fg(DIM));
                 overskrifter.push(y);
             }
             Rad::Pane(pane, merke) => {
-                let kort = kort(app, pane);
+                let kort = kort(app, pane, merke);
                 let område = Rect::new(0, y, bredde, høyde.min(hint_y - y));
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
                 tegn_kort(buf, område, &kort, merke, valgt, app.fokus);
@@ -99,7 +105,11 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(farge));
 
     // Overskriftene treffer skillestreken, og øverst går streken videre til
-    // fanene.
+    // fanene. Står bare FERDIG i lista, er den nederst, og da går streken over
+    // lista alene.
+    if !overskrifter.contains(&0) {
+        buf.set_string(0, 0, "─".repeat(bredde as usize), Style::new().fg(DIM));
+    }
     for y in 0..område.height {
         let tegn = match y {
             0 => "┬",
@@ -110,11 +120,14 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     }
 }
 
-/// En sesjon i lista: mappa, branchen helt til høyre, og oppgaven under.
+/// En sesjon i lista: mappa, branchen helt til høyre, og oppgaven under, med
+/// hvor lenge den har ventet eller jobbet helt til høyre på siste linje. Uten
+/// oppgave står tiden til høyre for branchen.
 struct Kort {
     mappe: String,
     branch: Option<String>,
     oppgave: Vec<String>,
+    tid: Option<String>,
 }
 
 impl Kort {
@@ -123,7 +136,7 @@ impl Kort {
     }
 }
 
-fn kort(app: &App, pane: &Pane) -> Kort {
+fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
     let ny = app.nye.get(&pane.id);
     let mappe = app
         .sesjoner
@@ -132,38 +145,72 @@ fn kort(app: &App, pane: &Pane) -> Kort {
         .or(ny.map(|m| m.as_path()))
         .and_then(|m| m.file_name()?.to_str())
         .map_or_else(|| format!("{}:{}", pane.sesjon, pane.vindu), str::to_string);
+    let tid = match merke {
+        Merke::Spør | Merke::Ulest | Merke::Jobber => {
+            app.sesjoner.get(&pane.id).map(|s| varighet(crate::nå_ms().saturating_sub(s.endret)))
+        }
+        Merke::Sett | Merke::Starter => None,
+    };
     let oppgave = match ny {
         Some(_) => vec!["starter …".to_string()],
-        None => pane.oppgave().map(|o| bryt(o, TEKST, OPPGAVE_LINJER)).unwrap_or_default(),
+        None => pane.oppgave().map(|o| bryt_med(o, tid.as_deref(), TEKST, OPPGAVE_LINJER)).unwrap_or_default(),
     };
-    Kort { mappe, branch: app.brancher.get(&pane.id).cloned(), oppgave }
+    Kort { mappe, branch: app.brancher.get(&pane.id).cloned(), oppgave, tid }
+}
+
+/// Kort nok til å stå ytterst på en linje i kortet.
+fn varighet(ms: u64) -> String {
+    match ms / 60_000 {
+        0 => "<1m".into(),
+        m @ 1..60 => format!("{m}m"),
+        m @ 60..1440 => format!("{}t", m / 60),
+        m => format!("{}d", m / 1440),
+    }
 }
 
 fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus) {
     if valgt && fokus == Fokus::Liste {
         buf.set_style(område, Style::new().bg(MARKERT));
     }
-    let (peker, farge) = if valgt { ("▎", HVIT) } else { (" ", LYS) };
+    let dempet = !valgt && merke.gruppe() == Gruppe::Ferdig;
+    let (peker, mappestil, oppgavefarge, gråfarge) = match (valgt, dempet) {
+        (true, _) => ("▎", Style::new().fg(HVIT).add_modifier(Modifier::BOLD), LYS, GRÅ),
+        (false, false) => (" ", Style::new().fg(LYS).add_modifier(Modifier::BOLD), GRÅ, GRÅ),
+        (false, true) => (" ", Style::new().fg(GRÅ), DIM, DIM),
+    };
     for y in område.top()..område.bottom() {
         buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT));
     }
     let y = område.y;
     buf.set_stringn(1, y, merke.glyf(), 1, Style::new().fg(glyffarge(merke)));
 
-    let mappe = kutt(&kort.mappe, TEKST);
-    buf.set_stringn(TEKST_X, y, &mappe, TEKST, Style::new().fg(farge).add_modifier(Modifier::BOLD));
+    let mut slutt = TEKST_X + TEKST as u16;
+    if let Some(tid) = kort.tid.as_ref().filter(|_| kort.oppgave.is_empty()) {
+        slutt = høyrestilt(buf, y, slutt, tid, gråfarge).saturating_sub(2);
+    }
+    let bredde = slutt.saturating_sub(TEKST_X) as usize;
+    let mappe = kutt(&kort.mappe, bredde);
+    buf.set_stringn(TEKST_X, y, &mappe, bredde, mappestil);
     // Med mindre enn to tegn igjen blir branchen bare en …
-    let plass = TEKST.saturating_sub(mappe.chars().count() + 2);
+    let plass = bredde.saturating_sub(mappe.chars().count() + 2);
     if let Some(branch) = kort.branch.as_ref().filter(|_| plass >= 2) {
-        let branch = kutt(branch, plass);
-        let x = TEKST_X + TEKST as u16 - branch.chars().count() as u16;
-        buf.set_string(x, y, branch, Style::new().fg(GRÅ));
+        høyrestilt(buf, y, slutt, &kutt(branch, plass), gråfarge);
     }
 
-    let oppgavefarge = if valgt { LYS } else { GRÅ };
     for (linje, y) in kort.oppgave.iter().zip(y + 1..område.bottom()) {
         buf.set_stringn(TEKST_X, y, linje, TEKST, Style::new().fg(oppgavefarge));
     }
+    let siste = y + kort.høyde() - 1;
+    if let Some(tid) = kort.tid.as_ref().filter(|_| siste > y && siste < område.bottom()) {
+        høyrestilt(buf, siste, TEKST_X + TEKST as u16, tid, gråfarge);
+    }
+}
+
+/// Tekst som slutter foran kolonne `slutt`. Gir kolonnen den starter i.
+fn høyrestilt(buf: &mut Buffer, y: u16, slutt: u16, tekst: &str, farge: Color) -> u16 {
+    let x = slutt.saturating_sub(tekst.chars().count() as u16);
+    buf.set_string(x, y, tekst, Style::new().fg(farge));
+    x
 }
 
 fn glyffarge(merke: Merke) -> Color {
@@ -174,29 +221,78 @@ fn glyffarge(merke: Merke) -> Color {
     }
 }
 
-/// Radene i lista med y og høyde. Får alt plass, legges FERDIG nederst, med en
-/// tom rad over hintet, så det du har lagt bort står for seg selv.
-fn plasser<'a>(app: &'a App, plass: u16) -> Vec<(u16, u16, Rad<'a>)> {
-    let rader = app.rader();
-    let høyder: Vec<u16> = rader
-        .iter()
-        .map(|r| if let Rad::Pane(pane, _) = r { kort(app, pane).høyde() } else { 1 })
+/// Radene i lista med y og høyde, og hvor mange i FERDIG som ikke fikk plass.
+/// Får alt plass, legges FERDIG nederst, med en tom rad over hintet, så det du
+/// har lagt bort står for seg selv. Ellers vises så mange i FERDIG som får
+/// plass, og alltid den som er valgt.
+fn plasser<'a>(app: &'a App, plass: u16) -> (Vec<(u16, u16, Rad<'a>)>, usize) {
+    let mut rader: Vec<(Rad, u16)> = app
+        .rader()
+        .into_iter()
+        .map(|r| {
+            let høyde = if let Rad::Pane(pane, merke) = r { kort(app, pane, merke).høyde() } else { 1 };
+            (r, høyde)
+        })
         .collect();
-    let sett = rader.iter().position(|r| matches!(r, Rad::Overskrift(Gruppe::Ferdig))).unwrap_or(rader.len());
-    let over: u16 = høyder[..sett].iter().sum();
-    let under: u16 = høyder[sett..].iter().sum();
-    let sett_y = if over + under < plass { plass - under - 1 } else { over };
+    let ferdig = rader.iter().position(|(r, _)| matches!(r, Rad::Overskrift(Gruppe::Ferdig))).unwrap_or(rader.len());
+    let over: u16 = rader[..ferdig].iter().map(|(_, h)| h).sum();
+    let under: u16 = rader[ferdig..].iter().map(|(_, h)| h).sum();
+
+    let mut skjult = 0;
+    let ferdig_y = if over + under < plass {
+        plass - under - 1
+    } else {
+        let kort: Vec<(Rad, u16)> = rader.split_off(ferdig).into_iter().filter(|(r, _)| matches!(r, Rad::Pane(..))).collect();
+        if !kort.is_empty() {
+            let valgt = app.valgt.as_ref().and_then(|v| kort.iter().position(|(r, _)| matches!(r, Rad::Pane(p, _) if p.id == v.id)));
+            let høyder: Vec<u16> = kort.iter().map(|(_, h)| *h).collect();
+            let vis = synlige(&høyder, valgt, plass.saturating_sub(over + 1));
+            skjult = kort.len() - vis.len();
+            rader.push((Rad::Overskrift(Gruppe::Ferdig), 1));
+            for (i, k) in kort.into_iter().enumerate().skip(vis.start).take(vis.len()) {
+                if i > vis.start {
+                    rader.push((Rad::Strek, 1));
+                }
+                rader.push(k);
+            }
+        }
+        over
+    };
 
     let mut y = 0;
     let mut plassert = Vec::with_capacity(rader.len());
-    for (i, (rad, høyde)) in rader.into_iter().zip(høyder).enumerate() {
-        if i == sett {
-            y = sett_y;
+    for (i, (rad, høyde)) in rader.into_iter().enumerate() {
+        if i == ferdig {
+            y = ferdig_y;
         }
         plassert.push((y, høyde, rad));
         y += høyde;
     }
-    plassert
+    (plassert, skjult)
+}
+
+/// Kortene med `høyder` som får plass på `rom` rader, med en strek mellom hvert.
+/// Er det valgte langt nede, er det det nederste som vises. Det første får
+/// alltid plass, selv om bare toppen av det vises.
+fn synlige(høyder: &[u16], valgt: Option<usize>, rom: u16) -> Range<usize> {
+    if rom == 0 || høyder.is_empty() {
+        return 0..0;
+    }
+    let får_plass = |fra: usize, til: usize| høyder[fra..til].iter().sum::<u16>() + (til - fra) as u16 - 1 <= rom;
+    let mut til = 1;
+    while til < høyder.len() && får_plass(0, til + 1) {
+        til += 1;
+    }
+    match valgt {
+        Some(v) if v >= til => {
+            let mut fra = v;
+            while fra > 0 && får_plass(fra - 1, v + 1) {
+                fra -= 1;
+            }
+            fra..v + 1
+        }
+        _ => 0..til,
+    }
 }
 
 /// Panen som står på rad `y` i lista.
@@ -205,7 +301,7 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     if y >= hint_y {
         return None;
     }
-    plasser(app, hint_y).into_iter().find_map(|(topp, høyde, rad)| match rad {
+    plasser(app, hint_y).0.into_iter().find_map(|(topp, høyde, rad)| match rad {
         Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })
@@ -373,6 +469,28 @@ fn kutt(tekst: &str, bredde: usize) -> String {
     let mut kuttet: String = tekst.chars().take(bredde.saturating_sub(1)).collect();
     kuttet.push('…');
     kuttet
+}
+
+/// Som `bryt`, men med plass til `tid` ytterst på siste linje. Fyller teksten
+/// alle linjene, kuttes den siste.
+fn bryt_med(tekst: &str, tid: Option<&str>, bredde: usize, maks: usize) -> Vec<String> {
+    let Some(tid) = tid else { return bryt(tekst, bredde, maks) };
+    let mut linjer = bryt(&format!("{tekst} {tid}"), bredde, maks);
+    if let Some(siste) = linjer.last_mut() {
+        if siste == tid {
+            siste.clear();
+            return linjer;
+        }
+        if let Some(uten) = siste.strip_suffix(&format!(" {tid}")) {
+            *siste = uten.to_string();
+            return linjer;
+        }
+    }
+    let mut linjer = bryt(tekst, bredde, maks);
+    if let Some(siste) = linjer.last_mut() {
+        *siste = kutt(siste, bredde.saturating_sub(tid.chars().count() + 1));
+    }
+    linjer
 }
 
 /// Bryter på mellomrom over høyst `maks` linjer, og ender med … når teksten
@@ -558,5 +676,32 @@ mod tester {
         );
         assert_eq!(bryt("en to tre fire", 7, 2), ["en to", "tre…"]);
         assert_eq!(bryt("Langtordsomikkefårplass", 10, 2), ["Langtords…"]);
+    }
+
+    #[test]
+    fn tiden_får_plass_ytterst_på_siste_linje() {
+        assert_eq!(bryt_med("Fiks testene", Some("3m"), 16, 2), ["Fiks testene"]);
+        assert_eq!(bryt_med("Fiks alle testene", Some("14m"), 12, 1), ["Fiks al…"]);
+        assert_eq!(bryt_med("Fiks testene", Some("3m"), 12, 2), ["Fiks testene", ""]);
+        assert_eq!(bryt_med("Fiks", None, 16, 2), ["Fiks"]);
+    }
+
+    #[test]
+    fn varighet_i_minutter_timer_og_døgn() {
+        assert_eq!(varighet(59_000), "<1m");
+        assert_eq!(varighet(14 * 60_000), "14m");
+        assert_eq!(varighet(3 * 3_600_000 + 60_000), "3t");
+        assert_eq!(varighet(2 * 86_400_000), "2d");
+    }
+
+    #[test]
+    fn så_mange_kort_som_får_plass_og_alltid_det_valgte() {
+        // Tre kort på tre rader med strek mellom er 11 rader.
+        assert_eq!(synlige(&[3, 3, 3], None, 11), 0..3);
+        assert_eq!(synlige(&[3, 3, 3], None, 10), 0..2);
+        assert_eq!(synlige(&[3, 3, 3], Some(2), 7), 1..3);
+        assert_eq!(synlige(&[3, 3, 3], Some(1), 7), 0..2);
+        assert_eq!(synlige(&[3, 3, 3], None, 2), 0..1);
+        assert_eq!(synlige(&[3], None, 0), 0..0);
     }
 }

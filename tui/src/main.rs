@@ -13,9 +13,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
 use bokser::Boks;
-use grupper::{Gruppe, Merke, Rad};
+use grupper::{Merke, Plass, Rad};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
-use nerdr_kjerne::paner::{FELT, Pane};
+use nerdr_kjerne::paner::{self, FELT, Pane};
 use nerdr_kjerne::{git, oppsett, start, tmux};
 use nerdr_kjerne::register::{self, Sesjon};
 use nerdr_kjerne::sgr::{self, Linje};
@@ -88,12 +88,13 @@ struct App {
     sesjoner: HashMap<String, Sesjon>,
     /// Pane-id → branchen mappen til sesjonen står på.
     brancher: HashMap<String, String>,
-    /// Pane-id → da du sist var inne i panen. En Claude nerdr ikke har sett
-    /// før, regnes som sett, så ingenting havner i «venter på deg» ved oppstart.
+    /// Pane-id → da du sist var inne i panen, også skrevet til panen i tmux.
+    /// En Claude nerdr ikke har sett før, regnes som sett, så ingenting havner
+    /// i «venter på deg» første gang nerdr starter.
     sett: HashMap<String, u64>,
-    /// Panen du er inne i, og gruppen den sto i da du gikk inn. Den blir stående
+    /// Panen du er inne i, og plassen den hadde da du gikk inn. Den blir stående
     /// der til du går ut, så kortet ikke flytter seg for hver melding.
-    låst: Option<(String, Gruppe)>,
+    låst: Option<(String, Plass)>,
 
     /// Claude-en som er valgt i lista.
     valgt: Option<Pane>,
@@ -403,12 +404,8 @@ impl App {
                 self.lister = false;
                 self.sist_listet = Some(Instant::now());
                 self.sesjoner = register::les(&self.konfig.join("sessions"));
-                let nå = nå_ms();
-                self.sett.retain(|id, _| self.sesjoner.contains_key(id));
-                for id in self.sesjoner.keys() {
-                    self.sett.entry(id.clone()).or_insert(nå);
-                }
                 let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
+                self.husk_sett(&alle);
                 if ok {
                     self.nye.retain(|id, _| !self.sesjoner.contains_key(id) && alle.iter().any(|p| &p.id == id));
                 }
@@ -1032,14 +1029,14 @@ impl App {
         if fokus == self.fokus {
             return;
         }
-        // Gruppen må tas før panen merkes som sett, ellers havner en ferdig
+        // Plassen må tas før panen merkes som sett, ellers havner en ferdig
         // Claude du går inn i, rett i FERDIG.
         self.låst = match fokus {
-            Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.merke(p)?.gruppe()))),
+            Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.plass(p)?))),
             Fokus::Liste => None,
         };
-        if let Some(pane) = &self.valgt {
-            self.sett.insert(pane.id.clone(), nå_ms());
+        if let Some(id) = self.valgt.as_ref().map(|p| p.id.clone()) {
+            self.merk_sett(&id, nå_ms());
         }
         // Fra lista går du inn i panen du valgte, også når en annen er aktiv
         // i vinduet.
@@ -1061,13 +1058,36 @@ impl App {
         Some(Merke::fra(sesjon, sett))
     }
 
-    fn plass(&self, pane: &Pane) -> Option<(Gruppe, Merke)> {
+    fn plass(&self, pane: &Pane) -> Option<Plass> {
         let merke = self.merke(pane)?;
-        let gruppe = match &self.låst {
-            Some((id, gruppe)) if *id == pane.id => *gruppe,
-            _ => merke.gruppe(),
-        };
-        Some((gruppe, merke))
+        Some(match &self.låst {
+            Some((id, låst)) if *id == pane.id => Plass { merke, ..*låst },
+            _ => Plass { gruppe: merke.gruppe(), merke, siden: self.sesjoner.get(&pane.id).map(|s| s.endret) },
+        })
+    }
+
+    /// Tar inn det tmux har for panene der en Claude kjører. En pane som
+    /// ingen nerdr har sett før, får tiden nå, også i tmux, så det den blir
+    /// ferdig med mens nerdr er lukket, venter på deg neste gang.
+    fn husk_sett(&mut self, alle: &[Pane]) {
+        self.sett.retain(|id, _| self.sesjoner.contains_key(id));
+        let nå = nå_ms();
+        for pane in alle {
+            if !self.sesjoner.contains_key(&pane.id) {
+                continue;
+            }
+            match (self.sett.get(&pane.id).copied(), pane.sett) {
+                (None, None) => self.merk_sett(&pane.id, nå),
+                (her, i_tmux) => {
+                    self.sett.insert(pane.id.clone(), her.max(i_tmux).unwrap_or(nå));
+                }
+            }
+        }
+    }
+
+    fn merk_sett(&mut self, id: &str, tid: u64) {
+        self.sett.insert(id.to_string(), tid);
+        self.send(&format!("set-option -p -t {} {} {tid}", sitat(id), paner::SETT), Venter::Ingenting);
     }
 
     fn rader(&self) -> Vec<Rad<'_>> {

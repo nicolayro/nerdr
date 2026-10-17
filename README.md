@@ -85,6 +85,15 @@ delt i tre:
 | **jobber** | `◐` jobber, `◌` starter |
 | **ferdig** | `○` er ferdig, og du har vært inne i den siden |
 
+I venter og jobber står den som kom inn først, øverst, med hvor lenge den har
+ventet eller jobbet til høyre. I ferdig står den nyeste øverst, dempet. Er
+det ikke plass til alle i ferdig, vises så mange
+som får plass, og overskriften sier hvor mange som ikke vises.
+
+Når du sist var inne i en Claude, skriver nerdr i pane-optionen `@nerdr-sett`
+i tmux. Den forsvinner med panen, og det en Claude blir ferdig med mens nerdr
+er lukket, venter på deg neste gang.
+
 ### Starte og fortsette
 
 `n` åpner en popup der du søker fram en mappe, og `⏎` starter `claude` der i en
@@ -108,8 +117,8 @@ med et `versjon`-felt.
 | `nerdr ny <mappe>` | Start en Claude i mappa, som `n` |
 | `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som `C-r` |
 
-Hvilke Claude-er du har sett, husker bare TUI-et, så `liste` skiller ikke en
-som er ferdig, fra en du har sett.
+`sett` i JSON fra `liste` er da du sist var inne i Claude-en i nerdr, i
+millisekunder som `endret`, eller `null` når nerdr ikke har sett den.
 
 ## Innstillinger
 

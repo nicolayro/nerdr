@@ -37,7 +37,7 @@ tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
 sleep 2
 
 echo "=== nerdr etter oppstart (alfa ● under VENTER, gamma ◐ under JOBBER, ingen beta) ==="
-echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under. Øverst står fanen gcat på en strek som fortsetter overskriften med ┬, og JOBBER treffer skillestreken med ┤ ==="
+echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under med <1m til høyre. gamma har ingen oppgave og har <1m til høyre for branchen. Øverst står fanen gcat på en strek som fortsetter overskriften med ┬, og JOBBER treffer skillestreken med ┤ ==="
 tmux -L nerdr-vert capture-pane -p -t vert
 echo "=== størrelse på alfa (skal være 68x12 med bokser, 74x15 med linjer) ==="
 tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
@@ -82,7 +82,7 @@ sleep 1
 tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,7p;16p'
 tmux -L nerdr-vert send-keys -t vert C-b w
 
-echo "=== gamma blir ferdig og havner under VENTER med ◆, og uten cwd står gamma:0 ==="
+echo "=== gamma blir ferdig og havner under VENTER med ◆ under alfa, med <1m til høyre, og uten cwd står gamma:0 ==="
 pane=$(tmux -L nerdr-maal display-message -p -t gamma '#{pane_id}')
 printf '{"tmux":"gamma:@0.%s","status":"idle","updatedAt":%s000}' "$pane" "$(date +%s)" > "$KONFIG/sessions/gamma.json"
 sleep 2.5
@@ -94,6 +94,9 @@ sleep 0.3
 tmux -L nerdr-vert send-keys -t vert C-b w
 sleep 0.5
 tmux -L nerdr-vert capture-pane -p -t vert
+
+echo "=== nerdr har skrevet når du var inne i gamma, i @nerdr-sett på panen (skal være 1) ==="
+tmux -L nerdr-maal show-options -p -t gamma -v @nerdr-sett | grep -c '^[0-9]*$'
 
 echo "=== k opp til alfa, så klikk på gamma nederst (rad 14) går inn i gamma ==="
 tmux -L nerdr-vert send-keys -t vert k
@@ -336,9 +339,9 @@ tmux -L nerdr-vert send-keys -t vert q
 sleep 0.5
 tmux -L nerdr-maal list-clients
 
-echo "=== nerdr liste: alfa venter, gamma og prosjekt.ny er klare ==="
+echo "=== nerdr liste: alfa venter, gamma og prosjekt.ny er klare, og alle tre har sett med et tall ==="
 CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal liste
-CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal liste --json | grep -o -e '"versjon":1' -e '"tilstand":"[a-z]*"' | tr '\n' ' '
+CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal liste --json | grep -o -e '"versjon":1' -e '"tilstand":"[a-z]*"' -e '"sett":[0-9n]' | tr '\n' ' '
 echo
 
 echo "=== nerdr samtaler: Fiks testene i annet, med id abc-123 ==="

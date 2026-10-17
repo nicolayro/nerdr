@@ -50,6 +50,7 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
                     "branch": s.mappe.as_deref().and_then(git::branch),
                     "oppgave": p.oppgave(),
                     "samtale": s.samtale,
+                    "sett": p.sett,
                 })
             })
             .collect();
