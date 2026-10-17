@@ -24,8 +24,9 @@ use nerdr_kjerne::register::{self, Claude};
 use nerdr_kjerne::sgr::{self, Linje};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
-    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
+    EnableFocusChange, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton,
+    MouseEvent, MouseEventKind,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
@@ -76,6 +77,17 @@ enum Lukke {
 enum Fokus {
     Liste,
     Pane,
+}
+
+/// Det et klikk der musen står, ville truffet.
+#[derive(PartialEq)]
+enum Mål {
+    /// Pane-id-en til Claude-en i lista.
+    Kort(String),
+    /// Id-en til vinduet.
+    Fane(String),
+    /// En pane i vinduet som tastene ikke går til.
+    Pane(String),
 }
 
 struct App {
@@ -146,6 +158,9 @@ struct App {
     /// Det som lukkes hvis du svarer `y`.
     lukke: Option<Lukke>,
     visning: Rect,
+    /// Kolonne og rad, til terminalen mister fokus. Terminalen sier ikke fra
+    /// når musen forlater vinduet.
+    musen: Option<(u16, u16)>,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
     hjelp: bool,
@@ -234,10 +249,10 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
     });
 
     let mut terminal = ratatui::init();
-    execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste)?;
+    execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange)?;
     let mut app = App::ny(kontroll);
     let res = app.løkke(&mut terminal, &rx);
-    let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste);
+    let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste, DisableFocusChange);
     ratatui::restore();
 
     res?;
@@ -285,6 +300,7 @@ impl App {
             etter_prefiks: false,
             lukke: None,
             visning: Rect::default(),
+            musen: None,
             velger: None,
             hjelp: false,
             nye: HashMap::new(),
@@ -381,6 +397,7 @@ impl App {
                     false
                 }
             },
+            Hendelse::Term(Event::FocusLost) => self.musen.take().is_some(),
             Hendelse::Term(Event::Resize(..)) => true,
             Hendelse::Term(_) => false,
         }
@@ -943,6 +960,33 @@ impl App {
     }
 
     fn mus(&mut self, m: MouseEvent) -> bool {
+        let før = self.under_musen();
+        self.musen = Some((m.column, m.row));
+        let flyttet = self.under_musen() != før;
+        self.håndter_mus(m) || flyttet
+    }
+
+    /// Regnes ut på nytt hver gang, så det følger med når lista flytter seg
+    /// under en mus som står stille.
+    fn under_musen(&self) -> Option<Mål> {
+        let (x, y) = self.musen?;
+        if self.velger.is_some() || self.hjelp {
+            return None;
+        }
+        let v = self.visning;
+        if x < v.x {
+            return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
+        }
+        if y < v.y {
+            return tegn::fane_på(self, x).map(Mål::Fane);
+        }
+        let inni = |r: Rect| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
+        let boks = self.bokser().into_iter().find(|b| inni(b.ramme.unwrap_or(b.innhold)))?;
+        let aktiv = self.aktiv().is_some_and(|p| p.id == boks.pane);
+        (self.fokus == Fokus::Liste || !aktiv).then_some(Mål::Pane(boks.pane))
+    }
+
+    fn håndter_mus(&mut self, m: MouseEvent) -> bool {
         if self.velger.is_some() || self.hjelp {
             return false;
         }

@@ -16,7 +16,7 @@ use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf, tittel};
 use crate::ny::Velger;
 use crate::tekst::{mappenavn, varighet};
-use crate::{App, Fokus, Lukke, hjelp};
+use crate::{App, Fokus, Lukke, Mål, hjelp};
 
 /// Bredden på lista, med skillelinja.
 pub const LISTE: u16 = 36;
@@ -35,23 +35,38 @@ const STERK: Style = Style::new().add_modifier(Modifier::BOLD);
 const VANLIG: Style = Style::new();
 const SVAK: Style = Style::new().add_modifier(Modifier::DIM);
 
-/// Så mye av forgrunnen som blandes inn i bakgrunnen der noe er valgt.
+/// Så mye av forgrunnen som blandes inn i bakgrunnen der noe er valgt, og der
+/// musen står.
 const MARKERT_ANDEL: f32 = 0.12;
+const UNDER_MUSEN_ANDEL: f32 = 0.06;
 
 static MARKERT: OnceLock<Option<Color>> = OnceLock::new();
+static UNDER_MUSEN: OnceLock<Option<Color>> = OnceLock::new();
 
 /// Valgt kort og fane får terminalens bakgrunn blandet med litt av forgrunnen,
 /// så markeringen er like diskré i alle fargetemaer. Svarer ikke terminalen,
 /// står de uten bakgrunn, med peker og fet tekst.
 pub fn bruk_farger(farger: Option<(Rgb, Rgb)>) {
-    let _ = MARKERT.set(farger.map(|(fg, bg)| {
-        let (r, g, b) = bland(bg, fg, MARKERT_ANDEL);
-        Color::Rgb(r, g, b)
-    }));
+    let blandet = |andel| {
+        farger.map(|(fg, bg)| {
+            let (r, g, b) = bland(bg, fg, andel);
+            Color::Rgb(r, g, b)
+        })
+    };
+    let _ = MARKERT.set(blandet(MARKERT_ANDEL));
+    let _ = UNDER_MUSEN.set(blandet(UNDER_MUSEN_ANDEL));
 }
 
 fn markert() -> Style {
-    MARKERT.get().copied().flatten().map_or(Style::new(), |c| Style::new().bg(c))
+    bakgrunn(&MARKERT)
+}
+
+fn under_musen() -> Style {
+    bakgrunn(&UNDER_MUSEN)
+}
+
+fn bakgrunn(farge: &OnceLock<Option<Color>>) -> Style {
+    farge.get().copied().flatten().map_or(Style::new(), |c| Style::new().bg(c))
 }
 
 /// Til høyre for lista, under faneraden.
@@ -63,9 +78,10 @@ pub fn alt(f: &mut Frame, app: &App) {
     let område = f.area();
     let buf = f.buffer_mut();
     let bokser = app.bokser();
-    tegn_liste(buf, område, app);
-    tegn_faner(buf, app);
-    tegn_pane(buf, app, &bokser);
+    let mus = app.under_musen();
+    tegn_liste(buf, område, app, mus.as_ref());
+    tegn_faner(buf, app, mus.as_ref());
+    tegn_pane(buf, app, &bokser, mus.as_ref());
 
     if app.hjelp {
         tegn_hjelp(buf, område, &app.prefiks.navn());
@@ -80,7 +96,7 @@ pub fn alt(f: &mut Frame, app: &App) {
     }
 }
 
-fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
+fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let bredde = LISTE - 1;
     let hint_y = område.height.saturating_sub(1);
 
@@ -109,7 +125,8 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
                 let Some(kort) = kort else { continue };
                 let område = Rect::new(0, y, bredde, høyde.min(hint_y - y));
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
-                tegn_kort(buf, område, &kort, merke, valgt, app.fokus);
+                let pekt = matches!(mus, Some(Mål::Kort(id)) if *id == pane.id);
+                tegn_kort(buf, område, &kort, merke, valgt, app.fokus, pekt);
             }
         }
     }
@@ -182,10 +199,12 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
     Kort { tittel, under, branch: app.brancher.get(&pane.id).cloned(), tid }
 }
 
-fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus) {
+fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus, pekt: bool) {
     let dempet = !valgt && merke.gruppe() == Gruppe::Ferdig;
     if valgt && fokus == Fokus::Liste {
         buf.set_style(område, markert());
+    } else if pekt {
+        buf.set_style(område, under_musen());
     }
     let (peker, tittelstil) = match (valgt, dempet) {
         (true, _) => ("▎", STERK),
@@ -349,13 +368,15 @@ fn faner(app: &App) -> Vec<Fane> {
 
 /// Vinduene i sesjonen på en strek i øverste rad, som fortsetter overskriften
 /// i lista. Vinduet som vises, har bakgrunn.
-fn tegn_faner(buf: &mut Buffer, app: &App) {
+fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
     let v = app.visning;
     buf.set_string(v.x, 0, "─".repeat(v.width as usize), SVAK);
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
-        let stil = match f.vist {
-            true => markert().add_modifier(Modifier::BOLD),
-            false => SVAK,
+        let pekt = matches!(mus, Some(Mål::Fane(vindu)) if *vindu == f.vindu);
+        let stil = match (f.vist, pekt) {
+            (true, _) => markert().add_modifier(Modifier::BOLD),
+            (false, true) => under_musen(),
+            (false, false) => SVAK,
         };
         buf.set_string(f.fra, 0, format!(" {} ", f.navn), stil);
     }
@@ -513,7 +534,7 @@ fn bryt(tekst: &str, bredde: usize, maks: usize) -> Vec<String> {
     linjer
 }
 
-fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
+fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
     let v = app.visning;
     if v.width == 0 {
         return;
@@ -522,20 +543,24 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
         buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, SVAK);
         return;
     }
-    let aktiv = app.aktiv().map(|p| p.id.as_str());
+    // Den aktive har vanlig farge når du er inne i vinduet, så du ser hvor
+    // tastene går. Den under musen får det samme, fordi et klikk gjør den aktiv.
+    let aktiv = app.aktiv().map(|p| p.id.as_str()).filter(|_| app.fokus == Fokus::Pane);
+    let lyse: Vec<&Boks> = bokser
+        .iter()
+        .filter(|b| aktiv == Some(&b.pane) || matches!(mus, Some(Mål::Pane(id)) if *id == b.pane))
+        .collect();
     for boks in bokser {
         if let Some(bilde) = app.bilder.get(&boks.pane) {
             tegn_bilde(buf, boks.innhold, bilde);
         }
         if let Some(ramme) = boks.ramme {
-            // Den aktive har vanlig farge når du er inne i vinduet, så du ser
-            // hvor tastene går.
-            let stil = if app.fokus == Fokus::Pane && aktiv == Some(&boks.pane) { VANLIG } else { SVAK };
+            let stil = if lyse.iter().any(|b| b.pane == boks.pane) { VANLIG } else { SVAK };
             tegn_ramme(buf, ramme, stil);
         }
     }
     if app.rammer == Rammer::Linjer && bokser.len() > 1 {
-        tegn_linjer(buf, app, bokser);
+        tegn_linjer(buf, app, bokser, &lyse);
     }
     if let (true, Some(boks)) = (app.rull > 0, aktiv_boks(app, bokser)) {
         let hvor = format!(" {}/{} ", app.rull, app.historie);
@@ -571,14 +596,13 @@ fn tegn_bilde(buf: &mut Buffer, område: Rect, bilde: &[Linje]) {
 /// Rutene i vinduet som ingen pane dekker, er strekene tmux legger mellom
 /// panene. Tegnet i hver rute avhenger av hvilke naboer som også er strek, så
 /// kryss og hjørner blir riktige.
-fn tegn_linjer(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
+fn tegn_linjer(buf: &mut Buffer, app: &App, bokser: &[Boks], lyse: &[&Boks]) {
     let Some(oppsett) = app.oppsett() else { return };
     let v = app.visning;
     let (bredde, høyde) = (oppsett.bredde.min(v.width), oppsett.høyde.min(v.height));
     let inni = |r: Rect, x: u16, y: u16| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
     let dekket = |x: u16, y: u16| bokser.iter().any(|b| inni(b.innhold, v.x + x, v.y + y));
     let strek = |x: i32, y: i32| x >= 0 && y >= 0 && x < bredde as i32 && y < høyde as i32 && !dekket(x as u16, y as u16);
-    let aktiv = aktiv_boks(app, bokser).filter(|_| app.fokus == Fokus::Pane).map(|b| b.innhold);
     for y in 0..høyde {
         for x in 0..bredde {
             if dekket(x, y) {
@@ -586,12 +610,11 @@ fn tegn_linjer(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
             }
             let (xi, yi) = (x as i32, y as i32);
             let tegn = rammetegn(strek(xi, yi - 1), strek(xi, yi + 1), strek(xi - 1, yi), strek(xi + 1, yi));
-            // Strekene rundt den aktive har vanlig farge, så du ser hvor tastene går.
-            let ved_aktiv = aktiv.is_some_and(|a| {
+            let ved_lys = lyse.iter().map(|b| b.innhold).any(|a| {
                 let (x, y) = (v.x + x, v.y + y);
                 x + 1 >= a.x && x <= a.right() && y + 1 >= a.y && y <= a.bottom()
             });
-            let stil = if ved_aktiv { VANLIG } else { SVAK };
+            let stil = if ved_lys { VANLIG } else { SVAK };
             buf.set_string(v.x + x, v.y + y, tegn, stil);
         }
     }
