@@ -1,19 +1,24 @@
 #!/bin/sh
 # Kjører nerdr inne i én tmux-server og lar den vise en annen, med et falskt
 # sesjonsregister. Ingenting av det er brukerens eget. Bygg med `cargo build`
-# først. Skriver bare ut det som feiler, med skjermen til nerdr, og går ut med 1
-# når noe feiler.
+# først. Stopper ved første sjekk som feiler, skriver den ut med skjermen til
+# nerdr og går ut med 1. Sjekkene bygger på hverandre, så de etter en feil
+# sier lite.
 HER=$(cd "$(dirname "$0")" && pwd)
 ROT=$(cd "$HER/.." && pwd -P)
 NERDR=$ROT/target/debug/nerdr
 FALSK=$HER/falsk-claude.sh
 KONFIG=$(mktemp -d)
+# Egne servere for hver kjøring, så to kjøringer samtidig, som fra to
+# worktrees, ikke dreper hverandres.
+MAAL=nerdr-maal-$$
+VERT=nerdr-vert-$$
+TOM=nerdr-tom-$$
 antall=0
-feil=0
 
-maal() { tmux -L nerdr-maal "$@"; }
-vert() { tmux -L nerdr-vert "$@"; }
-tast() { tmux -L nerdr-vert send-keys -t vert "$@"; }
+maal() { tmux -L "$MAAL" "$@"; }
+vert() { tmux -L "$VERT" "$@"; }
+tast() { tmux -L "$VERT" send-keys -t vert "$@"; }
 klikk() { tast -l "$(printf '\033[<0;%s;%sM\033[<0;%s;%sm' "$1" "$2" "$1" "$2")"; }
 hjul() { tast -l "$(printf '\033[<%s;%s;%sM' "$1" "$2" "$3")"; }
 skjerm() { vert capture-pane -p -t vert; }
@@ -28,11 +33,10 @@ sjekk() {
   until "$@" > /dev/null 2>&1; do
     i=$((i + 1))
     if [ $i -ge 80 ]; then
-      feil=$((feil + 1))
-      echo "FEIL: $hva"
+      echo "FEIL i sjekk $antall: $hva"
       echo "  ($*)"
       skjerm | sed 's/^/  │/'
-      return 1
+      exit 1
     fi
     sleep 0.05
   done
@@ -65,9 +69,9 @@ uten_klienter() { [ -z "$(maal list-clients)" ]; }
 i_lista() { linje_har 16 '^ \? hjelp'; }
 i_panen() { linje_har 16 '^ C-b \? hjelp'; }
 nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
-gruppert() { nerdr -L nerdr-maal liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
-fra_json() { nerdr -L nerdr-maal liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
-sett_i_json() { nerdr -L nerdr-maal liste --json | grep -o '"sett":[0-9]' | wc -l | tr -d ' '; }
+gruppert() { nerdr -L "$MAAL" liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
+fra_json() { nerdr -L "$MAAL" liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
+sett_i_json() { nerdr -L "$MAAL" liste --json | grep -o '"sett":[0-9]' | wc -l | tr -d ' '; }
 
 # registrer <fil> <sesjon> <status> [flere JSON-felt]
 #
@@ -93,8 +97,16 @@ mkdir -p "$KONFIG/projects/annet"
 printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
 printf '{"type":"user","cwd":"%s"}\n{"type":"last-prompt"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/tom.jsonl"
 
-for server in nerdr-maal nerdr-vert nerdr-tom; do tmux -L $server kill-server 2>/dev/null; done
-trap 'for server in nerdr-maal nerdr-vert nerdr-tom; do tmux -L $server kill-server 2>/dev/null; done; rm -r "$KONFIG"' EXIT
+# tmux lar socket-fila ligge igjen, og med nye navn hver gang ville de hopet seg opp.
+rydd() {
+  for server in "$MAAL" "$VERT" "$TOM"; do
+    tmux -L "$server" kill-server 2>/dev/null
+    rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$server"
+  done
+  rm -rf "$KONFIG"
+}
+trap rydd EXIT
+trap 'exit 1' INT TERM
 
 maal -f /dev/null new-session -d -s alfa -x 80 -y 20 -c "$ROT" "sh $FALSK"
 maal new-session -d -s beta -x 80 -y 20 /bin/sh
@@ -108,7 +120,7 @@ registrer alfa alfa waiting ",\"cwd\":\"$ROT\""
 registrer gamma gamma busy ",\"cwd\":\"$ROT\""
 
 vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
-  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
+  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
 sjekk "alfa står under VENTER med ●, og oppgaven har <1m til høyre" linje_har 3 'Fiks testene +<1m │'
 sjekk "alfa er valgt" linje_har 2 '^▎●  nerdr '
@@ -330,26 +342,25 @@ sjekk "nerdr liste grupperer som TUI-et: alfa venter, og prosjekt.ny og gamma er
 sjekk "nerdr liste --json har tilstanden fra Claude" er 'venter klar klar ' fra_json tilstand
 sjekk "nerdr liste --json har merket" er 'spør sett sett ' fra_json merke
 sjekk "nerdr liste --json har gruppen" er 'venter ferdig ferdig ' fra_json gruppe
-sjekk "nerdr liste --json har versjon" inneholder "$(nerdr -L nerdr-maal liste --json)" '"versjon":1'
+sjekk "nerdr liste --json har versjon" inneholder "$(nerdr -L "$MAAL" liste --json)" '"versjon":1'
 sjekk "alle tre har sett med et tall" er 3 sett_i_json
 sjekk "nerdr samtaler viser Fiks testene i annet, med id" inneholder "$(nerdr samtaler)" 'abc-123  annet  Fiks testene'
 
-ut=$(nerdr -L nerdr-maal ny "$KONFIG/kode/tredje")
+ut=$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje")
 sjekk "nerdr ny lager sesjonen tredje" inneholder "$ut" 'tmux-sesjonen tredje'
 sjekk "og skriver inn claude" i_pane tredje claude
-ut=$(nerdr -L nerdr-maal ny --fortsett abc-123 --json)
+ut=$(nerdr -L "$MAAL" ny --fortsett abc-123 --json)
 sjekk "nerdr ny --fortsett finner mappa annet" inneholder "$ut" '"sesjon":"annet"'
 sjekk "og gir et nytt vindu der" linjer 2 maal list-windows -t annet
 sjekk "med claude --resume" i_pane annet:1 'claude --resume abc-123'
 
 registrer tredje tredje busy ',"sessionId":"abc-123"'
-sjekk "en samtale som kjører, startes ikke en gang til" inneholder "$(nerdr -L nerdr-maal ny --fortsett abc-123)" 'samtalen abc-123 kjører alt'
-sjekk "ukjent id gir feil" inneholder "$(nerdr -L nerdr-maal ny --fortsett finnes-ikke)" 'fant ingen samtale med id finnes-ikke'
+sjekk "en samtale som kjører, startes ikke en gang til" inneholder "$(nerdr -L "$MAAL" ny --fortsett abc-123)" 'samtalen abc-123 kjører alt'
+sjekk "ukjent id gir feil" inneholder "$(nerdr -L "$MAAL" ny --fortsett finnes-ikke)" 'fant ingen samtale med id finnes-ikke'
 maal kill-server
 
-vert new-session -d -s tom "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-tom; sleep 30"
-sjekk "uten tmux-server lager nerdr en sesjon" linjer 1 tmux -L nerdr-tom list-sessions
+vert new-session -d -s tom "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $TOM; sleep 30"
+sjekk "uten tmux-server lager nerdr en sesjon" linjer 1 tmux -L "$TOM" list-sessions
 sjekk "uten tmux sier nerdr fra" inneholder "$(PATH=/finnes-ikke "$NERDR" 2>&1)" 'fant ikke tmux'
 
-echo "$antall sjekker, $feil feilet"
-[ $feil -eq 0 ]
+echo "$antall sjekker, alle grønne"
