@@ -16,13 +16,11 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
 ## Før commit
 
 ```
-cargo test && cargo clippy --all-targets
-cargo build && scripts/tui-test.sh
+cargo test && cargo clippy --all-targets && cargo build && scripts/tui-test.sh
 scripts/installer-test.sh    # når installer.sh eller avinstaller.sh er endret
 ```
 
-`tui-test.sh` sjekker ingenting selv. Les utskriften mot det hver `===`-linje
-sier skal vises.
+`tui-test.sh` skriver bare ut sjekkene som feiler, med skjermen til nerdr.
 
 ## Konvensjoner
 

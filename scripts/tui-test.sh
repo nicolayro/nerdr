@@ -1,12 +1,89 @@
 #!/bin/sh
 # Kjører nerdr inne i én tmux-server og lar den vise en annen, med et falskt
 # sesjonsregister. Ingenting av det er brukerens eget. Bygg med `cargo build`
-# først. Forventningene gjelder bokser, og NERDR_RAMMER=linjer foran kjører
-# den med linjer.
+# først. Skriver bare ut det som feiler, med skjermen til nerdr, og går ut med 1
+# når noe feiler.
 HER=$(cd "$(dirname "$0")" && pwd)
-NERDR=$HER/../target/debug/nerdr
+ROT=$(cd "$HER/.." && pwd -P)
+NERDR=$ROT/target/debug/nerdr
 FALSK=$HER/falsk-claude.sh
 KONFIG=$(mktemp -d)
+antall=0
+feil=0
+
+maal() { tmux -L nerdr-maal "$@"; }
+vert() { tmux -L nerdr-vert "$@"; }
+tast() { tmux -L nerdr-vert send-keys -t vert "$@"; }
+klikk() { tast -l "$(printf '\033[<0;%s;%sM\033[<0;%s;%sm' "$1" "$2" "$1" "$2")"; }
+hjul() { tast -l "$(printf '\033[<%s;%s;%sM' "$1" "$2" "$3")"; }
+skjerm() { vert capture-pane -p -t vert; }
+
+# Kjører resten av argumentene på nytt til de lykkes, i opptil fire sekunder.
+# Lista fra registeret leses hvert annet sekund, så det må være lenger enn det.
+sjekk() {
+  hva=$1
+  shift
+  antall=$((antall + 1))
+  i=0
+  until "$@" > /dev/null 2>&1; do
+    i=$((i + 1))
+    if [ $i -ge 80 ]; then
+      feil=$((feil + 1))
+      echo "FEIL: $hva"
+      echo "  ($*)"
+      skjerm | sed 's/^/  │/'
+      return 1
+    fi
+    sleep 0.05
+  done
+}
+
+linje_har() { skjerm | sed -n "$1p" | grep -Eq -- "$2"; }
+linje_mangler() { ! linje_har "$@"; }
+har() { skjerm | grep -Eq -- "$1"; }
+mangler() { ! har "$1"; }
+i_pane() { maal capture-pane -p -t "$1" | grep -qF -- "$2"; }
+er() {
+  forventet=$1
+  shift
+  [ "$("$@")" = "$forventet" ]
+}
+inneholder() { case $1 in *"$2"*) ;; *) return 1 ;; esac; }
+linjer() {
+  n=$1
+  shift
+  [ "$("$@" | wc -l | tr -d ' ')" = "$n" ]
+}
+tell() { skjerm | grep -o -- "$1" | wc -l | tr -d ' '; }
+dimensjon() { maal display-message -p -t "$1" '#{window_width}x#{window_height}'; }
+pane_indeks() { maal display-message -p -t alfa:0 '#{pane_index}'; }
+vindu_indeks() { maal display-message -p -t alfa '#{window_index}'; }
+zoom() { maal display-message -p -t alfa:0 '#{window_zoomed_flag}'; }
+mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
+sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
+uten_klienter() { [ -z "$(maal list-clients)" ]; }
+i_lista() { linje_har 16 '^ \? hjelp'; }
+i_panen() { linje_har 16 '^ C-b \? hjelp'; }
+nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
+tilstander() { nerdr -L nerdr-maal liste | cut -d' ' -f1 | tr '\n' ' '; }
+sett_i_json() { nerdr -L nerdr-maal liste --json | grep -o '"sett":[0-9]' | wc -l | tr -d ' '; }
+
+# registrer <fil> <sesjon> <status> [flere JSON-felt]
+#
+# Tiden er i millisekunder, som fra Claude Code. Med hele sekunder kan en
+# Claude bli ferdig før du sist var inne i den, og havne i FERDIG.
+registrer() {
+  pane=$(maal display-message -p -t "$2" '#{pane_id}')
+  printf '{"tmux":"%s:@0.%s","status":"%s","updatedAt":%s%s}' \
+    "$2" "$pane" "$3" "$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000')" "$4" > "$KONFIG/sessions/$1.json"
+}
+# En sesjon som kommer og går, får nerdr til å liste med en gang, så testen
+# slipper å vente på intervallet.
+list_straks() {
+  maal new-session -d -s puff /bin/cat
+  maal kill-session -t puff
+}
+
 mkdir "$KONFIG/sessions"
 # HOME for nerdr, så mappevelgeren viser disse mappene og ikke brukerens egne.
 mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/kode/tredje"
@@ -15,366 +92,259 @@ mkdir -p "$KONFIG/projects/annet"
 printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
 printf '{"type":"user","cwd":"%s"}\n{"type":"last-prompt"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/tom.jsonl"
 
-tmux -L nerdr-maal kill-server 2>/dev/null
-tmux -L nerdr-vert kill-server 2>/dev/null
+for server in nerdr-maal nerdr-vert nerdr-tom; do tmux -L $server kill-server 2>/dev/null; done
+trap 'for server in nerdr-maal nerdr-vert nerdr-tom; do tmux -L $server kill-server 2>/dev/null; done; rm -r "$KONFIG"' EXIT
 
-tmux -L nerdr-maal -f /dev/null new-session -d -s alfa -x 80 -y 20 "sh $FALSK"
-tmux -L nerdr-maal new-session -d -s beta -x 80 -y 20 /bin/sh
-tmux -L nerdr-maal new-session -d -s gamma -x 80 -y 20 /bin/cat
+maal -f /dev/null new-session -d -s alfa -x 80 -y 20 -c "$ROT" "sh $FALSK"
+maal new-session -d -s beta -x 80 -y 20 /bin/sh
+maal new-session -d -s gamma -x 80 -y 20 /bin/cat
 # Nye sesjoner får cat i stedet for et skall, så «claude» som skrives inn,
 # bare blir stående.
-tmux -L nerdr-maal set -g default-command /bin/cat
+maal set -g default-command /bin/cat
 
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
-for linje in "alfa waiting" "gamma busy"; do
-  set -- $linje
-  pane=$(tmux -L nerdr-maal display-message -p -t "$1" '#{pane_id}')
-  printf '{"tmux":"%s:@0.%s","status":"%s","cwd":"%s","updatedAt":%s000}' "$1" "$pane" "$2" "$(dirname "$HER")" "$(date +%s)" > "$KONFIG/sessions/$1.json"
-done
+registrer alfa alfa waiting ",\"cwd\":\"$ROT\""
+registrer gamma gamma busy ",\"cwd\":\"$ROT\""
 
-tmux -L nerdr-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
-  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=${NERDR_RAMMER:-bokser} CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
-sleep 2
+vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
+  "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-maal; sleep 30"
 
-echo "=== nerdr etter oppstart (alfa ● under VENTER, gamma ◐ under JOBBER, ingen beta) ==="
-echo "=== kortene viser mappa med branchen helt til høyre, og alfa har oppgaven under med <1m til høyre. gamma har ingen oppgave og har <1m til høyre for branchen. Øverst står fanen gcat på en strek som fortsetter overskriften med ┬, og JOBBER treffer skillestreken med ┤ ==="
-tmux -L nerdr-vert capture-pane -p -t vert
-echo "=== størrelse på alfa (skal være 68x12 med bokser, 74x15 med linjer) ==="
-tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
+sjekk "alfa står under VENTER med ●, og oppgaven har <1m til høyre" linje_har 3 'Fiks testene +<1m │'
+sjekk "alfa er valgt" linje_har 2 '^▎●  nerdr '
+sjekk "fanen står på en strek som fortsetter overskriften med ┬" linje_har 1 '^ VENTER .*┬─ [^ ]+ ─'
+sjekk "JOBBER treffer skillestreken med ┤" linje_har 5 '^ JOBBER .*┤'
+sjekk "gamma står under JOBBER med ◐, uten oppgave og med <1m til høyre for branchen" linje_har 6 '^ ◐  nerdr .* <1m │'
+sjekk "beta har ingen Claude og vises ikke" mangler beta
+sjekk "alfa får størrelsen til boksen" er 68x12 dimensjon alfa
 
-echo "=== tastetrykk: Enter for fokus, så «hei æ» og Enter til alfa ==="
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert -l 'hei æ'
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.8
-tmux -L nerdr-maal capture-pane -p -t alfa | grep -n 'hei'
+tast Enter
+tast -l 'hei æ'
+tast Enter
+sjekk "Enter går inn i alfa, og det du skriver, havner der" i_pane alfa 'hei æ'
 
-echo "=== innliming av to linjer, pakket i ^[[200~ … ^[[201~ ==="
-tmux -L nerdr-vert set-buffer -b test "$(printf 'linje én\n$HOME "to"')"
-tmux -L nerdr-vert paste-buffer -p -d -b test -t vert
-sleep 0.8
-tmux -L nerdr-maal capture-pane -p -t alfa | grep -n -e 'linje' -e 'HOME'
+vert set-buffer -b test "$(printf 'linje én\n$HOME "to"')"
+vert paste-buffer -p -d -b test -t vert
+sjekk "innliming starter med ^[[200~" i_pane alfa '^[[200~linje én'
+sjekk "innliming slutter med ^[[201~, uten at tmux utvider \$HOME" i_pane alfa '$HOME "to"^[[201~'
 
-echo "=== musehjul i kolonne 41, rad 4 (skal komme fram som ^[[<64;2;1M med bokser, ^[[<64;5;3M med linjer) ==="
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;41;4M')"
-sleep 0.8
-tmux -L nerdr-maal capture-pane -p -t alfa | grep -n '<64'
+hjul 64 41 4
+sjekk "musehjulet kommer fram i alfa, regnet fra boksen" i_pane alfa '^[[<64;2;1M'
 
-echo "=== alfa blir ferdig mens du er inne, og står fortsatt under VENTER, med ○ ==="
-alfa=$(tmux -L nerdr-maal display-message -p -t alfa '#{pane_id}')
-for status in idle waiting; do
-  printf '{"tmux":"alfa:@0.%s","status":"%s","cwd":"%s","updatedAt":%s000}' "$alfa" "$status" "$(dirname "$HER")" "$(date +%s)" > "$KONFIG/sessions/alfa.json"
-  sleep 2.5
-  [ $status = idle ] && tmux -L nerdr-vert capture-pane -p -t vert | head -3
-done
+# Denne venter på intervallet, ikke på list_straks.
+registrer alfa alfa idle ",\"cwd\":\"$ROT\""
+sjekk "alfa blir ferdig mens du er inne, og står fortsatt under VENTER, med ○" linje_har 2 '^▎○  nerdr '
+registrer alfa alfa waiting ",\"cwd\":\"$ROT\""
+list_straks
 
-echo "=== C-b w tilbake, j ned til gamma ==="
-tmux -L nerdr-vert send-keys -t vert C-b w
-sleep 0.2
-tmux -L nerdr-vert send-keys -t vert j
-sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | head -7
+tast C-b w j
+sjekk "C-b w og j velger gamma" linje_har 6 '^▎◐  nerdr '
+sjekk "alfa venter igjen" linje_har 2 '^ ●  nerdr '
 
-echo "=== klikk på andre rad går rett inn i alfa ==="
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;2M\033[<0;5;2m')"
-sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,7p;16p'
-tmux -L nerdr-vert send-keys -t vert C-b w
+klikk 5 2
+sjekk "klikk på andre rad går rett inn i alfa" linje_har 2 '^▎●  nerdr '
+sjekk "inne i panen viser hintet prefikset" i_panen
+tast C-b w
+sjekk "C-b w går tilbake til lista" i_lista
 
-echo "=== gamma blir ferdig og havner under VENTER med ◆ under alfa, med <1m til høyre, og uten cwd står gamma:0 ==="
-pane=$(tmux -L nerdr-maal display-message -p -t gamma '#{pane_id}')
-printf '{"tmux":"gamma:@0.%s","status":"idle","updatedAt":%s000}' "$pane" "$(date +%s)" > "$KONFIG/sessions/gamma.json"
-sleep 2.5
-tmux -L nerdr-vert capture-pane -p -t vert | head -7
+registrer gamma gamma idle
+list_straks
+sjekk "gamma blir ferdig og havner under VENTER med ◆, og uten cwd står gamma:0" linje_har 5 '^ ◆  gamma:0 +<1m │'
+sjekk "streken mellom kortene i VENTER" linje_har 4 '┈'
 
-echo "=== inn i gamma og ut igjen, så står den under FERDIG med ○, nederst ==="
-tmux -L nerdr-vert send-keys -t vert j Enter
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert C-b w
+tast j Enter
+sjekk "j og Enter går inn i gamma" i_panen
+tast C-b w
+sjekk "gamma står under FERDIG med ○, nederst" linje_har 14 '^▎○  gamma:0'
+sjekk "FERDIG treffer skillestreken" linje_har 13 '^ FERDIG .*┤'
+sjekk "nerdr har skrevet når du var inne i gamma, i @nerdr-sett" sett_er_tall gamma
+
+tast k
+sjekk "k opp til alfa" linje_har 2 '^▎●  nerdr '
+klikk 5 14
+sjekk "klikk på gamma nederst velger den" linje_har 14 '^▎○  gamma:0'
+sjekk "klikk på gamma går inn i den" i_panen
+tast C-b w
+sjekk "tilbake i lista" i_lista
+
+klikk 3 16
+sjekk "klikk på «? hjelp» viser hjelpen" har 'trykk en tast for å lukke'
+tast x
+sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
+tast '?'
+sjekk "? viser hjelpen med prefikstastene" har 'C-b c +nytt vindu i mappa til panen'
+tast x
+sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
+
+tast n
+sjekk "n åpner popupen med 3 mapper" linje_har 2 'mappe › .*3/3'
+sjekk "~/git/annet står først og er valgt" linje_har 3 '▎~/git/annet'
+sjekk "så ~/git/prosjekt.ny" linje_har 4 '~/git/prosjekt\.ny'
+sjekk "så mappa i kode" linje_har 5 '~/kode/tredje'
+tast -l pny
+sjekk "«pny» treffer bare prosjekt.ny" linje_har 2 'mappe › pny .*1/3'
+sjekk "prosjekt.ny er valgt" linje_har 3 '▎~/git/prosjekt\.ny'
+
+tast Enter
+sjekk "Enter lager sesjonen prosjekt-ny i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny
+sjekk "claude skrives inn i prosjekt-ny" i_pane prosjekt-ny claude
+sjekk "nerdr er inne i prosjekt.ny, med ◌" linje_har 6 '^▎◌  prosjekt\.ny'
+sjekk "kortet sier «starter …»" linje_har 7 'starter …'
+sjekk "hintet viser at du er inne" i_panen
+
+registrer ny prosjekt-ny idle ",\"cwd\":\"$KONFIG/git/prosjekt.ny\""
+list_straks
+sjekk "i registeret får prosjekt.ny vanlig merke" linje_har 6 '^▎○  prosjekt\.ny'
+sjekk "og mister «starter …»" linje_mangler 7 'starter'
+
+tast C-b w n
+sjekk "popupen åpner igjen" har 'mappe ›'
+tast -l pny
+sjekk "«pny» igjen" linje_har 2 '1/3'
+tast Enter
+sjekk "samme mappe igjen gir et nytt vindu i prosjekt-ny" linjer 2 maal list-windows -t prosjekt-ny
+sjekk "nerdr er inne i det nye vinduet" i_panen
+
+tast C-b w C-r
+sjekk "C-r viser tidligere samtaler" linje_har 1 'tidligere samtaler'
+sjekk "bare samtalen med meldinger, 1/1" linje_har 2 '1/1'
+sjekk "annet  Fiks testene er valgt" linje_har 3 '▎annet  Fiks testene +nå'
+tast C-r
+sjekk "C-r bytter til mappene" linje_har 1 'ny claude'
+tast C-r
+sjekk "C-r bytter tilbake" linje_har 1 'tidligere samtaler'
+tast Enter
+sjekk "Enter lager sesjonen annet og skriver inn claude --resume abc-123" i_pane annet 'claude --resume abc-123'
+sjekk "nerdr er inne i annet" i_panen
+
+tast C-b w n
+sjekk "popupen åpner" har 'mappe ›'
+tast Escape
+sjekk "Esc lukker popupen" mangler 'mappe ›'
+sjekk "Esc går tilbake til lista" i_lista
+sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
+
+tast k k k k k k k k
+sjekk "k opp til alfa" linje_har 2 '^▎●  nerdr '
+tast C-b
+sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … w lista · c vindu · \? mer'
+
+tast %
+sjekk "% deler alfa" linjer 2 maal list-panes -t alfa:0
+sjekk "to bokser med luft mellom" linje_har 3 '╮ ╭'
+sjekk "begge panene står i nerdr-mappa" er "$ROT" mapper alfa:0
+sjekk "tmux får plass til begge boksene" er 64x12 dimensjon alfa:0
+
+tast Enter
+tast -l 'til venstre'
+sjekk "Enter går inn i Claude-en og ikke i den nye panen" i_pane alfa:0.0 'til venstre'
+klikk 90 5
+sjekk "klikk i høyre pane gjør den aktiv" er 1 pane_indeks
+tast -l 'til høyre'
+sjekk "det du skriver, havner i høyre pane" i_pane alfa:0.1 'til høyre'
+
+for i in $(seq 1 30); do maal send-keys -t alfa:0.1 "linje $i" Enter; done
+# cat ekkoer hver linje, og telleren er bare stabil når alt er kommet fram.
+sjekk "bunnen av høyre boks viser linje 30, to ganger" er 2 tell 'linje 30'
+for i in 1 2 3 4; do hjul 64 90 6; done
+sjekk "fire hakk opp gir 12/… på toppen av rammen" linje_har 3 ' 12/[0-9]+ '
+for i in 1 2; do hjul 65 90 6; done
+sjekk "to hakk ned gir 6/…" linje_har 3 ' 6/[0-9]+ '
+tast Enter
+sjekk "Enter går tilbake til bunnen uten teller" linje_mangler 3 '[0-9]+/[0-9]+'
+
+tast C-b C-b
+sjekk "C-b C-b sender ^B til panen" i_pane alfa:0.1 '^B'
+tast C-b o
+sjekk "C-b o gjør Claude-en aktiv igjen" er 0 pane_indeks
+
+tast C-b z
+sjekk "C-b z zoomer inn" er 1 zoom
+sjekk "med zoom vises bare én boks" er 1 tell '╭'
+tast C-b z
+sjekk "C-b z igjen zoomer ut" er 0 zoom
+sjekk "begge boksene er tilbake" er 2 tell '╭'
+
+maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}x#{window_height} >> $KONFIG/storrelser'"
+tast C-b ')'
+sjekk "C-b ) går til neste Claude" linje_mangler 2 '^▎'
+tast C-b '('
+sjekk "C-b ( går tilbake til alfa" linje_har 2 '^▎●  nerdr '
+# Et vindu som endrer størrelse, gjør det like etter byttet.
 sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert
+sjekk "ingen vindu endrer størrelse når du bytter Claude" [ ! -s "$KONFIG/storrelser" ]
+maal set-hook -gu window-resized
 
-echo "=== nerdr har skrevet når du var inne i gamma, i @nerdr-sett på panen (skal være 1) ==="
-tmux -L nerdr-maal show-options -p -t gamma -v @nerdr-sett | grep -c '^[0-9]*$'
+tast C-b o C-b x
+sjekk "C-b x spør" linje_har 16 'lukke panen\? y/n'
+tast n
+sjekk "n lar panen stå" linje_mangler 16 'lukke'
+sjekk "begge panene er der" linjer 2 maal list-panes -t alfa:0
+tast C-b x y
+sjekk "C-b x y lukker panen" linjer 1 maal list-panes -t alfa:0
 
-echo "=== k opp til alfa, så klikk på gamma nederst (rad 14) går inn i gamma ==="
-tmux -L nerdr-vert send-keys -t vert k
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;5;14M\033[<0;5;14m')"
-sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p;14p;16p'
-tmux -L nerdr-vert send-keys -t vert C-b w
-sleep 0.2
+tast C-b '"'
+sjekk "C-b \" deler over og under" er 2 tell '╭'
+tast C-b x y
+sjekk "C-b x y lukker den nye" linjer 1 maal list-panes -t alfa:0
+sjekk "uten split fyller Claude-en hele visningen igjen" er 68x12 dimensjon alfa:0
+tast C-b w
 
-echo "=== klikk på «? hjelp» nederst til venstre viser hjelpen, og en tast lukker den ==="
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;3;16M\033[<0;3;16m')"
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | grep -c 'trykk en tast for å lukke'
-tmux -L nerdr-vert send-keys -t vert x
-sleep 0.3
+tast C-b B
+sjekk "C-b B gir linjer, og alfa blir større" er 74x15 dimensjon alfa
+sjekk "med linjer er det ingen bokser" mangler '╭'
+tast C-b B
+sjekk "C-b B igjen gir bokser" er 68x12 dimensjon alfa
+sjekk "boksen er tilbake" har '╭'
 
-echo "=== ? viser hjelpen, og en tast lukker den ==="
-tmux -L nerdr-vert send-keys -t vert ?
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert
-tmux -L nerdr-vert send-keys -t vert x
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | tail -1
+tast C-b c
+sjekk "C-b c fra lista lager alfa:1" linjer 2 maal list-windows -t alfa
+sjekk "to faner øverst" linje_har 1 '┬─ [^ ]+ ─ [^ ]+ ─'
+sjekk "nerdr er inne i det nye vinduet" i_panen
+tast -l 'i vindu 1'
+sjekk "det du skriver, havner i alfa:1" i_pane alfa:1 'i vindu 1'
 
-echo "=== n åpner popupen med mappene i NERDR_MAPPER, ~/git og kode ==="
-tmux -L nerdr-vert send-keys -t vert n
-sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert
+tast C-b n
+sjekk "C-b n går rundt til 0" er 0 vindu_indeks
+tast C-b l
+sjekk "C-b l går tilbake til 1" er 1 vindu_indeks
+tast C-b 0
+sjekk "C-b 0 går til 0" er 0 vindu_indeks
+klikk 46 1
+sjekk "klikk på fane 1 viser vindu 1" er 1 vindu_indeks
+tast C-b w Enter
+sjekk "C-b w og Enter går inn i Claude-en i vindu 0" er 0 vindu_indeks
 
-echo "=== «pny» sorterer prosjekt.ny øverst ==="
-tmux -L nerdr-vert send-keys -t vert -l pny
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2,4p'
+tast C-b 1 C-b '&'
+sjekk "C-b & spør" linje_har 16 'lukke vinduet\? y/n'
+tast y
+sjekk "y lukker vinduet" linjer 1 maal list-windows -t alfa
+sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ ]+ ─'
+tast C-b w
 
-echo "=== Enter lager sesjonen prosjekt-ny, skriver inn claude, og nerdr er inne i den med ◌ og «starter …» ==="
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.8
-tmux -L nerdr-maal list-sessions -F '#{session_name} #{pane_current_path}' | grep prosjekt
-tmux -L nerdr-maal capture-pane -p -t prosjekt-ny | grep -c claude
-tmux -L nerdr-vert capture-pane -p -t vert
+tast q
+sjekk "q avslutter" uten_klienter
 
-echo "=== når den står i registeret, får den vanlig merke og mister «starter …» ==="
-pane=$(tmux -L nerdr-maal display-message -p -t prosjekt-ny '#{pane_id}')
-printf '{"tmux":"prosjekt-ny:@0.%s","status":"idle","cwd":"%s","updatedAt":%s000}' "$pane" "$KONFIG/git/prosjekt.ny" "$(date +%s)" > "$KONFIG/sessions/ny.json"
-sleep 2.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '5,8p;16p'
+sjekk "nerdr liste: alfa venter, gamma og prosjekt.ny er klare" er 'venter klar klar ' tilstander
+sjekk "nerdr liste --json har versjon" inneholder "$(nerdr -L nerdr-maal liste --json)" '"versjon":1'
+sjekk "alle tre har sett med et tall" er 3 sett_i_json
+sjekk "nerdr samtaler viser Fiks testene i annet, med id" inneholder "$(nerdr samtaler)" 'abc-123  annet  Fiks testene'
 
-echo "=== samme mappe igjen gir et nytt vindu i prosjekt-ny (skal være 2) ==="
-tmux -L nerdr-vert send-keys -t vert C-b w
-sleep 0.2
-tmux -L nerdr-vert send-keys -t vert n
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert -l pny
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.8
-tmux -L nerdr-maal list-windows -t prosjekt-ny | wc -l
+ut=$(nerdr -L nerdr-maal ny "$KONFIG/kode/tredje")
+sjekk "nerdr ny lager sesjonen tredje" inneholder "$ut" 'tmux-sesjonen tredje'
+sjekk "og skriver inn claude" i_pane tredje claude
+ut=$(nerdr -L nerdr-maal ny --fortsett abc-123 --json)
+sjekk "nerdr ny --fortsett finner mappa annet" inneholder "$ut" '"sesjon":"annet"'
+sjekk "og gir et nytt vindu der" linjer 2 maal list-windows -t annet
+sjekk "med claude --resume" i_pane annet:1 'claude --resume abc-123'
 
-echo "=== C-r i lista viser tidligere samtaler: bare «annet  Fiks testene», 1/1 ==="
-tmux -L nerdr-vert send-keys -t vert C-b w
-sleep 0.2
-tmux -L nerdr-vert send-keys -t vert C-r
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,4p'
+registrer tredje tredje busy ',"sessionId":"abc-123"'
+sjekk "en samtale som kjører, startes ikke en gang til" inneholder "$(nerdr -L nerdr-maal ny --fortsett abc-123)" 'samtalen abc-123 kjører alt'
+sjekk "ukjent id gir feil" inneholder "$(nerdr -L nerdr-maal ny --fortsett finnes-ikke)" 'fant ingen samtale med id finnes-ikke'
+maal kill-server
 
-echo "=== C-r der bytter til mappene og tilbake ==="
-tmux -L nerdr-vert send-keys -t vert C-r
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | grep -o -e 'tidligere samtaler' -e 'ny claude' | head -1
-tmux -L nerdr-vert send-keys -t vert C-r
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | grep -o -e 'tidligere samtaler' -e 'ny claude' | head -1
+vert new-session -d -s tom "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-tom; sleep 30"
+sjekk "uten tmux-server lager nerdr en sesjon" linjer 1 tmux -L nerdr-tom list-sessions
+sjekk "uten tmux sier nerdr fra" inneholder "$(PATH=/finnes-ikke "$NERDR" 2>&1)" 'fant ikke tmux'
 
-echo "=== Enter lager sesjonen annet og skriver inn claude --resume abc-123 ==="
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.8
-tmux -L nerdr-maal capture-pane -p -t annet | grep -m1 'claude --resume'
-
-echo "=== Esc i popupen går tilbake til lista uten ny sesjon (skal være 5 sesjoner) ==="
-tmux -L nerdr-vert send-keys -t vert C-b w
-sleep 0.2
-tmux -L nerdr-vert send-keys -t vert n
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert Escape
-sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '4p;16p'
-tmux -L nerdr-maal list-sessions | wc -l
-
-echo "=== k opp til alfa ==="
-tmux -L nerdr-vert send-keys -t vert k k k k k k k k
-sleep 0.3
-
-echo "=== C-b viser prefikstastene i hintlinja ==="
-tmux -L nerdr-vert send-keys -t vert C-b
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
-
-echo "=== % deler alfa i to bokser med luft mellom, begge i nerdr-mappa, og tmux får 64x12 (74x15 med linjer) ==="
-tmux -L nerdr-vert send-keys -t vert %
-sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,3p'
-tmux -L nerdr-maal list-panes -t alfa:0 -F '#{pane_index} #{pane_current_path}' | sed "s|$(dirname "$HER")|nerdr|"
-tmux -L nerdr-maal display-message -p -t alfa:0 '#{window_width}x#{window_height}'
-
-echo "=== Enter går inn i Claude-en og ikke i den nye panen, så «til venstre» havner i alfa:0.0 ==="
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert -l 'til venstre'
-sleep 0.5
-tmux -L nerdr-maal capture-pane -p -t alfa:0.0 | grep -c 'til venstre'
-
-echo "=== klikk i høyre pane gjør den aktiv, og «til høyre» havner i alfa:0.1 ==="
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;90;5M\033[<0;90;5m')"
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert -l 'til høyre'
-sleep 0.5
-tmux -L nerdr-maal capture-pane -p -t alfa:0.1 | grep -c 'til høyre'
-tmux -L nerdr-maal display-message -p -t alfa:0 '#{pane_index}'
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
-
-echo "=== 30 linjer i høyre pane, og bunnen av boksen viser linje 30 ==="
-for i in $(seq 1 30); do tmux -L nerdr-maal send-keys -t alfa:0.1 "linje $i" Enter; done
-sleep 0.8
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '15p'
-
-echo "=== fire hakk opp med hjulet over høyre pane gir 12/… på toppen av rammen ==="
-for i in 1 2 3 4; do tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<64;90;6M')"; done
-sleep 0.8
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
-
-echo "=== to hakk ned gir 6/…, og Enter går tilbake til bunnen uten teller ==="
-for i in 1 2; do tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<65;90;6M')"; done
-sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.5
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
-
-echo "=== C-b C-b sender ^B til cat, og C-b o gjør Claude-en aktiv igjen (0) ==="
-tmux -L nerdr-vert send-keys -t vert C-b C-b
-sleep 0.5
-tmux -L nerdr-maal capture-pane -p -t alfa:0.1 | grep -c '\^B'
-tmux -L nerdr-vert send-keys -t vert C-b o
-sleep 0.5
-tmux -L nerdr-maal display-message -p -t alfa:0 '#{pane_index}'
-
-echo "=== C-b z viser bare Claude-en, og C-b z igjen gir begge panene tilbake ==="
-tmux -L nerdr-vert send-keys -t vert C-b z
-sleep 0.8
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
-tmux -L nerdr-vert send-keys -t vert C-b z
-sleep 0.8
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
-
-echo "=== C-b ) og C-b ( bytter fra den delte alfa til neste Claude og til en annen igjen uten at noe vindu endrer størrelse (ingen linjer) ==="
-tmux -L nerdr-maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}x#{window_height} >> $KONFIG/storrelser'"
-tmux -L nerdr-vert send-keys -t vert C-b ')'
-sleep 0.8
-tmux -L nerdr-vert send-keys -t vert C-b '('
-sleep 0.8
-cat "$KONFIG/storrelser" 2>/dev/null
-tmux -L nerdr-maal set-hook -gu window-resized
-tmux -L nerdr-vert send-keys -t vert C-b w k k k k k k k k Enter
-sleep 0.5
-
-echo "=== C-b o, C-b x spør, n lar panen stå, og y lukker den (2, så 1) ==="
-tmux -L nerdr-vert send-keys -t vert C-b o C-b x
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
-tmux -L nerdr-vert send-keys -t vert n
-sleep 0.3
-tmux -L nerdr-maal list-panes -t alfa:0 | wc -l
-tmux -L nerdr-vert send-keys -t vert C-b x y
-sleep 1
-tmux -L nerdr-maal list-panes -t alfa:0 | wc -l
-
-echo "=== C-b \" deler over og under, med boksene rett under hverandre, og C-b x y lukker den nye ==="
-tmux -L nerdr-vert send-keys -t vert C-b '"'
-sleep 1
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '6,10p'
-tmux -L nerdr-vert send-keys -t vert C-b x y
-sleep 1
-
-echo "=== uten split fyller Claude-en hele visningen igjen (68x12, 74x15 med linjer) ==="
-tmux -L nerdr-maal display-message -p -t alfa:0.0 '#{pane_width}x#{pane_height}'
-tmux -L nerdr-vert send-keys -t vert C-b w
-
-echo "=== C-b B bytter rammene: alfa går fra 68x12 med bokser til 74x15 med linjer, og tilbake ==="
-for i in 1 2; do
-  tmux -L nerdr-vert send-keys -t vert C-b B
-  sleep 0.8
-  tmux -L nerdr-maal display-message -p -t alfa '#{window_width}x#{window_height}'
-  tmux -L nerdr-vert capture-pane -p -t vert | sed -n '2p'
-done
-
-echo "=== C-b c fra lista lager alfa:1, nerdr er inne i det, og fanene gcat og tmux står øverst (navnet kan være tmux til tmux har gitt det navnet cat) ==="
-tmux -L nerdr-vert send-keys -t vert C-b c
-sleep 1
-tmux -L nerdr-maal list-windows -t alfa -F '#{window_index} #{window_name}'
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p;16p'
-
-echo "=== det du skriver, havner i alfa:1 ==="
-tmux -L nerdr-vert send-keys -t vert -l 'i vindu 1'
-sleep 0.5
-tmux -L nerdr-maal capture-pane -p -t alfa:1 | grep -c 'i vindu 1'
-
-echo "=== C-b n går rundt til 0, C-b l tilbake til 1, og C-b 0 til 0 (0, 1, 0) ==="
-for tast in n l 0; do
-  tmux -L nerdr-vert send-keys -t vert C-b $tast
-  sleep 0.5
-  tmux -L nerdr-maal display-message -p -t alfa '#{window_index}'
-done
-
-echo "=== klikk på fane 1 viser vindu 1 ==="
-tmux -L nerdr-vert send-keys -t vert -l "$(printf '\033[<0;46;1M\033[<0;46;1m')"
-sleep 0.5
-tmux -L nerdr-maal display-message -p -t alfa '#{window_index}'
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1p'
-
-echo "=== C-b w og Enter går inn i Claude-en i vindu 0 ==="
-tmux -L nerdr-vert send-keys -t vert C-b w
-sleep 0.3
-tmux -L nerdr-vert send-keys -t vert Enter
-sleep 0.5
-tmux -L nerdr-maal display-message -p -t alfa '#{window_index}'
-
-echo "=== C-b 1 og C-b & spør, y lukker vinduet, og bare fane 0 står igjen (1 vindu) ==="
-tmux -L nerdr-vert send-keys -t vert C-b 1 C-b '&'
-sleep 0.3
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '16p'
-tmux -L nerdr-vert send-keys -t vert y
-sleep 1
-tmux -L nerdr-maal list-windows -t alfa | wc -l
-tmux -L nerdr-vert capture-pane -p -t vert | sed -n '1,2p'
-tmux -L nerdr-vert send-keys -t vert C-b w
-
-echo "=== q avslutter ==="
-tmux -L nerdr-vert send-keys -t vert q
-sleep 0.5
-tmux -L nerdr-maal list-clients
-
-echo "=== nerdr liste: alfa venter, gamma og prosjekt.ny er klare, og alle tre har sett med et tall ==="
-CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal liste
-CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal liste --json | grep -o -e '"versjon":1' -e '"tilstand":"[a-z]*"' -e '"sett":[0-9n]' | tr '\n' ' '
-echo
-
-echo "=== nerdr samtaler: Fiks testene i annet, med id abc-123 ==="
-CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" samtaler
-
-echo "=== nerdr ny lager sesjonen tredje og skriver inn claude ==="
-CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal ny "$KONFIG/kode/tredje" | sed "s|$KONFIG|…|"
-sleep 0.5
-tmux -L nerdr-maal capture-pane -p -t tredje | grep -m1 claude
-
-echo "=== nerdr ny --fortsett abc-123 finner mappa annet og gir et nytt vindu der (skal være 2) ==="
-CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal ny --fortsett abc-123 --json | grep -o '"sesjon":"[a-z]*"'
-sleep 0.5
-tmux -L nerdr-maal list-windows -t annet | wc -l
-tmux -L nerdr-maal capture-pane -p -t annet:1 | grep -m1 'claude --resume'
-
-echo "=== en samtale som kjører, startes ikke en gang til, og ukjent id gir feil ==="
-pane=$(tmux -L nerdr-maal display-message -p -t tredje '#{pane_id}')
-printf '{"tmux":"tredje:@0.%s","status":"busy","sessionId":"abc-123","updatedAt":%s000}' "$pane" "$(date +%s)" > "$KONFIG/sessions/tredje.json"
-CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal ny --fortsett abc-123
-CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" -L nerdr-maal ny --fortsett finnes-ikke
-
-tmux -L nerdr-maal kill-server
-
-echo "=== uten tmux-server lager nerdr en sesjon (skal være 1) ==="
-tmux -L nerdr-tom kill-server 2>/dev/null
-tmux -L nerdr-vert new-session -d -s tom "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L nerdr-tom; sleep 30"
-sleep 1
-tmux -L nerdr-tom list-sessions | wc -l
-tmux -L nerdr-tom kill-server
-
-echo "=== uten tmux sier nerdr fra ==="
-PATH=/finnes-ikke "$NERDR"
-
-tmux -L nerdr-vert kill-server
-rm -r "$KONFIG"
+echo "$antall sjekker, $feil feilet"
+[ $feil -eq 0 ]
