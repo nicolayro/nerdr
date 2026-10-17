@@ -108,6 +108,7 @@ pub fn mus(m: &MouseEvent, x: u16, y: u16) -> Option<String> {
         MouseEventKind::Down(b) => (knappkode(b), 'M'),
         MouseEventKind::Up(b) => (knappkode(b), 'm'),
         MouseEventKind::Drag(b) => (knappkode(b) + 32, 'M'),
+        MouseEventKind::Moved => (3 + 32, 'M'),
         MouseEventKind::ScrollUp => (64, 'M'),
         MouseEventKind::ScrollDown => (65, 'M'),
         _ => return None,
@@ -196,6 +197,8 @@ mod tester {
         // \e[<16;1;2m
         let slipp = mus(&m(MouseEventKind::Up(MouseButton::Left), KeyModifiers::CONTROL), 0, 1);
         assert_eq!(slipp.as_deref(), Some("-H 1b 5b 3c 31 36 3b 31 3b 32 6d"));
-        assert_eq!(mus(&m(MouseEventKind::Moved, KeyModifiers::NONE), 0, 0), None);
+        // \e[<35;1;1M
+        let flytt = mus(&m(MouseEventKind::Moved, KeyModifiers::NONE), 0, 0);
+        assert_eq!(flytt.as_deref(), Some("-H 1b 5b 3c 33 35 3b 31 3b 31 4d"));
     }
 }

@@ -118,6 +118,8 @@ struct App {
     markør: Option<(u16, u16)>,
     /// Panen har slått på mus med SGR-koding, slik Claude Code gjør i fullskjerm.
     pane_mus: bool,
+    /// Panen vil også ha musebevegelse uten knapp (modus 1003).
+    pane_bevegelse: bool,
     /// Panen viser den alternative skjermen, som `less` og `vim`, og den har
     /// ingen historikk.
     alternativ: bool,
@@ -267,6 +269,7 @@ impl App {
             bilder: HashMap::new(),
             markør: None,
             pane_mus: false,
+            pane_bevegelse: false,
             alternativ: false,
             historie: 0,
             rull: 0,
@@ -479,6 +482,7 @@ impl App {
                 };
                 self.pane_mus = felt.get(3) == Some(&"1");
                 self.alternativ = felt.get(4) == Some(&"1");
+                self.pane_bevegelse = felt.get(6) == Some(&"1");
                 let historie: u32 = felt.get(5).and_then(|h| h.parse().ok()).unwrap_or(0);
                 // Det du leser, blir stående når ny tekst skyver historikken opp.
                 let rull = match self.rull {
@@ -772,6 +776,7 @@ impl App {
     fn nullstill_aktiv(&mut self) {
         self.markør = None;
         self.pane_mus = false;
+        self.pane_bevegelse = false;
         self.alternativ = false;
         self.historie = 0;
         self.rull = 0;
@@ -797,7 +802,7 @@ impl App {
         let id = sitat(&aktiv);
         let felt = sitat(
             "#{cursor_x}\t#{cursor_y}\t#{cursor_flag}\t#{&&:#{mouse_any_flag},#{mouse_sgr_flag}}\t\
-             #{alternate_on}\t#{history_size}",
+             #{alternate_on}\t#{history_size}\t#{mouse_all_flag}",
         );
         self.send(&format!("display-message -p -t {id} {felt}"), Svar::Markør);
         self.utdatert = false;
@@ -1000,6 +1005,7 @@ impl App {
             _ => None,
         };
         match opp {
+            _ if m.kind == MouseEventKind::Moved && !self.pane_bevegelse => {}
             _ if self.pane_mus => {
                 if let Some(args) = taster::mus(&m, x, y) {
                     self.send(&format!("send-keys -t {id} {args}"), Svar::Ingenting);
