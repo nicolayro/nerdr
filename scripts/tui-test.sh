@@ -96,6 +96,11 @@ mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/kode/tredje"
 mkdir -p "$KONFIG/projects/annet"
 printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
 printf '{"type":"user","cwd":"%s"}\n{"type":"last-prompt"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/tom.jsonl"
+# Mappa til alfa og gamma, med samme navn og branch uansett hvilken worktree
+# og branch testen kjøres fra.
+mkdir -p "$KONFIG/nerdr/.git"
+echo 'ref: refs/heads/main' > "$KONFIG/nerdr/.git/HEAD"
+MAPPE=$(cd "$KONFIG/nerdr" && pwd -P)
 
 # tmux lar socket-fila ligge igjen, og med nye navn hver gang ville de hopet seg opp.
 rydd() {
@@ -108,7 +113,7 @@ rydd() {
 trap rydd EXIT
 trap 'exit 1' INT TERM
 
-maal -f /dev/null new-session -d -s alfa -x 80 -y 20 -c "$ROT" "sh $FALSK"
+maal -f /dev/null new-session -d -s alfa -x 80 -y 20 -c "$MAPPE" "sh $FALSK"
 maal new-session -d -s beta -x 80 -y 20 /bin/sh
 maal new-session -d -s gamma -x 80 -y 20 /bin/cat
 # Nye sesjoner får cat i stedet for et skall, så «claude» som skrives inn,
@@ -116,17 +121,17 @@ maal new-session -d -s gamma -x 80 -y 20 /bin/cat
 maal set -g default-command /bin/cat
 
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
-registrer alfa alfa waiting ",\"cwd\":\"$ROT\""
-registrer gamma gamma busy ",\"cwd\":\"$ROT\""
+registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
+registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
 
 vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
   "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
 sjekk "alfa står under VENTER med ●, og oppgaven har <1m til høyre" linje_har 3 'Fiks testene +<1m │'
-sjekk "alfa er valgt" linje_har 2 '^▎●  nerdr '
+sjekk "alfa er valgt" linje_har 2 '^▎●  nerdr +main │'
 sjekk "fanen står på en strek som fortsetter overskriften med ┬" linje_har 1 '^ VENTER .*┬─ [^ ]+ ─'
 sjekk "JOBBER treffer skillestreken med ┤" linje_har 5 '^ JOBBER .*┤'
-sjekk "gamma står under JOBBER med ◐, uten oppgave og med <1m til høyre for branchen" linje_har 6 '^ ◐  nerdr .* <1m │'
+sjekk "gamma står under JOBBER med ◐, uten oppgave og med <1m til høyre for branchen" linje_har 6 '^ ◐  nerdr +main  <1m │'
 sjekk "beta har ingen Claude og vises ikke" mangler beta
 sjekk "alfa får størrelsen til boksen" er 68x12 dimensjon alfa
 
@@ -144,9 +149,9 @@ hjul 64 41 4
 sjekk "musehjulet kommer fram i alfa, regnet fra boksen" i_pane alfa '^[[<64;2;1M'
 
 # Denne venter på intervallet, ikke på list_straks.
-registrer alfa alfa idle ",\"cwd\":\"$ROT\""
+registrer alfa alfa idle ",\"cwd\":\"$MAPPE\""
 sjekk "alfa blir ferdig mens du er inne, og står fortsatt under VENTER, med ○" linje_har 2 '^▎○  nerdr '
-registrer alfa alfa waiting ",\"cwd\":\"$ROT\""
+registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 list_straks
 
 tast C-b w j
@@ -154,7 +159,7 @@ sjekk "C-b w og j velger gamma" linje_har 6 '^▎◐  nerdr '
 sjekk "alfa venter igjen" linje_har 2 '^ ●  nerdr '
 
 klikk 5 2
-sjekk "klikk på andre rad går rett inn i alfa" linje_har 2 '^▎●  nerdr '
+sjekk "klikk på andre rad går rett inn i alfa" linje_har 2 '^▎●  nerdr +main │'
 sjekk "inne i panen viser hintet prefikset" i_panen
 tast C-b w
 sjekk "C-b w går tilbake til lista" i_lista
@@ -172,7 +177,7 @@ sjekk "FERDIG treffer skillestreken" linje_har 13 '^ FERDIG .*┤'
 sjekk "nerdr har skrevet når du var inne i gamma, i @nerdr-sett" sett_er_tall gamma
 
 tast k
-sjekk "k opp til alfa" linje_har 2 '^▎●  nerdr '
+sjekk "k opp til alfa" linje_har 2 '^▎●  nerdr +main │'
 klikk 5 14
 sjekk "klikk på gamma nederst velger den" linje_har 14 '^▎○  gamma:0'
 sjekk "klikk på gamma går inn i den" i_panen
@@ -237,14 +242,14 @@ sjekk "Esc går tilbake til lista" i_lista
 sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
 
 tast k k k k k k k k
-sjekk "k opp til alfa" linje_har 2 '^▎●  nerdr '
+sjekk "k opp til alfa" linje_har 2 '^▎●  nerdr +main │'
 tast C-b
 sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … w lista · c vindu · \? mer'
 
 tast %
 sjekk "% deler alfa" linjer 2 maal list-panes -t alfa:0
 sjekk "to bokser med luft mellom" linje_har 3 '╮ ╭'
-sjekk "begge panene står i nerdr-mappa" er "$ROT" mapper alfa:0
+sjekk "begge panene står i nerdr-mappa" er "$MAPPE" mapper alfa:0
 sjekk "tmux får plass til begge boksene" er 64x12 dimensjon alfa:0
 
 tast Enter
@@ -281,7 +286,7 @@ maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}
 tast C-b ')'
 sjekk "C-b ) går til neste Claude" linje_mangler 2 '^▎'
 tast C-b '('
-sjekk "C-b ( går tilbake til alfa" linje_har 2 '^▎●  nerdr '
+sjekk "C-b ( går tilbake til alfa" linje_har 2 '^▎●  nerdr +main │'
 # Et vindu som endrer størrelse, gjør det like etter byttet.
 sleep 0.5
 sjekk "ingen vindu endrer størrelse når du bytter Claude" [ ! -s "$KONFIG/storrelser" ]
