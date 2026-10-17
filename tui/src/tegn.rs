@@ -4,6 +4,7 @@ use nerdr_kjerne::merke::{Gruppe, Merke};
 use nerdr_kjerne::paner::Pane;
 use nerdr_kjerne::sgr::{Farge, Linje, Stil};
 use std::ops::Range;
+use std::sync::OnceLock;
 
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -11,6 +12,7 @@ use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::bokser::{Boks, Rammer};
+use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf, tittel};
 use crate::ny::Velger;
 use crate::tekst::{mappenavn, varighet};
@@ -27,17 +29,34 @@ const VELGER_LINJER: u16 = 12;
 
 const ORANSJE: Color = Color::Rgb(217, 119, 87);
 const GRØNN: Color = Color::Indexed(108);
-const HVIT: Color = Color::Indexed(255);
-const LYS: Color = Color::Indexed(252);
-const GRÅ: Color = Color::Indexed(245);
-const DIM: Color = Color::Indexed(240);
-const MARKERT: Color = Color::Indexed(236);
+// Gråtonene i 256-paletten er faste og følger ikke fargetemaet, så teksten har
+// standardfargen til terminalen og skiller seg bare med fet og svak.
+const STERK: Style = Style::new().add_modifier(Modifier::BOLD);
+const VANLIG: Style = Style::new();
+const SVAK: Style = Style::new().add_modifier(Modifier::DIM);
 
-/// Til høyre for lista, under faneraden. Med bokser står en tom rad mellom, så
-/// streken fanene står på, ikke ligger rett over toppen av boksene.
-pub fn visning(størrelse: Size, rammer: Rammer) -> Rect {
-    let topp = if rammer == Rammer::Bokser { 2 } else { 1 };
-    Rect::new(LISTE, topp, størrelse.width.saturating_sub(LISTE), størrelse.height.saturating_sub(topp))
+/// Så mye av forgrunnen som blandes inn i bakgrunnen der noe er valgt.
+const MARKERT_ANDEL: f32 = 0.12;
+
+static MARKERT: OnceLock<Option<Color>> = OnceLock::new();
+
+/// Valgt kort og fane får terminalens bakgrunn blandet med litt av forgrunnen,
+/// så markeringen er like diskré i alle fargetemaer. Svarer ikke terminalen,
+/// står de uten bakgrunn, med peker og fet tekst.
+pub fn bruk_farger(farger: Option<(Rgb, Rgb)>) {
+    let _ = MARKERT.set(farger.map(|(fg, bg)| {
+        let (r, g, b) = bland(bg, fg, MARKERT_ANDEL);
+        Color::Rgb(r, g, b)
+    }));
+}
+
+fn markert() -> Style {
+    MARKERT.get().copied().flatten().map_or(Style::new(), |c| Style::new().bg(c))
+}
+
+/// Til høyre for lista, under faneraden.
+pub fn visning(størrelse: Size) -> Rect {
+    Rect::new(LISTE, 1, størrelse.width.saturating_sub(LISTE), størrelse.height.saturating_sub(1))
 }
 
 pub fn alt(f: &mut Frame, app: &App) {
@@ -75,15 +94,15 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
             Rad::Tom => {}
             Rad::Strek => {
                 let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
-                buf.set_stringn(TEKST_X, y, strek, TEKST, Style::new().fg(DIM));
+                buf.set_stringn(TEKST_X, y, strek, TEKST, SVAK);
             }
             Rad::Overskrift(gruppe) => {
-                let mut x = buf.set_stringn(1, y, tittel(gruppe), bredde as usize, Style::new().fg(GRÅ)).0 + 1;
+                let mut x = buf.set_stringn(1, y, tittel(gruppe), bredde as usize, SVAK).0 + 1;
                 if gruppe == Gruppe::Ferdig && skjult > 0 {
-                    x = buf.set_stringn(x, y, format!("+{skjult}"), bredde as usize, Style::new().fg(DIM)).0 + 1;
+                    x = buf.set_stringn(x, y, format!("+{skjult}"), bredde as usize, SVAK).0 + 1;
                 }
                 let strek = "─".repeat(bredde.saturating_sub(x) as usize);
-                buf.set_stringn(x, y, strek, bredde as usize, Style::new().fg(DIM));
+                buf.set_stringn(x, y, strek, bredde as usize, SVAK);
                 overskrifter.push(y);
             }
             Rad::Pane(pane, merke) => {
@@ -98,20 +117,20 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
     // Hintet sier noe bare når du har trykket prefikset eller nerdr spør. Ellers
     // står bare veien til hjelpen der, dempet.
     let prefiks = app.prefiks.navn();
-    let (hint, farge) = match app.fokus {
-        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => (" lukke panen? y/n".to_string(), LYS),
-        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => (" lukke vinduet? y/n".to_string(), LYS),
-        _ if app.etter_prefiks => (format!(" {prefiks} … w lista · c vindu · ? mer"), LYS),
-        Fokus::Liste => (" ? hjelp".to_string(), DIM),
-        Fokus::Pane => (format!(" {prefiks} ? hjelp"), DIM),
+    let (hint, stil) = match app.fokus {
+        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => (" lukke panen? y/n".to_string(), VANLIG),
+        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => (" lukke vinduet? y/n".to_string(), VANLIG),
+        _ if app.etter_prefiks => (format!(" {prefiks} … w lista · c vindu · ? mer"), VANLIG),
+        Fokus::Liste => (" ? hjelp".to_string(), SVAK),
+        Fokus::Pane => (format!(" {prefiks} ? hjelp"), SVAK),
     };
-    buf.set_stringn(0, hint_y, hint, bredde as usize, Style::new().fg(farge));
+    buf.set_stringn(0, hint_y, hint, bredde as usize, stil);
 
     // Overskriftene treffer skillestreken, og øverst går streken videre til
     // fanene. Står bare FERDIG i lista, er den nederst, og da går streken over
     // lista alene.
     if !overskrifter.contains(&0) {
-        buf.set_string(0, 0, "─".repeat(bredde as usize), Style::new().fg(DIM));
+        buf.set_string(0, 0, "─".repeat(bredde as usize), SVAK);
     }
     for y in 0..område.height {
         let tegn = match y {
@@ -119,23 +138,24 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
             _ if overskrifter.contains(&y) => "┤",
             _ => "│",
         };
-        buf.set_stringn(bredde, y, tegn, 1, Style::new().fg(DIM));
+        buf.set_stringn(bredde, y, tegn, 1, SVAK);
     }
 }
 
-/// En sesjon i lista: mappa, branchen helt til høyre, og oppgaven under, med
-/// hvor lenge den har ventet eller jobbet helt til høyre på siste linje. Uten
-/// oppgave står tiden til høyre for branchen.
+/// En sesjon i lista: oppgaven som tittel, og under den mappa, branchen og hvor
+/// lenge den har ventet eller jobbet. Uten oppgave er mappa tittelen.
 struct Kort {
-    mappe: String,
+    tittel: Vec<String>,
+    /// Mappa når den ikke er tittelen, eller at Claude starter.
+    under: Option<String>,
     branch: Option<String>,
-    oppgave: Vec<String>,
     tid: Option<String>,
 }
 
 impl Kort {
     fn høyde(&self) -> u16 {
-        1 + self.oppgave.len() as u16
+        let under = self.under.is_some() || self.branch.is_some() || self.tid.is_some();
+        self.tittel.len() as u16 + under as u16
     }
 }
 
@@ -153,55 +173,50 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
         }
         Merke::Sett | Merke::Starter => None,
     };
-    let oppgave = match ny {
-        Some(_) => vec!["starter …".to_string()],
-        None => pane.oppgave().map(|o| bryt_med(o, tid.as_deref(), TEKST, OPPGAVE_LINJER)).unwrap_or_default(),
+    let oppgave = pane.oppgave().map(|o| bryt(o, TEKST, OPPGAVE_LINJER)).filter(|l| !l.is_empty());
+    let (tittel, under) = match (ny, oppgave) {
+        (Some(_), _) => (vec![mappe], Some("starter …".to_string())),
+        (None, Some(oppgave)) => (oppgave, Some(mappe)),
+        (None, None) => (vec![mappe], None),
     };
-    Kort { mappe, branch: app.brancher.get(&pane.id).cloned(), oppgave, tid }
+    Kort { tittel, under, branch: app.brancher.get(&pane.id).cloned(), tid }
 }
 
 fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus) {
-    if valgt && fokus == Fokus::Liste {
-        buf.set_style(område, Style::new().bg(MARKERT));
-    }
     let dempet = !valgt && merke.gruppe() == Gruppe::Ferdig;
-    let (peker, mappestil, oppgavefarge, gråfarge) = match (valgt, dempet) {
-        (true, _) => ("▎", Style::new().fg(HVIT).add_modifier(Modifier::BOLD), LYS, GRÅ),
-        (false, false) => (" ", Style::new().fg(LYS).add_modifier(Modifier::BOLD), GRÅ, GRÅ),
-        (false, true) => (" ", Style::new().fg(GRÅ), DIM, DIM),
+    if valgt && fokus == Fokus::Liste {
+        buf.set_style(område, markert());
+    }
+    let (peker, tittelstil) = match (valgt, dempet) {
+        (true, _) => ("▎", STERK),
+        (false, false) => (" ", VANLIG),
+        (false, true) => (" ", SVAK),
     };
     for y in område.top()..område.bottom() {
-        buf.set_stringn(0, y, peker, 1, Style::new().fg(HVIT));
+        buf.set_stringn(0, y, peker, 1, VANLIG);
     }
-    let y = område.y;
-    buf.set_stringn(1, y, glyf(merke), 1, Style::new().fg(glyffarge(merke)));
+    buf.set_stringn(1, område.y, glyf(merke), 1, Style::new().fg(glyffarge(merke)));
+    for (linje, y) in kort.tittel.iter().zip(område.top()..område.bottom()) {
+        buf.set_stringn(TEKST_X, y, linje, TEKST, tittelstil);
+    }
 
+    let y = område.y + kort.tittel.len() as u16;
+    if y >= område.bottom() {
+        return;
+    }
     let mut slutt = TEKST_X + TEKST as u16;
-    if let Some(tid) = kort.tid.as_ref().filter(|_| kort.oppgave.is_empty()) {
-        slutt = høyrestilt(buf, y, slutt, tid, gråfarge).saturating_sub(2);
+    if let Some(tid) = &kort.tid {
+        slutt = høyrestilt(buf, y, slutt, tid, SVAK).saturating_sub(2);
     }
     let bredde = slutt.saturating_sub(TEKST_X) as usize;
-    let mappe = kutt(&kort.mappe, bredde);
-    buf.set_stringn(TEKST_X, y, &mappe, bredde, mappestil);
-    // Med mindre enn to tegn igjen blir branchen bare en …
-    let plass = bredde.saturating_sub(mappe.chars().count() + 2);
-    if let Some(branch) = kort.branch.as_ref().filter(|_| plass >= 2) {
-        høyrestilt(buf, y, slutt, &kutt(branch, plass), gråfarge);
-    }
-
-    for (linje, y) in kort.oppgave.iter().zip(y + 1..område.bottom()) {
-        buf.set_stringn(TEKST_X, y, linje, TEKST, Style::new().fg(oppgavefarge));
-    }
-    let siste = y + kort.høyde() - 1;
-    if let Some(tid) = kort.tid.as_ref().filter(|_| siste > y && siste < område.bottom()) {
-        høyrestilt(buf, siste, TEKST_X + TEKST as u16, tid, gråfarge);
-    }
+    let under: Vec<&str> = [&kort.under, &kort.branch].into_iter().flatten().map(String::as_str).collect();
+    buf.set_stringn(TEKST_X, y, kutt(&under.join(" · "), bredde), bredde, SVAK);
 }
 
 /// Tekst som slutter foran kolonne `slutt`. Gir kolonnen den starter i.
-fn høyrestilt(buf: &mut Buffer, y: u16, slutt: u16, tekst: &str, farge: Color) -> u16 {
+fn høyrestilt(buf: &mut Buffer, y: u16, slutt: u16, tekst: &str, stil: Style) -> u16 {
     let x = slutt.saturating_sub(tekst.chars().count() as u16);
-    buf.set_string(x, y, tekst, Style::new().fg(farge));
+    buf.set_string(x, y, tekst, stil);
     x
 }
 
@@ -209,7 +224,7 @@ fn glyffarge(merke: Merke) -> Color {
     match merke {
         Merke::Spør | Merke::Ulest => ORANSJE,
         Merke::Jobber | Merke::Starter => GRØNN,
-        Merke::Sett => LYS,
+        Merke::Sett => Color::Reset,
     }
 }
 
@@ -336,11 +351,11 @@ fn faner(app: &App) -> Vec<Fane> {
 /// i lista. Vinduet som vises, har bakgrunn.
 fn tegn_faner(buf: &mut Buffer, app: &App) {
     let v = app.visning;
-    buf.set_string(v.x, 0, "─".repeat(v.width as usize), Style::new().fg(DIM));
+    buf.set_string(v.x, 0, "─".repeat(v.width as usize), SVAK);
     for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
         let stil = match f.vist {
-            true => Style::new().fg(HVIT).bg(MARKERT).add_modifier(Modifier::BOLD),
-            false => Style::new().fg(GRÅ),
+            true => markert().add_modifier(Modifier::BOLD),
+            false => SVAK,
         };
         buf.set_string(f.fra, 0, format!(" {} ", f.navn), stil);
     }
@@ -371,8 +386,8 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
         buf.set_string(boks.x, y, format!("{v}{}{h}", fyll.repeat(bredde as usize - 2)), ramme);
     }
     let tekst = (bredde - 4) as usize;
-    buf.set_stringn(boks.x + 2, boks.y, format!(" {tittel} "), tekst, Style::new().fg(HVIT).add_modifier(Modifier::BOLD));
-    buf.set_stringn(boks.x + 2, boks.bottom() - 1, format!(" {hint} "), tekst, Style::new().fg(GRÅ));
+    buf.set_stringn(boks.x + 2, boks.y, format!(" {tittel} "), tekst, STERK);
+    buf.set_stringn(boks.x + 2, boks.bottom() - 1, format!(" {hint} "), tekst, SVAK);
     Some(boks)
 }
 
@@ -391,24 +406,24 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str) {
         }
     };
     for l in om {
-        linje(&l, Style::new().fg(LYS));
+        linje(&l, VANLIG);
     }
     linje("", Style::new());
     for (tast, hva) in hjelp::TASTER {
-        linje(&format!("{tast:<9}{hva}"), Style::new().fg(LYS));
+        linje(&format!("{tast:<9}{hva}"), VANLIG);
     }
     linje("", Style::new());
     for (tast, hva) in hjelp::PREFIKSTASTER {
         let tast = if tast == "prefiks" { format!("{prefiks} {prefiks}") } else { format!("{prefiks} {tast}") };
-        linje(&format!("{tast:<13}{hva}"), Style::new().fg(LYS));
+        linje(&format!("{tast:<13}{hva}"), VANLIG);
     }
     linje("", Style::new());
     for (merke, hva) in hjelp::MERKER {
-        linje(&format!("{}  {hva}", glyf(merke)), Style::new().fg(LYS));
+        linje(&format!("{}  {hva}", glyf(merke)), VANLIG);
     }
     linje("", Style::new());
-    linje(hjelp::BARE_TMUX, Style::new().fg(GRÅ));
-    linje(&hjelp::mapper(), Style::new().fg(GRÅ));
+    linje(hjelp::BARE_TMUX, SVAK);
+    linje(&hjelp::mapper(), SVAK);
 }
 
 /// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
@@ -430,9 +445,9 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
     let prompt = if velger.fortsett { "samtale › " } else { "mappe › " };
     let søk = kutt(&velger.søk, indre.saturating_sub(prompt.chars().count() + 8));
     let etter = buf.set_stringn(x, y, prompt, indre, Style::new().fg(ORANSJE)).0;
-    let markør = buf.set_stringn(etter, y, &søk, indre, Style::new().fg(HVIT)).0;
+    let markør = buf.set_stringn(etter, y, &søk, indre, VANLIG).0;
     let antall = format!("{}/{}", treff.len(), velger.antall());
-    buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, Style::new().fg(DIM));
+    buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
 
     let linjer = (høyde - 3) as usize;
     let fra = velger.valgt.saturating_sub(linjer - 1);
@@ -440,26 +455,26 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
         let y = boks.y + 2 + (i - fra) as u16;
         let valgt = i == velger.valgt;
         if valgt {
-            buf.set_style(Rect::new(boks.x + 1, y, bredde - 2, 1), Style::new().bg(MARKERT));
-            buf.set_string(boks.x + 1, y, "▎", Style::new().fg(HVIT));
+            buf.set_style(Rect::new(boks.x + 1, y, bredde - 2, 1), markert());
+            buf.set_string(boks.x + 1, y, "▎", VANLIG);
         }
-        let farge = if valgt { HVIT } else { LYS };
+        let stil = if valgt { STERK } else { VANLIG };
         let k = t.kandidat;
         let mut plass = indre;
         if let Some(alder) = &k.alder {
             let bredde = alder.chars().count();
-            buf.set_string(boks.right() - 2 - bredde as u16, y, alder, Style::new().fg(DIM));
+            buf.set_string(boks.right() - 2 - bredde as u16, y, alder, SVAK);
             plass = plass.saturating_sub(bredde + 2);
         }
         // Mappenavnet foran tittelen til en samtale er grått.
         let mappe = k.samtale.as_ref().and_then(|_| k.vis.find("  ")).map_or(0, |i| k.vis[..i].chars().count());
         for (n, c) in kutt(&k.vis, plass).chars().enumerate() {
-            let farge = match () {
-                _ if t.tegn.contains(&n) => ORANSJE,
-                _ if n < mappe => GRÅ,
-                _ => farge,
+            let stil = match () {
+                _ if t.tegn.contains(&n) => Style::new().fg(ORANSJE),
+                _ if n < mappe => SVAK,
+                _ => stil,
             };
-            buf.set_string(x + n as u16, y, c.encode_utf8(&mut [0; 4]), Style::new().fg(farge));
+            buf.set_string(x + n as u16, y, c.encode_utf8(&mut [0; 4]), stil);
         }
     }
     (markør, y)
@@ -472,28 +487,6 @@ fn kutt(tekst: &str, bredde: usize) -> String {
     let mut kuttet: String = tekst.chars().take(bredde.saturating_sub(1)).collect();
     kuttet.push('…');
     kuttet
-}
-
-/// Som `bryt`, men med plass til `tid` ytterst på siste linje. Fyller teksten
-/// alle linjene, kuttes den siste.
-fn bryt_med(tekst: &str, tid: Option<&str>, bredde: usize, maks: usize) -> Vec<String> {
-    let Some(tid) = tid else { return bryt(tekst, bredde, maks) };
-    let mut linjer = bryt(&format!("{tekst} {tid}"), bredde, maks);
-    if let Some(siste) = linjer.last_mut() {
-        if siste == tid {
-            siste.clear();
-            return linjer;
-        }
-        if let Some(uten) = siste.strip_suffix(&format!(" {tid}")) {
-            *siste = uten.to_string();
-            return linjer;
-        }
-    }
-    let mut linjer = bryt(tekst, bredde, maks);
-    if let Some(siste) = linjer.last_mut() {
-        *siste = kutt(siste, bredde.saturating_sub(tid.chars().count() + 1));
-    }
-    linjer
 }
 
 /// Bryter på mellomrom over høyst `maks` linjer, og ender med … når teksten
@@ -524,7 +517,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
         return;
     }
     if app.valgt.is_none() {
-        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, Style::new().fg(GRÅ));
+        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, SVAK);
         return;
     }
     let aktiv = app.aktiv().map(|p| p.id.as_str());
@@ -535,8 +528,8 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
         if let Some(ramme) = boks.ramme {
             // Den aktive har vanlig farge når du er inne i vinduet, så du ser
             // hvor tastene går.
-            let farge = if app.fokus == Fokus::Pane && aktiv == Some(&boks.pane) { Color::Reset } else { DIM };
-            tegn_ramme(buf, ramme, Style::new().fg(farge));
+            let stil = if app.fokus == Fokus::Pane && aktiv == Some(&boks.pane) { VANLIG } else { SVAK };
+            tegn_ramme(buf, ramme, stil);
         }
     }
     if app.rammer == Rammer::Linjer && bokser.len() > 1 {
@@ -596,8 +589,8 @@ fn tegn_linjer(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
                 let (x, y) = (v.x + x, v.y + y);
                 x + 1 >= a.x && x <= a.right() && y + 1 >= a.y && y <= a.bottom()
             });
-            let farge = if ved_aktiv { Color::Reset } else { DIM };
-            buf.set_string(v.x + x, v.y + y, tegn, Style::new().fg(farge));
+            let stil = if ved_aktiv { VANLIG } else { SVAK };
+            buf.set_string(v.x + x, v.y + y, tegn, stil);
         }
     }
 }
@@ -678,14 +671,6 @@ mod tester {
         );
         assert_eq!(bryt("en to tre fire", 7, 2), ["en to", "tre…"]);
         assert_eq!(bryt("Langtordsomikkefårplass", 10, 2), ["Langtords…"]);
-    }
-
-    #[test]
-    fn tiden_får_plass_ytterst_på_siste_linje() {
-        assert_eq!(bryt_med("Fiks testene", Some("3m"), 16, 2), ["Fiks testene"]);
-        assert_eq!(bryt_med("Fiks alle testene", Some("14m"), 12, 1), ["Fiks al…"]);
-        assert_eq!(bryt_med("Fiks testene", Some("3m"), 12, 2), ["Fiks testene", ""]);
-        assert_eq!(bryt_med("Fiks", None, 16, 2), ["Fiks"]);
     }
 
     #[test]

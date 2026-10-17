@@ -3,6 +3,7 @@ mod grupper;
 mod hjelp;
 mod kommandoer;
 mod ny;
+mod palett;
 mod taster;
 mod tegn;
 mod tekst;
@@ -216,6 +217,7 @@ fn uten_tmux(feil: io::Error) -> io::Error {
 }
 
 fn kjør(socket: Option<&str>) -> io::Result<()> {
+    tegn::bruk_farger(palett::les());
     let (tx, rx) = mpsc::channel();
     let tmux_tx = tx.clone();
     let kontroll = Kontroll::start(socket, move |m| {
@@ -294,7 +296,7 @@ impl App {
         let mut tegne = true;
         while self.ferdig.is_none() {
             if tegne {
-                self.visning = tegn::visning(terminal.size()?, self.rammer);
+                self.visning = tegn::visning(terminal.size()?);
                 // Når teksten i panen ruller, skrives nesten hver celle på nytt.
                 // Uten synkronisert oppdatering kan terminalen vise den halvveis.
                 execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;

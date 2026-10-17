@@ -360,6 +360,7 @@ dependencies = [
 name = "nerdr"
 version = "0.2.0"
 dependencies = [
+ "libc",
  "nerdr-kjerne",
  "ratatui",
  "serde_json",

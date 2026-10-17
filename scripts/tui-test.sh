@@ -127,13 +127,14 @@ registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
 vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
   "HOME=$KONFIG NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
-sjekk "alfa står under VENTER med ●, og oppgaven har <1m til høyre" linje_har 3 'Fiks testene +<1m │'
-sjekk "alfa er valgt" linje_har 2 '^▎●  nerdr +main │'
+sjekk "alfa står under VENTER med ●, med oppgaven som tittel" linje_har 2 '^▎●  Fiks testene +│'
+sjekk "under står mappa og branchen, og <1m til høyre" linje_har 3 '^▎   nerdr · main +<1m │'
 sjekk "fanen står på en strek som fortsetter overskriften med ┬" linje_har 1 '^ VENTER .*┬─ [^ ]+ ─'
 sjekk "JOBBER treffer skillestreken med ┤" linje_har 5 '^ JOBBER .*┤'
-sjekk "gamma står under JOBBER med ◐, uten oppgave og med <1m til høyre for branchen" linje_har 6 '^ ◐  nerdr +main  <1m │'
+sjekk "gamma står under JOBBER med ◐, og uten oppgave er mappa tittelen" linje_har 6 '^ ◐  nerdr +│'
+sjekk "under gamma står branchen og <1m" linje_har 7 '^    main +<1m │'
 sjekk "beta har ingen Claude og vises ikke" mangler beta
-sjekk "alfa får størrelsen til boksen" er 68x12 dimensjon alfa
+sjekk "alfa får størrelsen til boksen" er 68x13 dimensjon alfa
 
 tast Enter
 tast -l 'hei æ'
@@ -145,28 +146,29 @@ vert paste-buffer -p -d -b test -t vert
 sjekk "innliming starter med ^[[200~" i_pane alfa '^[[200~linje én'
 sjekk "innliming slutter med ^[[201~, uten at tmux utvider \$HOME" i_pane alfa '$HOME "to"^[[201~'
 
-hjul 64 41 4
+hjul 64 41 3
 sjekk "musehjulet kommer fram i alfa, regnet fra boksen" i_pane alfa '^[[<64;2;1M'
 
 # Denne venter på intervallet, ikke på list_straks.
 registrer alfa alfa idle ",\"cwd\":\"$MAPPE\""
-sjekk "alfa blir ferdig mens du er inne, og står fortsatt under VENTER, med ○" linje_har 2 '^▎○  nerdr '
+sjekk "alfa blir ferdig mens du er inne, og står fortsatt under VENTER, med ○" linje_har 2 '^▎○  Fiks testene'
 registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 list_straks
 
 tast C-b w j
 sjekk "C-b w og j velger gamma" linje_har 6 '^▎◐  nerdr '
-sjekk "alfa venter igjen" linje_har 2 '^ ●  nerdr '
+sjekk "alfa venter igjen" linje_har 2 '^ ●  Fiks testene'
 
 klikk 5 2
-sjekk "klikk på andre rad går rett inn i alfa" linje_har 2 '^▎●  nerdr +main │'
+sjekk "klikk på andre rad går rett inn i alfa" linje_har 2 '^▎●  Fiks testene +│'
 sjekk "inne i panen viser hintet prefikset" i_panen
 tast C-b w
 sjekk "C-b w går tilbake til lista" i_lista
 
 registrer gamma gamma idle
 list_straks
-sjekk "gamma blir ferdig og havner under VENTER med ◆, og uten cwd står gamma:0" linje_har 5 '^ ◆  gamma:0 +<1m │'
+sjekk "gamma blir ferdig og havner under VENTER med ◆, og uten cwd står gamma:0" linje_har 5 '^ ◆  gamma:0 +│'
+sjekk "uten branch står bare tiden under" linje_har 6 '^ +<1m │'
 sjekk "streken mellom kortene i VENTER" linje_har 4 '┈'
 
 tast j Enter
@@ -177,7 +179,7 @@ sjekk "FERDIG treffer skillestreken" linje_har 13 '^ FERDIG .*┤'
 sjekk "nerdr har skrevet når du var inne i gamma, i @nerdr-sett" sett_er_tall gamma
 
 tast k
-sjekk "k opp til alfa" linje_har 2 '^▎●  nerdr +main │'
+sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +│'
 klikk 5 14
 sjekk "klikk på gamma nederst velger den" linje_har 14 '^▎○  gamma:0'
 sjekk "klikk på gamma går inn i den" i_panen
@@ -242,15 +244,15 @@ sjekk "Esc går tilbake til lista" i_lista
 sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
 
 tast k k k k k k k k
-sjekk "k opp til alfa" linje_har 2 '^▎●  nerdr +main │'
+sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +│'
 tast C-b
 sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … w lista · c vindu · \? mer'
 
 tast %
 sjekk "% deler alfa" linjer 2 maal list-panes -t alfa:0
-sjekk "to bokser med luft mellom" linje_har 3 '╮ ╭'
+sjekk "to bokser med luft mellom" linje_har 2 '╮ ╭'
 sjekk "begge panene står i nerdr-mappa" er "$MAPPE" mapper alfa:0
-sjekk "tmux får plass til begge boksene" er 64x12 dimensjon alfa:0
+sjekk "tmux får plass til begge boksene" er 64x13 dimensjon alfa:0
 
 tast Enter
 tast -l 'til venstre'
@@ -264,11 +266,11 @@ for i in $(seq 1 30); do maal send-keys -t alfa:0.1 "linje $i" Enter; done
 # cat ekkoer hver linje, og telleren er bare stabil når alt er kommet fram.
 sjekk "bunnen av høyre boks viser linje 30, to ganger" er 2 tell 'linje 30'
 for i in 1 2 3 4; do hjul 64 90 6; done
-sjekk "fire hakk opp gir 12/… på toppen av rammen" linje_har 3 ' 12/[0-9]+ '
+sjekk "fire hakk opp gir 12/… på toppen av rammen" linje_har 2 ' 12/[0-9]+ '
 for i in 1 2; do hjul 65 90 6; done
-sjekk "to hakk ned gir 6/…" linje_har 3 ' 6/[0-9]+ '
+sjekk "to hakk ned gir 6/…" linje_har 2 ' 6/[0-9]+ '
 tast Enter
-sjekk "Enter går tilbake til bunnen uten teller" linje_mangler 3 '[0-9]+/[0-9]+'
+sjekk "Enter går tilbake til bunnen uten teller" linje_mangler 2 '[0-9]+/[0-9]+'
 
 tast C-b C-b
 sjekk "C-b C-b sender ^B til panen" i_pane alfa:0.1 '^B'
@@ -286,7 +288,7 @@ maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}
 tast C-b ')'
 sjekk "C-b ) går til neste Claude" linje_mangler 2 '^▎'
 tast C-b '('
-sjekk "C-b ( går tilbake til alfa" linje_har 2 '^▎●  nerdr +main │'
+sjekk "C-b ( går tilbake til alfa" linje_har 2 '^▎●  Fiks testene +│'
 # Et vindu som endrer størrelse, gjør det like etter byttet.
 sleep 0.5
 sjekk "ingen vindu endrer størrelse når du bytter Claude" [ ! -s "$KONFIG/storrelser" ]
@@ -304,14 +306,14 @@ tast C-b '"'
 sjekk "C-b \" deler over og under" er 2 tell '╭'
 tast C-b x y
 sjekk "C-b x y lukker den nye" linjer 1 maal list-panes -t alfa:0
-sjekk "uten split fyller Claude-en hele visningen igjen" er 68x12 dimensjon alfa:0
+sjekk "uten split fyller Claude-en hele visningen igjen" er 68x13 dimensjon alfa:0
 tast C-b w
 
 tast C-b B
 sjekk "C-b B gir linjer, og alfa blir større" er 74x15 dimensjon alfa
 sjekk "med linjer er det ingen bokser" mangler '╭'
 tast C-b B
-sjekk "C-b B igjen gir bokser" er 68x12 dimensjon alfa
+sjekk "C-b B igjen gir bokser" er 68x13 dimensjon alfa
 sjekk "boksen er tilbake" har '╭'
 
 tast C-b c

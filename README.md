@@ -76,8 +76,8 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
 
-Hver Claude viser mappen og branchen den jobber i, og oppgaven under. Lista er
-delt i tre:
+Hver Claude viser oppgaven, og under den mappen og branchen den jobber i. Lista
+er delt i tre:
 
 | | |
 | --- | --- |

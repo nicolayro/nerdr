@@ -6,5 +6,6 @@ license.workspace = true
 
 [dependencies]
 nerdr-kjerne = { path = "../kjerne" }
+libc = "0.2"
 ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
 serde_json = "1"
