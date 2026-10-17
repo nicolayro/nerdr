@@ -3,10 +3,12 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use std::{env, fs};
 
 use nerdr_kjerne::samtaler;
+
+use crate::tekst::{mappenavn, varighet};
 
 /// Mappene det søkes i, kolonseparert som `PATH`. Kandidatene er mappene rett
 /// under dem.
@@ -58,10 +60,9 @@ impl Velger {
         let samtaler = samtaler::siste(prosjekter, SAMTALER, kjører)
             .into_iter()
             .map(|s| {
-                let navn = s.mappe.file_name().map_or_else(|| s.mappe.display().to_string(), |n| n.to_string_lossy().into());
                 Kandidat {
-                    vis: format!("{navn}  {}", s.tittel),
-                    alder: Some(alder(nå.duration_since(s.endret).unwrap_or_default())),
+                    vis: format!("{}  {}", mappenavn(&s.mappe), s.tittel),
+                    alder: Some(varighet(nå.duration_since(s.endret).unwrap_or_default().as_millis() as u64)),
                     samtale: Some(s.id),
                     mappe: s.mappe,
                 }
@@ -114,15 +115,6 @@ impl Velger {
 
     pub fn valgt(&self) -> Option<&Kandidat> {
         self.treff().into_iter().nth(self.valgt).map(|t| t.kandidat)
-    }
-}
-
-pub fn alder(tid: Duration) -> String {
-    match tid.as_secs() / 60 {
-        0 => "nå".into(),
-        m @ 1..60 => format!("{m} min"),
-        m @ 60..1440 => format!("{} t", m / 60),
-        m => format!("{} d", m / 1440),
     }
 }
 
@@ -208,12 +200,6 @@ mod tester {
         let navn: Vec<_> = kandidater(&røtter("git:kode", &hjem)).iter().map(|m| m.strip_prefix(&hjem).unwrap().to_path_buf()).collect();
         assert_eq!(navn, [Path::new("git/a"), Path::new("git/b"), Path::new("kode/c")]);
         fs::remove_dir_all(hjem).unwrap();
-    }
-
-    #[test]
-    fn alder_i_minutter_timer_og_dager() {
-        let min = |m: u64| alder(Duration::from_secs(m * 60));
-        assert_eq!([min(0), min(5), min(90), min(3 * 1440)], ["nå", "5 min", "1 t", "3 d"]);
     }
 
     #[test]

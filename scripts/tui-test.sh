@@ -220,7 +220,7 @@ sjekk "nerdr er inne i det nye vinduet" i_panen
 tast C-b w C-r
 sjekk "C-r viser tidligere samtaler" linje_har 1 'tidligere samtaler'
 sjekk "bare samtalen med meldinger, 1/1" linje_har 2 '1/1'
-sjekk "annet  Fiks testene er valgt" linje_har 3 '▎annet  Fiks testene +nå'
+sjekk "annet  Fiks testene er valgt" linje_har 3 '▎annet  Fiks testene +<1m'
 tast C-r
 sjekk "C-r bytter til mappene" linje_har 1 'ny claude'
 tast C-r
@@ -357,6 +357,8 @@ sjekk "med claude --resume" i_pane annet:1 'claude --resume abc-123'
 registrer tredje tredje busy ',"sessionId":"abc-123"'
 sjekk "en samtale som kjører, startes ikke en gang til" inneholder "$(nerdr -L "$MAAL" ny --fortsett abc-123)" 'samtalen abc-123 kjører alt'
 sjekk "ukjent id gir feil" inneholder "$(nerdr -L "$MAAL" ny --fortsett finnes-ikke)" 'fant ingen samtale med id finnes-ikke'
+sjekk "en id som ikke er bokstaver, tall og -, skrives ikke inn i skallet" \
+  inneholder "$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje" --fortsett 'abc; ls')" 'er ikke en id for en samtale'
 maal kill-server
 
 vert new-session -d -s tom "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $TOM; sleep 30"

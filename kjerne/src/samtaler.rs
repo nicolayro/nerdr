@@ -52,17 +52,22 @@ pub fn siste(katalog: &Path, antall: usize, utenom: &HashSet<String>) -> Vec<Sam
             let endret = fil.metadata().ok()?.modified().ok()?;
             Some((endret, id, sti))
         })
-        .filter(|(_, id, _)| !utenom.contains(id))
+        .filter(|(_, id, _)| gyldig_id(id) && !utenom.contains(id))
         .collect();
     filer.sort_by(|a, b| b.0.cmp(&a.0));
 
     filer.into_iter().filter_map(|(endret, id, sti)| samtale(&sti, id, endret)).take(antall).collect()
 }
 
+/// Id-en blir en del av en sti, og skrives inn i skallet etter
+/// `claude --resume`.
+pub fn gyldig_id(id: &str) -> bool {
+    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 /// Samtalen med `id`, uansett hvor gammel den er.
 pub fn finn(katalog: &Path, id: &str) -> Option<Samtale> {
-    // Id-en blir en del av en sti.
-    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+    if !gyldig_id(id) {
         return None;
     }
     fs::read_dir(katalog).ok()?.flatten().find_map(|prosjekt| {
@@ -150,6 +155,7 @@ mod tester {
         skriv("gammel", "Gammel", 100);
         skriv("ny", "Ny", 300);
         skriv("kjører", "Kjører", 200);
+        skriv("rart; navn", "Rart navn", 400);
 
         let titler: Vec<_> = siste(&rot, 10, &HashSet::from(["kjører".to_string()]))
             .into_iter()

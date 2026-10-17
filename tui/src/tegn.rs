@@ -13,6 +13,7 @@ use ratatui::style::{Color, Modifier, Style};
 use crate::bokser::{Boks, Rammer};
 use crate::grupper::{Rad, glyf, tittel};
 use crate::ny::Velger;
+use crate::tekst::{mappenavn, varighet};
 use crate::{App, Fokus, Lukke, hjelp};
 
 /// Bredden på lista, med skillelinja.
@@ -42,16 +43,17 @@ pub fn visning(størrelse: Size, rammer: Rammer) -> Rect {
 pub fn alt(f: &mut Frame, app: &App) {
     let område = f.area();
     let buf = f.buffer_mut();
+    let bokser = app.bokser();
     tegn_liste(buf, område, app);
     tegn_faner(buf, app);
-    tegn_pane(buf, app);
+    tegn_pane(buf, app, &bokser);
 
     if app.hjelp {
         tegn_hjelp(buf, område, &app.prefiks.navn());
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
-    } else if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app)) {
+    } else if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app, &bokser)) {
         let i = boks.innhold;
         if x < i.width && y < i.height {
             f.set_cursor_position((i.x + x, i.y + y));
@@ -65,7 +67,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
 
     let mut overskrifter = Vec::new();
     let (rader, skjult) = plasser(app, hint_y);
-    for (y, høyde, rad) in rader {
+    for Plassert { y, høyde, rad, kort } in rader {
         if y >= hint_y {
             break;
         }
@@ -85,7 +87,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App) {
                 overskrifter.push(y);
             }
             Rad::Pane(pane, merke) => {
-                let kort = kort(app, pane, merke);
+                let Some(kort) = kort else { continue };
                 let område = Rect::new(0, y, bredde, høyde.min(hint_y - y));
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
                 tegn_kort(buf, område, &kort, merke, valgt, app.fokus);
@@ -138,17 +140,16 @@ impl Kort {
 }
 
 fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
-    let ny = app.nye.get(&pane.id);
+    let ny = app.nye.get(&pane.id).map(|(mappe, _)| mappe);
     let mappe = app
         .claude
         .get(&pane.id)
-        .and_then(|s| s.mappe.as_deref())
+        .and_then(|c| c.mappe.as_deref())
         .or(ny.map(|m| m.as_path()))
-        .and_then(|m| m.file_name()?.to_str())
-        .map_or_else(|| format!("{}:{}", pane.sesjon, pane.vindu), str::to_string);
+        .map_or_else(|| format!("{}:{}", pane.sesjon, pane.vindu), mappenavn);
     let tid = match merke {
         Merke::Spør | Merke::Ulest | Merke::Jobber => {
-            app.claude.get(&pane.id).map(|s| varighet(crate::nå_ms().saturating_sub(s.endret)))
+            app.claude.get(&pane.id).map(|c| varighet(crate::nå_ms().saturating_sub(c.endret)))
         }
         Merke::Sett | Merke::Starter => None,
     };
@@ -157,16 +158,6 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
         None => pane.oppgave().map(|o| bryt_med(o, tid.as_deref(), TEKST, OPPGAVE_LINJER)).unwrap_or_default(),
     };
     Kort { mappe, branch: app.brancher.get(&pane.id).cloned(), oppgave, tid }
-}
-
-/// Kort nok til å stå ytterst på en linje i kortet.
-fn varighet(ms: u64) -> String {
-    match ms / 60_000 {
-        0 => "<1m".into(),
-        m @ 1..60 => format!("{m}m"),
-        m @ 60..1440 => format!("{}t", m / 60),
-        m => format!("{}d", m / 1440),
-    }
 }
 
 fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus) {
@@ -222,37 +213,47 @@ fn glyffarge(merke: Merke) -> Color {
     }
 }
 
-/// Radene i lista med y og høyde, og hvor mange i FERDIG som ikke fikk plass.
-/// Får alt plass, legges FERDIG nederst, med en tom rad over hintet, så det du
-/// har lagt bort står for seg selv. Ellers vises så mange i FERDIG som får
-/// plass, og alltid den som er valgt.
-fn plasser<'a>(app: &'a App, plass: u16) -> (Vec<(u16, u16, Rad<'a>)>, usize) {
-    let mut rader: Vec<(Rad, u16)> = app
+/// En rad i lista, med kortet når raden er en pane.
+struct Plassert<'a> {
+    y: u16,
+    høyde: u16,
+    rad: Rad<'a>,
+    kort: Option<Kort>,
+}
+
+/// Radene i lista, og hvor mange i FERDIG som ikke fikk plass. Får alt plass,
+/// legges FERDIG nederst, med en tom rad over hintet, så det du har lagt bort
+/// står for seg selv. Ellers vises så mange i FERDIG som får plass, og alltid
+/// den som er valgt.
+fn plasser<'a>(app: &'a App, plass: u16) -> (Vec<Plassert<'a>>, usize) {
+    let høyde = |k: &Option<Kort>| k.as_ref().map_or(1, Kort::høyde);
+    let mut rader: Vec<(Rad, Option<Kort>)> = app
         .rader()
         .into_iter()
         .map(|r| {
-            let høyde = if let Rad::Pane(pane, merke) = r { kort(app, pane, merke).høyde() } else { 1 };
-            (r, høyde)
+            let kort = if let Rad::Pane(pane, merke) = r { Some(kort(app, pane, merke)) } else { None };
+            (r, kort)
         })
         .collect();
     let ferdig = rader.iter().position(|(r, _)| matches!(r, Rad::Overskrift(Gruppe::Ferdig))).unwrap_or(rader.len());
-    let over: u16 = rader[..ferdig].iter().map(|(_, h)| h).sum();
-    let under: u16 = rader[ferdig..].iter().map(|(_, h)| h).sum();
+    let over: u16 = rader[..ferdig].iter().map(|(_, k)| høyde(k)).sum();
+    let under: u16 = rader[ferdig..].iter().map(|(_, k)| høyde(k)).sum();
 
     let mut skjult = 0;
     let ferdig_y = if over + under < plass {
         plass - under - 1
     } else {
-        let kort: Vec<(Rad, u16)> = rader.split_off(ferdig).into_iter().filter(|(r, _)| matches!(r, Rad::Pane(..))).collect();
+        let kort: Vec<(Rad, Option<Kort>)> =
+            rader.split_off(ferdig).into_iter().filter(|(r, _)| matches!(r, Rad::Pane(..))).collect();
         if !kort.is_empty() {
             let valgt = app.valgt.as_ref().and_then(|v| kort.iter().position(|(r, _)| matches!(r, Rad::Pane(p, _) if p.id == v.id)));
-            let høyder: Vec<u16> = kort.iter().map(|(_, h)| *h).collect();
+            let høyder: Vec<u16> = kort.iter().map(|(_, k)| høyde(k)).collect();
             let vis = synlige(&høyder, valgt, plass.saturating_sub(over + 1));
             skjult = kort.len() - vis.len();
-            rader.push((Rad::Overskrift(Gruppe::Ferdig), 1));
+            rader.push((Rad::Overskrift(Gruppe::Ferdig), None));
             for (i, k) in kort.into_iter().enumerate().skip(vis.start).take(vis.len()) {
                 if i > vis.start {
-                    rader.push((Rad::Strek, 1));
+                    rader.push((Rad::Strek, None));
                 }
                 rader.push(k);
             }
@@ -262,11 +263,12 @@ fn plasser<'a>(app: &'a App, plass: u16) -> (Vec<(u16, u16, Rad<'a>)>, usize) {
 
     let mut y = 0;
     let mut plassert = Vec::with_capacity(rader.len());
-    for (i, (rad, høyde)) in rader.into_iter().enumerate() {
+    for (i, (rad, kort)) in rader.into_iter().enumerate() {
         if i == ferdig {
             y = ferdig_y;
         }
-        plassert.push((y, høyde, rad));
+        let høyde = høyde(&kort);
+        plassert.push(Plassert { y, høyde, rad, kort });
         y += høyde;
     }
     (plassert, skjult)
@@ -302,8 +304,8 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     if y >= hint_y {
         return None;
     }
-    plasser(app, hint_y).0.into_iter().find_map(|(topp, høyde, rad)| match rad {
-        Rad::Pane(pane, _) if (topp..topp + høyde).contains(&y) => Some(pane.clone()),
+    plasser(app, hint_y).0.into_iter().find_map(|p| match p.rad {
+        Rad::Pane(pane, _) if (p.y..p.y + p.høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })
 }
@@ -516,7 +518,7 @@ fn bryt(tekst: &str, bredde: usize, maks: usize) -> Vec<String> {
     linjer
 }
 
-fn tegn_pane(buf: &mut Buffer, app: &App) {
+fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
     let v = app.visning;
     if v.width == 0 {
         return;
@@ -526,8 +528,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
         return;
     }
     let aktiv = app.aktiv().map(|p| p.id.as_str());
-    let bokser = app.bokser();
-    for boks in &bokser {
+    for boks in bokser {
         if let Some(bilde) = app.bilder.get(&boks.pane) {
             tegn_bilde(buf, boks.innhold, bilde);
         }
@@ -539,9 +540,9 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
         }
     }
     if app.rammer == Rammer::Linjer && bokser.len() > 1 {
-        tegn_linjer(buf, app, &bokser);
+        tegn_linjer(buf, app, bokser);
     }
-    if let (true, Some(boks)) = (app.rull > 0, aktiv_boks(app)) {
+    if let (true, Some(boks)) = (app.rull > 0, aktiv_boks(app, bokser)) {
         let hvor = format!(" {}/{} ", app.rull, app.historie);
         let bredde = hvor.chars().count() as u16;
         // På toppen av rammen, eller øverst i panen når den ikke har ramme.
@@ -555,9 +556,9 @@ fn tegn_pane(buf: &mut Buffer, app: &App) {
     }
 }
 
-fn aktiv_boks(app: &App) -> Option<Boks> {
+fn aktiv_boks<'a>(app: &App, bokser: &'a [Boks]) -> Option<&'a Boks> {
     let aktiv = app.aktiv()?;
-    app.bokser().into_iter().find(|b| b.pane == aktiv.id)
+    bokser.iter().find(|b| b.pane == aktiv.id)
 }
 
 fn tegn_bilde(buf: &mut Buffer, område: Rect, bilde: &[Linje]) {
@@ -582,7 +583,7 @@ fn tegn_linjer(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
     let inni = |r: Rect, x: u16, y: u16| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
     let dekket = |x: u16, y: u16| bokser.iter().any(|b| inni(b.innhold, v.x + x, v.y + y));
     let strek = |x: i32, y: i32| x >= 0 && y >= 0 && x < bredde as i32 && y < høyde as i32 && !dekket(x as u16, y as u16);
-    let aktiv = aktiv_boks(app).filter(|_| app.fokus == Fokus::Pane).map(|b| b.innhold);
+    let aktiv = aktiv_boks(app, bokser).filter(|_| app.fokus == Fokus::Pane).map(|b| b.innhold);
     for y in 0..høyde {
         for x in 0..bredde {
             if dekket(x, y) {
@@ -685,14 +686,6 @@ mod tester {
         assert_eq!(bryt_med("Fiks alle testene", Some("14m"), 12, 1), ["Fiks al…"]);
         assert_eq!(bryt_med("Fiks testene", Some("3m"), 12, 2), ["Fiks testene", ""]);
         assert_eq!(bryt_med("Fiks", None, 16, 2), ["Fiks"]);
-    }
-
-    #[test]
-    fn varighet_i_minutter_timer_og_døgn() {
-        assert_eq!(varighet(59_000), "<1m");
-        assert_eq!(varighet(14 * 60_000), "14m");
-        assert_eq!(varighet(3 * 3_600_000 + 60_000), "3t");
-        assert_eq!(varighet(2 * 86_400_000), "2d");
     }
 
     #[test]

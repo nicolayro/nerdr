@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nerdr_kjerne::merke::Merke;
@@ -18,6 +18,7 @@ use serde_json::json;
 
 use crate::grupper::{self, Plass, Rad, glyf, tittel};
 use crate::ny;
+use crate::tekst::{mappenavn, varighet};
 
 const VERSJON: u32 = 1;
 
@@ -71,7 +72,7 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
             Rad::Overskrift(gruppe) => ut += &format!("{}\n", tittel(*gruppe)),
             Rad::Pane(p, m) => {
                 let mappe = claude.get(&p.id).and_then(|c| c.mappe.as_deref());
-                let navn = mappe.map_or_else(|| format!("{}:{}", p.sesjon, p.vindu), navn);
+                let navn = mappe.map_or_else(|| format!("{}:{}", p.sesjon, p.vindu), mappenavn);
                 let branch = mappe.and_then(git::branch).map(|b| format!(" › {b}")).unwrap_or_default();
                 let oppgave = p.oppgave().map(|o| format!("  {o}")).unwrap_or_default();
                 let _ = writeln!(ut, "{}  {:<5}  {navn}{branch}{oppgave}", glyf(*m), p.id);
@@ -96,16 +97,18 @@ pub fn samtaler(som_json: bool) -> io::Result<()> {
     if samtaler.is_empty() {
         ut += "Ingen tidligere samtaler.\n";
     }
-    let nå = SystemTime::now();
     for s in &samtaler {
-        let alder = ny::alder(nå.duration_since(s.endret).unwrap_or_default());
-        let _ = writeln!(ut, "{alder:>6}  {}  {}  {}", s.id, navn(&s.mappe), s.tittel);
+        let alder = varighet(crate::nå_ms().saturating_sub(ms(s.endret)));
+        let _ = writeln!(ut, "{alder:>4}  {}  {}  {}", s.id, mappenavn(&s.mappe), s.tittel);
     }
     skriv(&ut)
 }
 
 /// Uten `mappe` fortsettes samtalen i mappa den hørte til.
 pub fn ny(socket: Option<&str>, mappe: Option<&str>, fortsett: Option<&str>, som_json: bool) -> io::Result<()> {
+    if let Some(id) = fortsett.filter(|id| !samtaler::gyldig_id(id)) {
+        return Err(io::Error::other(format!("{id} er ikke en id for en samtale")));
+    }
     let claude = register::les(&konfigkatalog().join("sessions"));
     if let Some(id) = fortsett
         && let Some(pane) = claude.iter().find(|(_, c)| c.samtale.as_deref() == Some(id)).map(|(p, _)| p)
@@ -152,10 +155,6 @@ fn tilstand(t: Tilstand) -> &'static str {
         Tilstand::Jobber => "jobber",
         Tilstand::Klar => "klar",
     }
-}
-
-fn navn(mappe: &Path) -> String {
-    mappe.file_name().map_or_else(|| mappe.display().to_string(), |n| n.to_string_lossy().into())
 }
 
 fn ms(tid: SystemTime) -> u64 {

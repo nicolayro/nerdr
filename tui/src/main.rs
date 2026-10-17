@@ -5,6 +5,7 @@ mod kommandoer;
 mod ny;
 mod taster;
 mod tegn;
+mod tekst;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -35,6 +36,10 @@ const HENTE_INTERVALL: Duration = Duration::from_millis(16);
 /// Så lenge venter vi på at en synkronisert oppdatering blir ferdig, i tilfelle
 /// avslutningen aldri kommer.
 const SYNK_MAKS: Duration = Duration::from_millis(200);
+/// En Claude nerdr har startet, som ikke står i registeret etter så lang tid,
+/// kom trolig aldri i gang, som når `claude` ikke finnes i skallet. Den som
+/// starter tregt, er i registeret lenge før.
+const STARTER_MAKS: Duration = Duration::from_secs(5 * 60);
 /// Linjer per hakk på hjulet, som piltaster i alternativ skjerm og som linjer
 /// i historikken.
 const RULL_STEG: u32 = 3;
@@ -141,9 +146,10 @@ struct App {
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
     hjelp: bool,
-    /// Pane-id → mappe for Claude-er nerdr har startet, til de står i
-    /// registeret. Oppstarten tar flere sekunder, og så lenge vises de likevel.
-    nye: HashMap<String, PathBuf>,
+    /// Pane-id → mappe og starttid for Claude-er nerdr har startet, til de
+    /// står i registeret. Oppstarten tar flere sekunder, og så lenge vises de
+    /// likevel.
+    nye: HashMap<String, (PathBuf, Instant)>,
     /// Panen nerdr skal gå inn i når den dukker opp i `list-panes`.
     gå_inn_i: Option<String>,
     ferdig: Option<String>,
@@ -402,13 +408,18 @@ impl App {
                 let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
                 self.husk_sett(&alle);
                 if ok {
-                    self.nye.retain(|id, _| !self.claude.contains_key(id) && alle.iter().any(|p| &p.id == id));
+                    let inne = |id: &String| self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| &v.id == id);
+                    self.nye.retain(|id, (_, startet)| {
+                        !self.claude.contains_key(id)
+                            && alle.iter().any(|p| &p.id == id)
+                            && (startet.elapsed() < STARTER_MAKS || inne(id))
+                    });
                 }
                 self.brancher = self
                     .claude
                     .iter()
                     .filter_map(|(id, s)| Some((id, s.mappe.as_deref()?)))
-                    .chain(self.nye.iter().map(|(id, m)| (id, m.as_path())))
+                    .chain(self.nye.iter().map(|(id, (m, _))| (id, m.as_path())))
                     .filter_map(|(id, mappe)| Some((id.clone(), git::branch(mappe)?)))
                     .collect();
                 self.claude_paner = alle
@@ -489,7 +500,7 @@ impl App {
                 for kommando in start::skriv_inn(&id, &claude_kommando) {
                     self.send(&tmux::linje(&kommando), Svar::Ingenting);
                 }
-                self.nye.insert(id.clone(), mappe);
+                self.nye.insert(id.clone(), (mappe, Instant::now()));
                 self.gå_inn_i = Some(id);
                 self.list_paner();
                 false
