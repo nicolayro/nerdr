@@ -771,7 +771,11 @@ impl App {
     }
 
     fn hent(&mut self) {
-        let Some(aktiv) = self.aktiv().map(|p| p.id.clone()) else { return };
+        let Some(aktiv) = self.aktiv().map(|p| p.id.clone()) else {
+            // Ellers ber `tid_til_henting` om en ny henting med en gang, i hver runde.
+            self.utdatert = false;
+            return;
+        };
         let mut ider: Vec<String> = self.bokser().into_iter().map(|b| b.pane).collect();
         if ider.is_empty() {
             ider.push(aktiv.clone());
