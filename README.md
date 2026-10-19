@@ -52,7 +52,8 @@ terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
 Øverst står vinduene i sesjonen som faner, på en strek som fortsetter den
 første overskriften i lista, og vinduet som vises, har bakgrunn. Et klikk på en fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
 
-Prefikset er det samme som i tmux-oppsettet ditt, ellers `C-b`. Tastene etter
+Prefikset er det du setter i `NERDR_PREFIKS`, ellers det samme som i
+tmux-oppsettet ditt, ellers `C-b`. Tastene etter
 det er de samme som i tmux, og virker både fra lista og fra panen:
 
 | Etter prefikset | Hva |
@@ -153,6 +154,7 @@ eller `klar`), eller `null` når nerdr ikke kjenner statusen. `merke` er det lis
 | | |
 | --- | --- |
 | `NERDR_MAPPER` | Mappene `n` søker i, kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
+| `NERDR_PREFIKS` | Prefikset, skrevet som i tmux: `C-a`, `M-a` eller `C-Space`. Standard er prefikset i tmux-oppsettet ditt, ellers `C-b`. Det endrer ikke tmux, bare nerdr. |
 | `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `linjer`, og prefikset og `B` bytter mens nerdr kjører. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |
 | `nerdr -L <socket>` | tmux-serveren, som `tmux -L`. |

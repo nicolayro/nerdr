@@ -24,6 +24,7 @@ hjul() { tast -l "$(printf '\033[<%s;%s;%sM' "$1" "$2" "$3")"; }
 # dra <fra x> <fra y> <til x> <til y>, med venstre knapp.
 dra() { tast -l "$(printf '\033[<0;%s;%sM\033[<32;%s;%sM\033[<0;%s;%sm' "$1" "$2" "$3" "$4" "$3" "$4")"; }
 skjerm() { vert capture-pane -p -t vert; }
+vert_har() { vert capture-pane -p -t "$1" | grep -Eq -- "$2"; }
 
 # Kjører resten av argumentene på nytt til de lykkes, i opptil fire sekunder.
 # Lista fra registeret leses hvert annet sekund, så det må være lenger enn det.
@@ -490,8 +491,10 @@ sjekk "en id som ikke er bokstaver, tall og -, skrives ikke inn i skallet" \
   inneholder "$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje" --fortsett 'abc; ls')" 'er ikke en id for en samtale'
 maal kill-server
 
-vert new-session -d -s tom "CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $TOM; sleep 30"
+vert new-session -d -s tom "NERDR_PREFIKS=C-a CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $TOM; sleep 30"
 sjekk "uten tmux-server lager nerdr en sesjon" linjer 1 tmux -L "$TOM" list-sessions
+vert send-keys -t tom C-a
+sjekk "NERDR_PREFIKS gir et annet prefiks, og hintet viser det" vert_har tom 'C-a … \+ ny · w lista'
 sjekk "uten tmux sier nerdr fra" inneholder "$(PATH=/finnes-ikke "$NERDR" 2>&1)" 'fant ikke tmux'
 
 echo "$antall sjekker, alle grønne"

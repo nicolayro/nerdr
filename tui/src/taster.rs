@@ -2,7 +2,10 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-/// Prefikset fra tmux-oppsettet, så tastene er de samme som i tmux.
+/// Prefikset ditt i nerdr. Uten `NERDR_PREFIKS` er det det samme som i
+/// tmux-oppsettet, så tastene er de samme som i tmux.
+pub const PREFIKS_VARIABEL: &str = "NERDR_PREFIKS";
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prefiks {
     tegn: char,
@@ -17,6 +20,11 @@ impl Default for Prefiks {
 }
 
 impl Prefiks {
+    /// Fra `NERDR_PREFIKS`, når den er satt til et prefiks nerdr kan bruke.
+    pub fn fra_miljø() -> Option<Prefiks> {
+        Prefiks::fra_tmux(&std::env::var(PREFIKS_VARIABEL).ok()?)
+    }
+
     /// Fra navnet tmux bruker, som `C-b`, `M-a` eller `C-Space`.
     pub fn fra_tmux(navn: &str) -> Option<Prefiks> {
         let (mut ctrl, mut alt, mut rest) = (false, false, navn.trim());

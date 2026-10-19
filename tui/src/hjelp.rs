@@ -77,7 +77,10 @@ pub fn tekst() -> String {
     for (tast, hva) in TASTER {
         ut += &format!("  {tast:<9}{hva}\n");
     }
-    ut += "\nEtter prefikset fra tmux, som C-b:\n";
+    ut += &match crate::taster::Prefiks::fra_miljø() {
+        Some(prefiks) => format!("\nEtter prefikset, {} fra {}:\n", prefiks.navn(), crate::taster::PREFIKS_VARIABEL),
+        None => format!("\nEtter prefikset fra tmux, som C-b, eller fra {}:\n", crate::taster::PREFIKS_VARIABEL),
+    };
     for (tast, hva) in PREFIKSTASTER {
         ut += &format!("  {tast:<9}{hva}\n");
     }

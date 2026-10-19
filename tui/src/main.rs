@@ -368,7 +368,7 @@ impl App {
             output_hale: HashMap::new(),
             størrelser: HashMap::new(),
             fokus: Fokus::Liste,
-            prefiks: taster::Prefiks::default(),
+            prefiks: taster::Prefiks::fra_miljø().unwrap_or_default(),
             rammer: bokser::Rammer::fra(env::var(bokser::RAMMER_VARIABEL).ok().as_deref()),
             etter_prefiks: false,
             lukke: None,
@@ -388,7 +388,9 @@ impl App {
     }
 
     fn løkke(&mut self, terminal: &mut DefaultTerminal, rx: &Receiver<Hendelse>) -> io::Result<()> {
-        self.send("show-options -gv prefix", Svar::Prefiks);
+        if taster::Prefiks::fra_miljø().is_none() {
+            self.send("show-options -gv prefix", Svar::Prefiks);
+        }
         self.send(&format!("show-options -gqv {LISTE_OPTION}"), Svar::Liste);
         self.list_paner();
         let mut tegne = true;
