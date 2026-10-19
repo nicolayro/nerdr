@@ -290,23 +290,22 @@ fn uten_tmux(feil: io::Error) -> io::Error {
 fn kjør(socket: Option<&str>) -> io::Result<()> {
     tegn::bruk_farger(palett::les());
     let (tx, rx) = mpsc::channel();
-    let tmux_tx = tx.clone();
-    let socket_eid = socket.map(String::from);
-    let koble = move || {
-        let tx = tmux_tx.clone();
-        Kontroll::start(socket_eid.as_deref(), move |m| {
-            let _ = tx.send(Hendelse::Tmux(m));
-        })
+    let socket = socket.map(String::from);
+    let koble = {
+        let (socket, tx) = (socket.clone(), tx.clone());
+        move || {
+            let tx = tx.clone();
+            Kontroll::start(socket.as_deref(), move |m| {
+                let _ = tx.send(Hendelse::Tmux(m));
+            })
+        }
     };
     let kontroll = koble()?;
-    let koble_igjen = {
-        let socket = socket.map(String::from);
-        move || {
-            // Uten sesjoner ville tilkoblingen laget en, og da er det du som
-            // har avsluttet tmux.
-            tmux::kjør(socket.as_deref(), &["has-session"])?;
-            koble()
-        }
+    let koble_igjen = move || {
+        // Uten sesjoner ville tilkoblingen laget en, og da er det du som har
+        // avsluttet tmux.
+        tmux::kjør(socket.as_deref(), &["has-session"])?;
+        koble()
     };
     let prosjekter_tx = tx.clone();
     thread::spawn(move || {
@@ -1123,14 +1122,15 @@ impl App {
         self.meny = Some(Meny::ny(self.her()));
     }
 
-    fn ny_terminal(&mut self, her: &meny::Her) {
+    /// Svaret er det `format` gir for det nye vinduet.
+    fn nytt_vindu(&mut self, her: &meny::Her, format: &str, svar: Svar) {
         let (sesjon, mappe) = (sitat(&format!("{}:", her.sesjon_id)), sitat(&her.mappe.to_string_lossy()));
-        self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{window_id}}'"), Svar::NyttVindu);
+        self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F {}", sitat(format)), svar);
     }
 
     /// En worktree spør først om navnet, og startes når det er skrevet.
     ///
-    /// Det som startes en Claude, går via lista, så du går inn i den nye selv
+    /// Det som starter en Claude, går via lista, så du går inn i den nye selv
     /// om du åpnet menyen fra en pane.
     fn velg_ny(&mut self, valg: Valg) {
         let Some(meny) = &mut self.meny else { return };
@@ -1139,9 +1139,6 @@ impl App {
             return;
         }
         let Some(Meny { her, navn, .. }) = self.meny.take() else { return };
-        let sitert = |her: &meny::Her| {
-            (sitat(&format!("{}:", her.sesjon_id)), sitat(&her.pane_id), sitat(&her.mappe.to_string_lossy()))
-        };
         match (valg, her) {
             (Valg::Mappe | Valg::Fortsett, _) => {
                 self.bytt_fokus(Fokus::Liste);
@@ -1153,13 +1150,12 @@ impl App {
                     Valg::Worktree => start::claude_i_worktree(&navn.unwrap_or_default()),
                     _ => start::claude(None),
                 };
-                let (sesjon, _, mappe) = sitert(&her);
-                let svar = Svar::NyPane { mappe: her.mappe, claude_kommando };
-                self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{pane_id}}'"), svar);
+                let svar = Svar::NyPane { mappe: her.mappe.clone(), claude_kommando };
+                self.nytt_vindu(&her, "#{pane_id}", svar);
             }
-            (Valg::Terminal, Some(her)) => self.ny_terminal(&her),
+            (Valg::Terminal, Some(her)) => self.nytt_vindu(&her, "#{window_id}", Svar::NyttVindu),
             (Valg::SideOmSide | Valg::OverOgUnder, Some(her)) => {
-                let (_, pane, mappe) = sitert(&her);
+                let (pane, mappe) = (sitat(&her.pane_id), sitat(&her.mappe.to_string_lossy()));
                 let retning = if valg == Valg::SideOmSide { "-h" } else { "-v" };
                 self.send(&format!("split-window {retning} -t {pane} -c {mappe} -P -F '#{{pane_id}}'"), Svar::NyDeling);
             }
@@ -1300,7 +1296,7 @@ impl App {
             } else if tegn::ny_fane_på(self, m.column)
                 && let Some(her) = self.her()
             {
-                self.ny_terminal(&her);
+                self.nytt_vindu(&her, "#{window_id}", Svar::NyttVindu);
             }
             return true;
         }

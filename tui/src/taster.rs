@@ -2,10 +2,10 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-/// Prefikset ditt i nerdr. Uten `NERDR_PREFIKS` er det det samme som i
-/// tmux-oppsettet, så tastene er de samme som i tmux.
 pub const PREFIKS_VARIABEL: &str = "NERDR_PREFIKS";
 
+/// Prefikset ditt i nerdr. Uten `NERDR_PREFIKS` er det det samme som i
+/// tmux-oppsettet, så tastene er de samme som i tmux.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prefiks {
     tegn: char,

@@ -4,6 +4,7 @@ use nerdr_kjerne::merke::Merke;
 
 use crate::grupper::glyf;
 use crate::ny;
+use crate::taster::{PREFIKS_VARIABEL, Prefiks};
 
 pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
 og du kan gå inn i den og skrive.";
@@ -76,9 +77,9 @@ pub fn tekst() -> String {
     for (tast, hva) in TASTER {
         ut += &format!("  {tast:<9}{hva}\n");
     }
-    ut += &match crate::taster::Prefiks::fra_miljø() {
-        Some(prefiks) => format!("\nEtter prefikset, {} fra {}:\n", prefiks.navn(), crate::taster::PREFIKS_VARIABEL),
-        None => format!("\nEtter prefikset fra tmux, som C-b, eller fra {}:\n", crate::taster::PREFIKS_VARIABEL),
+    ut += &match Prefiks::fra_miljø() {
+        Some(prefiks) => format!("\nEtter prefikset, {} fra {PREFIKS_VARIABEL}:\n", prefiks.navn()),
+        None => format!("\nEtter prefikset fra tmux, som C-b, eller fra {PREFIKS_VARIABEL}:\n"),
     };
     for (tast, hva) in PREFIKSTASTER {
         ut += &format!("  {tast:<9}{hva}\n");

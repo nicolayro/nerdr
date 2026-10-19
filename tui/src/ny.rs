@@ -85,7 +85,7 @@ impl Velger {
     /// blir stående valgt.
     pub fn legg_til(&mut self, prosjekter: Vec<PathBuf>) {
         let valgt = self.valgt().map(|k| k.mappe.clone());
-        let nye = prosjekter.into_iter().filter(|p| !self.mapper.iter().any(|k| &k.mappe == p)).collect::<Vec<_>>();
+        let nye: Vec<PathBuf> = prosjekter.into_iter().filter(|p| !self.mapper.iter().any(|k| &k.mappe == p)).collect();
         self.mapper.extend(nye.into_iter().map(|mappe| Kandidat { vis: med_tilde(&mappe), mappe, samtale: None, alder: None }));
         self.søker = false;
         if !self.fortsett
@@ -210,7 +210,7 @@ fn let_etter_prosjekter(mappe: &Path, dybde: usize, ut: &mut Vec<PathBuf>) {
 /// står foran mappene under den, som `app` og `web` inne i en app.
 fn poeng_for(k: &Kandidat, søk: &str) -> Option<(i32, Vec<usize>)> {
     let (poeng, tegn) = poeng(søk, &k.vis)?;
-    let siste_del = k.vis.chars().collect::<Vec<_>>().iter().rposition(|&c| c == '/').map_or(0, |i| i + 1);
+    let siste_del = k.vis.rfind('/').map_or(0, |i| k.vis[..i].chars().count() + 1);
     let i_siste = k.samtale.is_none() && tegn.first().is_some_and(|&i| i >= siste_del);
     Some((poeng + if i_siste { 20 } else { 0 }, tegn))
 }

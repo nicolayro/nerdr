@@ -16,9 +16,8 @@ use crate::markering;
 use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf, tittel};
 use crate::ny::Velger;
-use crate::tekst::{sted, varighet};
 use crate::meny::Meny;
-use crate::tekst::med_tilde;
+use crate::tekst::{med_tilde, sted, varighet};
 use crate::{App, Fokus, Knapp, Lukke, Mål, hjelp};
 
 /// Bredden på lista, med skillelinja, til du drar i den.
@@ -153,11 +152,15 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                     overskrifter.push(y);
                 }
             }
-            Rad::Pane(pane, merke) => {
+            Rad::Pane(pane, _) => {
                 let Some(kort) = kort else { continue };
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
-                let pekt = matches!(mus, Some(Mål::Kort(id)) if *id == pane.id);
-                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, *merke, valgt, app.fokus, pekt);
+                let bakgrunn = match () {
+                    _ if valgt && app.fokus == Fokus::Liste => Some(markert()),
+                    _ if matches!(mus, Some(Mål::Kort(id)) if *id == pane.id) => Some(under_musen()),
+                    _ => None,
+                };
+                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, valgt, bakgrunn);
             }
         }
     }
@@ -231,6 +234,7 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
 /// jobbet til høyre, og under den repoet og branchen. Uten oppgave er repoet
 /// tittelen.
 struct Kort {
+    merke: Merke,
     tittel: Vec<String>,
     tid: Option<String>,
     under: Vec<String>,
@@ -244,7 +248,7 @@ impl Kort {
 
 fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
     if stripe(app) {
-        return Kort { tittel: vec![String::new()], tid: None, under: Vec::new() };
+        return Kort { merke, tittel: vec![String::new()], tid: None, under: Vec::new() };
     }
     let tekst = tekstbredde(app);
     let ny = app.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
@@ -265,7 +269,7 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
         (None, Some(oppgave)) => (oppgave, repo_og_branch(&sted, branch, tekst)),
         (None, None) => (vec![kutt(&sted, første)], branch.map(|b| vec![kutt(&format!("› {b}"), tekst)]).unwrap_or_default()),
     };
-    Kort { tittel, tid, under }
+    Kort { merke, tittel, tid, under }
 }
 
 /// På én linje når begge får plass, ellers branchen på linja under, så ingen
@@ -281,25 +285,10 @@ fn repo_og_branch(sted: &str, branch: Option<&str>, bredde: usize) -> Vec<String
 
 /// Kortet med første linje på rad `topp`, som kan være over skjermen når
 /// lista ruller. Bare linjene på radene i `vis` tegnes.
-#[allow(clippy::too_many_arguments)]
-fn tegn_kort(
-    buf: &mut Buffer,
-    topp: i32,
-    vis: &Range<u16>,
-    bredde: u16,
-    kort: &Kort,
-    merke: Merke,
-    valgt: bool,
-    fokus: Fokus,
-    pekt: bool,
-) {
+fn tegn_kort(buf: &mut Buffer, topp: i32, vis: &Range<u16>, bredde: u16, kort: &Kort, valgt: bool, bakgrunn: Option<Style>) {
     let tekst = bredde.saturating_sub(TEKST_X + 1);
+    let merke = kort.merke;
     let dempet = !valgt && merke.gruppe() == Gruppe::Ferdig;
-    let bakgrunn = match () {
-        _ if valgt && fokus == Fokus::Liste => Some(markert()),
-        _ if pekt => Some(under_musen()),
-        _ => None,
-    };
     let (peker, tittelstil) = match (valgt, dempet) {
         (true, _) => ("▎", STERK),
         (false, false) => (" ", VANLIG),
@@ -408,8 +397,7 @@ impl Utsnitt {
         self.rader().contains(&y).then(|| y - self.ruller as u16 + self.rull)
     }
 
-    /// Rullet så `valgt` vises, med overskriften over når den er den første i
-    /// gruppen. Er kortet høyere enn utsnittet, vises toppen.
+    /// Rullet så radene i `valgt` vises. Er de flere enn utsnittet, vises toppen.
     pub fn følg(mut self, valgt: Range<u16>) -> Utsnitt {
         if !self.ruller {
             return self;
