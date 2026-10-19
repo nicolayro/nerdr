@@ -26,10 +26,12 @@ impl Merke {
     /// `sett` er da du sist var inne i panen, i millisekunder siden 1970.
     pub fn fra(claude: &Claude, sett: u64) -> Merke {
         match claude.tilstand {
-            Tilstand::Spør => Merke::Spør,
-            Tilstand::Jobber => Merke::Jobber,
-            Tilstand::Klar if claude.endret > sett => Merke::Ulest,
-            Tilstand::Klar => Merke::Sett,
+            Some(Tilstand::Spør) => Merke::Spør,
+            Some(Tilstand::Jobber) => Merke::Jobber,
+            Some(Tilstand::Klar) if claude.endret > sett => Merke::Ulest,
+            // Uten tilstand vet vi ikke om den venter på deg, så den skal ikke
+            // tas med som VENTER.
+            Some(Tilstand::Klar) | None => Merke::Sett,
         }
     }
 
@@ -68,15 +70,16 @@ impl Gruppe {
 mod tester {
     use super::*;
 
-    fn claude(tilstand: Tilstand, endret: u64) -> Claude {
+    fn claude(tilstand: Option<Tilstand>, endret: u64) -> Claude {
         Claude { tilstand, endret, mappe: None, samtale: None }
     }
 
     #[test]
     fn ferdig_etter_at_du_var_inne_venter_på_deg() {
-        assert_eq!(Merke::fra(&claude(Tilstand::Klar, 20), 10), Merke::Ulest);
-        assert_eq!(Merke::fra(&claude(Tilstand::Klar, 10), 20), Merke::Sett);
-        assert_eq!(Merke::fra(&claude(Tilstand::Spør, 10), 20), Merke::Spør);
+        assert_eq!(Merke::fra(&claude(Some(Tilstand::Klar), 20), 10), Merke::Ulest);
+        assert_eq!(Merke::fra(&claude(Some(Tilstand::Klar), 10), 20), Merke::Sett);
+        assert_eq!(Merke::fra(&claude(Some(Tilstand::Spør), 10), 20), Merke::Spør);
+        assert_eq!(Merke::fra(&claude(None, 20), 10), Merke::Sett);
         assert_eq!(Merke::Ulest.gruppe(), Gruppe::Venter);
     }
 }

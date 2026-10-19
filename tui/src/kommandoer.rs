@@ -47,7 +47,7 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
                     "pane": p.id,
                     "sesjon": p.sesjon,
                     "vindu": p.vindu,
-                    "tilstand": tilstand(c.tilstand),
+                    "tilstand": c.tilstand.map(tilstand),
                     "merke": m.navn(),
                     "gruppe": m.gruppe().navn(),
                     "endret": c.endret,

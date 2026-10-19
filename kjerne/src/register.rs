@@ -19,7 +19,8 @@ pub enum Tilstand {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Claude {
-    pub tilstand: Tilstand,
+    /// `None` når Claude melder en status nerdr ikke kjenner.
+    pub tilstand: Option<Tilstand>,
     /// Millisekunder siden 1970.
     pub endret: u64,
     pub mappe: Option<PathBuf>,
@@ -65,11 +66,12 @@ fn tolk(tekst: &str) -> Option<(String, u64, Claude)> {
     let o: Oppføring = serde_json::from_str(tekst).ok()?;
     let tmux = o.tmux?;
     let (_, pane) = tmux.rsplit_once('.')?;
-    let tilstand = match o.status?.as_str() {
-        "waiting" => Tilstand::Spør,
-        "busy" => Tilstand::Jobber,
-        "idle" => Tilstand::Klar,
-        _ => return None,
+    let tilstand = match o.status.as_deref() {
+        Some("waiting") => Some(Tilstand::Spør),
+        Some("busy") => Some(Tilstand::Jobber),
+        // `shell` er ferdig ved prompten med et skall som kjører i bakgrunnen.
+        Some("idle" | "shell") => Some(Tilstand::Klar),
+        _ => None,
     };
     let endret = o.status_updated_at.unwrap_or(o.updated_at);
     Some((pane.to_string(), o.updated_at, Claude { tilstand, endret, mappe: o.cwd, samtale: o.session_id }))
@@ -83,17 +85,24 @@ mod tester {
     fn leser_pane_og_tilstand() {
         let t = r#"{"pid":1,"tmux":"nerdr:@7.%37","status":"waiting","cwd":"/a/nerdr","updatedAt":5,"statusUpdatedAt":3,"sessionId":"abc"}"#;
         let claude =
-            Claude { tilstand: Tilstand::Spør, endret: 3, mappe: Some("/a/nerdr".into()), samtale: Some("abc".into()) };
+            Claude { tilstand: Some(Tilstand::Spør), endret: 3, mappe: Some("/a/nerdr".into()), samtale: Some("abc".into()) };
         assert_eq!(tolk(t), Some(("%37".into(), 5, claude)));
         let uten = r#"{"tmux":"a:@1.%2","status":"idle","updatedAt":5}"#;
         assert_eq!(tolk(uten).map(|(_, _, s)| s.endret), Some(5));
     }
 
     #[test]
-    fn uten_tmux_eller_med_ukjent_status_gir_ingenting() {
+    fn uten_tmux_gir_ingenting() {
         assert_eq!(tolk(r#"{"status":"busy"}"#), None);
-        assert_eq!(tolk(r#"{"tmux":"a:@1.%2","status":"ny-verdi"}"#), None);
         assert_eq!(tolk("ikke json"), None);
+    }
+
+    #[test]
+    fn ukjent_status_gir_claude_uten_tilstand() {
+        let tilstand = |t| tolk(t).map(|(_, _, c)| c.tilstand);
+        assert_eq!(tilstand(r#"{"tmux":"a:@1.%2","status":"ny-verdi"}"#), Some(None));
+        assert_eq!(tilstand(r#"{"tmux":"a:@1.%2"}"#), Some(None));
+        assert_eq!(tilstand(r#"{"tmux":"a:@1.%2","status":"shell"}"#), Some(Some(Tilstand::Klar)));
     }
 
     #[test]
@@ -104,7 +113,7 @@ mod tester {
         fs::write(katalog.join("2.json"), r#"{"tmux":"b:@3.%2","status":"busy","updatedAt":20}"#).unwrap();
         fs::write(katalog.join("2.key"), "hemmelig").unwrap();
 
-        let jobber = Claude { tilstand: Tilstand::Jobber, endret: 20, mappe: None, samtale: None };
+        let jobber = Claude { tilstand: Some(Tilstand::Jobber), endret: 20, mappe: None, samtale: None };
         assert_eq!(les(&katalog), HashMap::from([("%2".to_string(), jobber)]));
         fs::remove_dir_all(katalog).unwrap();
     }

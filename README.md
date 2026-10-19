@@ -119,7 +119,7 @@ med et `versjon`-felt.
 | `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som `C-r` |
 
 I JSON fra `liste` er `tilstand` det Claude melder selv (`venter`, `jobber`
-eller `klar`). `merke` er det lista viser (`spør`, `ulest`, `jobber` eller
+eller `klar`), eller `null` når nerdr ikke kjenner statusen. `merke` er det lista viser (`spør`, `ulest`, `jobber` eller
 `sett`), og `gruppe` er der den står (`venter`, `jobber` eller `ferdig`).
 `sett` er da du sist var inne i Claude-en i nerdr, i millisekunder som
 `endret`, eller `null` når nerdr ikke har sett den.
