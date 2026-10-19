@@ -190,18 +190,18 @@ sjekk "streken mellom kortene i VENTER" linje_har 4 '┈'
 tast j Enter
 sjekk "j og Enter går inn i gamma" i_panen
 tast C-b w
-sjekk "gamma står under FERDIG med ○, nederst" linje_har 14 '^▎○  gamma:0'
-sjekk "FERDIG treffer skillestreken" linje_har 13 '^ FERDIG .*┤'
+sjekk "gamma står under FERDIG med ○, rett under VENTER" linje_har 6 '^▎○  gamma:0'
+sjekk "FERDIG treffer skillestreken" linje_har 5 '^ FERDIG .*┤'
 sjekk "nerdr har skrevet når du var inne i gamma, i @nerdr-sett" sett_er_tall gamma
 
 tast k
 sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
-klikk 5 14
-sjekk "klikk på gamma nederst velger den" linje_har 14 '^▎○  gamma:0'
+klikk 5 6
+sjekk "klikk på gamma velger den" linje_har 6 '^▎○  gamma:0'
 sleep 0.6
-klikk 5 14
+klikk 5 6
 sjekk "to klikk med pause mellom går ikke inn" i_lista
-klikk 5 14
+klikk 5 6
 sjekk "dobbeltklikk på gamma går inn i den" i_panen
 klikk 5 2
 sjekk "klikk på alfa fra panen velger alfa og går ut i lista" linje_har 2 '^▎●  Fiks testene'
@@ -317,6 +317,7 @@ klikk "$(kolonne 1 ' + ')" 1
 sjekk "klikk på + etter fanene åpner menyen" har 'c  Claude her'
 klikk 40 7
 sjekk "klikk på «terminal her» gir et nytt vindu" linjer 2 maal list-windows -t alfa
+sjekk "slippene etter klikkene i menyen kommer ikke fram i alfa" ikke_i_pane alfa '^[[<0;'
 tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 tast C-b w
@@ -419,11 +420,34 @@ sjekk "y lukker vinduet" linjer 1 maal list-windows -t alfa
 sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ +][^ ]* ─'
 tast C-b w
 
+tast C-b w k k k k k k k k
+for i in 1 2 3 4 5 6; do
+  maal new-session -d -s "ekstra$i" -x 80 -y 20 -c "$MAPPE"
+  registrer "ekstra$i" "ekstra$i" idle ",\"cwd\":\"$MAPPE\""
+done
+list_straks
+sjekk "får ikke lista plass, sier nederste rad hvor mange som er under" linje_har 15 '^  ↓ [0-9]+ +│'
+sjekk "og lista starter på rad to, under streken" linje_har 2 '^ VENTER'
+sjekk "øverst er det ingen pil" linje_mangler 1 '↑'
+for i in 1 2 3 4; do hjul 65 5 5; done
+sjekk "hjulet ruller lista, og øverst står det at noe venter over" linje_har 1 '↑ [0-9]+ · 1 venter'
+tast j j j j j j j j j j
+sjekk "den valgte nederst i lista vises" har '^▎○'
+sjekk "nederst er det ingen pil" linje_mangler 15 '↓'
+klikk 3 1
+sjekk "klikk på pilen ruller en side opp" linje_har 15 '↓ [0-9]+'
+for i in 1 2 3 4 5 6; do
+  maal kill-session -t "ekstra$i"
+  rm "$KONFIG/sessions/ekstra$i.json"
+done
+list_straks
+sjekk "når alt får plass igjen, er pilene borte" mangler '[↑↓] [0-9]'
+
 tast q
 sjekk "q avslutter" uten_klienter
 
-sjekk "nerdr liste grupperer som TUI-et: alfa venter, og prosjekt.ny og gamma er sett, nyest først" \
-  er 'VENTER: ● nerdr, FERDIG: ○ prosjekt.ny, ○ gamma:0, ' gruppert
+sjekk "nerdr liste grupperer som TUI-et: alfa venter, og gamma og prosjekt.ny er sett, eldst først" \
+  er 'VENTER: ● nerdr, FERDIG: ○ gamma:0, ○ prosjekt.ny, ' gruppert
 sjekk "nerdr liste --json har tilstanden fra Claude" er 'venter klar klar ' fra_json tilstand
 sjekk "nerdr liste --json har merket" er 'spør sett sett ' fra_json merke
 sjekk "nerdr liste --json har gruppen" er 'venter ferdig ferdig ' fra_json gruppe

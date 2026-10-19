@@ -109,32 +109,31 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let hint_y = område.height.saturating_sub(1);
 
     let mut overskrifter = Vec::new();
-    let (rader, skjult) = plasser(app, hint_y);
-    for Plassert { y, høyde, rad, kort } in rader {
-        if y >= hint_y {
-            break;
-        }
+    let (rader, utsnitt) = liste(app);
+    let vis = utsnitt.rader();
+    let på_skjermen = |y: u16| u16::try_from(utsnitt.skjerm(y)).ok().filter(|y| vis.contains(y));
+    for Plassert { y, rad, kort, .. } in &rader {
         match rad {
             Rad::Tom => {}
             Rad::Strek => {
-                let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
-                buf.set_stringn(TEKST_X, y, strek, TEKST, SVAK);
+                if let Some(y) = på_skjermen(*y) {
+                    let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
+                    buf.set_stringn(TEKST_X, y, strek, TEKST, SVAK);
+                }
             }
             Rad::Overskrift(gruppe) => {
-                let mut x = buf.set_stringn(1, y, tittel(gruppe), bredde as usize, SVAK).0 + 1;
-                if gruppe == Gruppe::Ferdig && skjult > 0 {
-                    x = buf.set_stringn(x, y, format!("+{skjult}"), bredde as usize, SVAK).0 + 1;
+                if let Some(y) = på_skjermen(*y) {
+                    let x = buf.set_stringn(1, y, tittel(*gruppe), bredde as usize, SVAK).0 + 1;
+                    let strek = "─".repeat(bredde.saturating_sub(x) as usize);
+                    buf.set_stringn(x, y, strek, bredde as usize, SVAK);
+                    overskrifter.push(y);
                 }
-                let strek = "─".repeat(bredde.saturating_sub(x) as usize);
-                buf.set_stringn(x, y, strek, bredde as usize, SVAK);
-                overskrifter.push(y);
             }
             Rad::Pane(pane, merke) => {
                 let Some(kort) = kort else { continue };
-                let område = Rect::new(0, y, bredde, høyde.min(hint_y - y));
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
                 let pekt = matches!(mus, Some(Mål::Kort(id)) if *id == pane.id);
-                tegn_kort(buf, område, &kort, merke, valgt, app.fokus, pekt);
+                tegn_kort(buf, utsnitt.skjerm(*y), &vis, kort, *merke, valgt, app.fokus, pekt);
             }
         }
     }
@@ -165,10 +164,24 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     }
 
     // Overskriftene treffer skillestreken, og øverst går streken videre til
-    // fanene. Står bare FERDIG i lista, er den nederst, og da går streken over
-    // lista alene.
+    // fanene. Når lista ruller, står pilen på den.
     if !overskrifter.contains(&0) {
         buf.set_string(0, 0, "─".repeat(bredde as usize), SVAK);
+    }
+    if utsnitt.ruller {
+        let kort = |p: &&Plassert| matches!(p.rad, Rad::Pane(..));
+        let over: Vec<&Plassert> = rader.iter().filter(kort).filter(|p| p.y + p.høyde <= utsnitt.rull).collect();
+        let under = rader.iter().filter(kort).filter(|p| p.y >= utsnitt.rull + utsnitt.rom).count();
+        let venter = over.iter().filter(|p| matches!(p.rad, Rad::Pane(_, m) if m.gruppe() == Gruppe::Venter)).count();
+        if !over.is_empty() {
+            let x = buf.set_stringn(1, 0, format!(" ↑ {} ", over.len()), bredde as usize, SVAK).0;
+            if venter > 0 {
+                buf.set_stringn(x, 0, format!("· {venter} venter "), bredde as usize, Style::new().fg(ORANSJE));
+            }
+        }
+        if under > 0 {
+            buf.set_stringn(1, vis.end, format!(" ↓ {under} "), bredde as usize, SVAK);
+        }
     }
     for y in 0..område.height {
         let tegn = match y {
@@ -228,28 +241,35 @@ fn repo_og_branch(sted: &str, branch: Option<&str>) -> Vec<String> {
     vec![kutt(sted, TEKST), kutt(&format!("› {branch}"), TEKST)]
 }
 
-fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus, pekt: bool) {
+/// Kortet med første linje på rad `topp`, som kan være over skjermen når
+/// lista ruller. Bare linjene på radene i `vis` tegnes.
+#[allow(clippy::too_many_arguments)]
+fn tegn_kort(buf: &mut Buffer, topp: i32, vis: &Range<u16>, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus, pekt: bool) {
     let dempet = !valgt && merke.gruppe() == Gruppe::Ferdig;
-    if valgt && fokus == Fokus::Liste {
-        buf.set_style(område, markert());
-    } else if pekt {
-        buf.set_style(område, under_musen());
-    }
+    let bakgrunn = match () {
+        _ if valgt && fokus == Fokus::Liste => Some(markert()),
+        _ if pekt => Some(under_musen()),
+        _ => None,
+    };
     let (peker, tittelstil) = match (valgt, dempet) {
         (true, _) => ("▎", STERK),
         (false, false) => (" ", VANLIG),
         (false, true) => (" ", SVAK),
     };
-    for y in område.top()..område.bottom() {
-        buf.set_stringn(0, y, peker, 1, VANLIG);
-    }
-    buf.set_stringn(1, område.y, glyf(merke), 1, Style::new().fg(glyffarge(merke)));
-    if let Some(tid) = &kort.tid {
-        høyrestilt(buf, område.y, TEKST_X + TEKST as u16, tid, SVAK);
-    }
     let linjer = kort.tittel.iter().map(|l| (l, tittelstil)).chain(kort.under.iter().map(|l| (l, SVAK)));
-    for ((linje, stil), y) in linjer.zip(område.top()..område.bottom()) {
+    for (i, (linje, stil)) in linjer.enumerate() {
+        let Some(y) = u16::try_from(topp + i as i32).ok().filter(|y| vis.contains(y)) else { continue };
+        if let Some(bakgrunn) = bakgrunn {
+            buf.set_style(Rect::new(0, y, LISTE - 1, 1), bakgrunn);
+        }
+        buf.set_stringn(0, y, peker, 1, VANLIG);
         buf.set_stringn(TEKST_X, y, linje, TEKST, stil);
+        if i == 0 {
+            buf.set_stringn(1, y, glyf(merke), 1, Style::new().fg(glyffarge(merke)));
+            if let Some(tid) = &kort.tid {
+                høyrestilt(buf, y, TEKST_X + TEKST as u16, tid, SVAK);
+            }
+        }
     }
 }
 
@@ -276,93 +296,118 @@ struct Plassert<'a> {
     kort: Option<Kort>,
 }
 
-/// Radene i lista, og hvor mange i FERDIG som ikke fikk plass. Får alt plass,
-/// legges FERDIG nederst, med en tom rad over hintet, så det du har lagt bort
-/// står for seg selv. Ellers vises så mange i FERDIG som får plass, og alltid
-/// den som er valgt.
-fn plasser<'a>(app: &'a App, plass: u16) -> (Vec<Plassert<'a>>, usize) {
-    let høyde = |k: &Option<Kort>| k.as_ref().map_or(1, Kort::høyde);
-    let mut rader: Vec<(Rad, Option<Kort>)> = app
-        .rader()
-        .into_iter()
-        .map(|r| {
-            let kort = if let Rad::Pane(pane, merke) = r { Some(kort(app, pane, merke)) } else { None };
-            (r, kort)
-        })
-        .collect();
-    let ferdig = rader.iter().position(|(r, _)| matches!(r, Rad::Overskrift(Gruppe::Ferdig))).unwrap_or(rader.len());
-    let over: u16 = rader[..ferdig].iter().map(|(_, k)| høyde(k)).sum();
-    let under: u16 = rader[ferdig..].iter().map(|(_, k)| høyde(k)).sum();
-
-    let mut skjult = 0;
-    let ferdig_y = if over + under < plass {
-        plass - under - 1
-    } else {
-        let kort: Vec<(Rad, Option<Kort>)> =
-            rader.split_off(ferdig).into_iter().filter(|(r, _)| matches!(r, Rad::Pane(..))).collect();
-        if !kort.is_empty() {
-            let valgt = app.valgt.as_ref().and_then(|v| kort.iter().position(|(r, _)| matches!(r, Rad::Pane(p, _) if p.id == v.id)));
-            let høyder: Vec<u16> = kort.iter().map(|(_, k)| høyde(k)).collect();
-            let vis = synlige(&høyder, valgt, plass.saturating_sub(over + 1));
-            skjult = kort.len() - vis.len();
-            rader.push((Rad::Overskrift(Gruppe::Ferdig), None));
-            for (i, k) in kort.into_iter().enumerate().skip(vis.start).take(vis.len()) {
-                if i > vis.start {
-                    rader.push((Rad::Strek, None));
-                }
-                rader.push(k);
-            }
-        }
-        over
-    };
-
+/// Radene i lista, etter hverandre fra toppen.
+fn plasser(app: &App) -> Vec<Plassert<'_>> {
     let mut y = 0;
-    let mut plassert = Vec::with_capacity(rader.len());
-    for (i, (rad, kort)) in rader.into_iter().enumerate() {
-        if i == ferdig {
-            y = ferdig_y;
-        }
-        let høyde = høyde(&kort);
-        plassert.push(Plassert { y, høyde, rad, kort });
-        y += høyde;
-    }
-    (plassert, skjult)
+    app.rader()
+        .into_iter()
+        .map(|rad| {
+            let kort = if let Rad::Pane(pane, merke) = rad { Some(kort(app, pane, merke)) } else { None };
+            let høyde = kort.as_ref().map_or(1, Kort::høyde);
+            let plassert = Plassert { y, høyde, rad, kort };
+            y += høyde;
+            plassert
+        })
+        .collect()
 }
 
-/// Kortene med `høyder` som får plass på `rom` rader, med en strek mellom hvert.
-/// Er det valgte langt nede, er det det nederste som vises. Det første får
-/// alltid plass, selv om bare toppen av det vises.
-fn synlige(høyder: &[u16], valgt: Option<usize>, rom: u16) -> Range<usize> {
-    if rom == 0 || høyder.is_empty() {
-        return 0..0;
-    }
-    let får_plass = |fra: usize, til: usize| høyder[fra..til].iter().sum::<u16>() + (til - fra) as u16 - 1 <= rom;
-    let mut til = 1;
-    while til < høyder.len() && får_plass(0, til + 1) {
-        til += 1;
-    }
-    match valgt {
-        Some(v) if v >= til => {
-            let mut fra = v;
-            while fra > 0 && får_plass(fra - 1, v + 1) {
-                fra -= 1;
-            }
-            fra..v + 1
+/// Rader til lista, over knappene.
+fn plass(app: &App) -> u16 {
+    app.visning.bottom().saturating_sub(1)
+}
+
+fn liste(app: &App) -> (Vec<Plassert<'_>>, Utsnitt) {
+    let rader = plasser(app);
+    let total = rader.last().map_or(0, |p| p.y + p.høyde);
+    let utsnitt = Utsnitt::ny(total, plass(app), app.liste_rull);
+    (rader, utsnitt)
+}
+
+/// Den delen av lista som vises. Får ikke alt plass, ruller lista, og øverste
+/// og nederste rad sier hvor mange kort som er over og under.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Utsnitt {
+    /// Første rad i lista som vises.
+    pub rull: u16,
+    /// Rader til kortene.
+    pub rom: u16,
+    pub ruller: bool,
+}
+
+impl Utsnitt {
+    pub fn ny(total: u16, plass: u16, rull: u16) -> Utsnitt {
+        if total <= plass {
+            return Utsnitt { rull: 0, rom: plass, ruller: false };
         }
-        _ => 0..til,
+        let rom = plass.saturating_sub(2);
+        Utsnitt { rull: rull.min(total - rom), rom, ruller: true }
     }
+
+    /// Raden på skjermen der rad `y` i lista står, også når den er utenfor.
+    fn skjerm(&self, y: u16) -> i32 {
+        y as i32 - self.rull as i32 + self.ruller as i32
+    }
+
+    /// Radene på skjermen kortene står på.
+    fn rader(&self) -> Range<u16> {
+        let topp = self.ruller as u16;
+        topp..topp + self.rom
+    }
+
+    fn i_lista(&self, y: u16) -> Option<u16> {
+        self.rader().contains(&y).then(|| y - self.ruller as u16 + self.rull)
+    }
+
+    /// Rullet så `valgt` vises, med overskriften over når den er den første i
+    /// gruppen. Er kortet høyere enn utsnittet, vises toppen.
+    pub fn følg(mut self, valgt: Range<u16>) -> Utsnitt {
+        if !self.ruller {
+            return self;
+        }
+        if valgt.end > self.rull + self.rom {
+            self.rull = valgt.end - self.rom;
+        }
+        self.rull = self.rull.min(valgt.start);
+        self
+    }
+}
+
+/// Utsnittet nå, og radene til den valgte i lista, med overskriften over når
+/// den er den første i gruppen.
+pub fn utsnitt(app: &App) -> (Utsnitt, Option<Range<u16>>) {
+    let (rader, utsnitt) = liste(app);
+    let i = app.valgt.as_ref().and_then(|v| rader.iter().position(|p| matches!(p.rad, Rad::Pane(pane, _) if pane.id == v.id)));
+    let valgt = i.map(|i| {
+        let p = &rader[i];
+        let topp = match i.checked_sub(1).map(|f| &rader[f]) {
+            Some(Plassert { rad: Rad::Overskrift(_), y, .. }) => *y,
+            _ => p.y,
+        };
+        topp..p.y + p.høyde
+    });
+    (utsnitt, valgt)
 }
 
 /// Panen som står på rad `y` i lista.
 pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
-    let hint_y = app.visning.bottom().saturating_sub(1);
-    if y >= hint_y {
-        return None;
-    }
-    plasser(app, hint_y).0.into_iter().find_map(|p| match p.rad {
+    let (rader, utsnitt) = liste(app);
+    let y = utsnitt.i_lista(y)?;
+    rader.into_iter().find_map(|p| match p.rad {
         Rad::Pane(pane, _) if (p.y..p.y + p.høyde).contains(&y) => Some(pane.clone()),
         _ => None,
     })
+}
+
+/// Opp eller ned når rad `y` er en av pilene som viser at lista ruller.
+pub fn pil_på(app: &App, y: u16) -> Option<bool> {
+    let (_, utsnitt) = liste(app);
+    let vis = utsnitt.rader();
+    match () {
+        _ if !utsnitt.ruller => None,
+        _ if y + 1 == vis.start => Some(true),
+        _ if y == vis.end => Some(false),
+        _ => None,
+    }
 }
 
 /// Et vindu i sesjonen, som fane i statuslinja.
@@ -884,13 +929,21 @@ mod tester {
     }
 
     #[test]
-    fn så_mange_kort_som_får_plass_og_alltid_det_valgte() {
-        // Tre kort på tre rader med strek mellom er 11 rader.
-        assert_eq!(synlige(&[3, 3, 3], None, 11), 0..3);
-        assert_eq!(synlige(&[3, 3, 3], None, 10), 0..2);
-        assert_eq!(synlige(&[3, 3, 3], Some(2), 7), 1..3);
-        assert_eq!(synlige(&[3, 3, 3], Some(1), 7), 0..2);
-        assert_eq!(synlige(&[3, 3, 3], None, 2), 0..1);
-        assert_eq!(synlige(&[3], None, 0), 0..0);
+    fn utsnittet_ruller_bare_når_lista_ikke_får_plass() {
+        assert_eq!(Utsnitt::ny(10, 12, 5), Utsnitt { rull: 0, rom: 12, ruller: false });
+        // To rader går til pilene.
+        assert_eq!(Utsnitt::ny(20, 12, 50), Utsnitt { rull: 10, rom: 10, ruller: true });
+        let u = Utsnitt::ny(20, 12, 4);
+        assert_eq!((u.skjerm(4), u.i_lista(1), u.i_lista(0), u.i_lista(11)), (1, Some(4), None, None));
+    }
+
+    #[test]
+    fn utsnittet_følger_den_valgte() {
+        let u = Utsnitt::ny(30, 12, 0);
+        assert_eq!(u.følg(2..5).rull, 0);
+        assert_eq!(u.følg(14..17).rull, 7);
+        assert_eq!(Utsnitt { rull: 20, ..u }.følg(14..17).rull, 14);
+        // Høyere enn utsnittet: toppen vises.
+        assert_eq!(u.følg(3..20).rull, 3);
     }
 }

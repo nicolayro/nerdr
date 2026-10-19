@@ -139,6 +139,10 @@ struct App {
 
     /// Claude-en som er valgt i lista.
     valgt: Option<Pane>,
+    /// Første rad i lista som vises, når den ikke får plass.
+    liste_rull: u16,
+    /// Lista ruller så den valgte vises, til du ruller den selv.
+    liste_følger: bool,
     /// Vinduet som vises til høyre: vinduet til den valgte, eller et annet
     /// vindu i samme sesjon.
     vist: Option<String>,
@@ -184,7 +188,7 @@ struct App {
     musen: Option<(u16, u16)>,
     /// Kortet som sist ble klikket på, og når, så et klikk til går inn.
     sist_klikket: Option<(String, Instant)>,
-    /// Slippet etter klikket som tok deg inn i panen, skal ikke til panen.
+    /// Det forrige klikket gikk ikke til panen, og det gjør ikke slippet heller.
     svelg_slipp: bool,
     /// I den aktive panen, når den ikke har slått på mus selv.
     markering: Option<Markering>,
@@ -308,6 +312,8 @@ impl App {
             sett: HashMap::new(),
             låst: None,
             valgt: None,
+            liste_rull: 0,
+            liste_følger: true,
             vist: None,
             forrige_vindu: None,
             vindu: Vec::new(),
@@ -351,6 +357,11 @@ impl App {
         while self.ferdig.is_none() {
             if tegne {
                 self.visning = tegn::visning(terminal.size()?);
+                let (utsnitt, valgt) = tegn::utsnitt(self);
+                self.liste_rull = match valgt.filter(|_| self.liste_følger) {
+                    Some(valgt) => utsnitt.følg(valgt).rull,
+                    None => utsnitt.rull,
+                };
                 // Når teksten i panen ruller, skrives nesten hver celle på nytt.
                 // Uten synkronisert oppdatering kan terminalen vise den halvveis.
                 execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
@@ -775,6 +786,7 @@ impl App {
         self.send(&format!("select-pane -t {}", sitat(&pane.id)), Svar::Ingenting);
         let (id, vindu) = (pane.id.clone(), pane.vindu_id.clone());
         self.valgt = Some(pane);
+        self.liste_følger = true;
         self.vis(vindu, Some(&id));
     }
 
@@ -1127,6 +1139,14 @@ impl App {
     }
 
     fn håndter_mus(&mut self, m: MouseEvent) -> bool {
+        // Slippet går bare til panen når klikket gjorde det, så et klikk i
+        // lista eller menyen ikke gir et slipp i Claude-en.
+        if m.kind == MouseEventKind::Up(MouseButton::Left) && std::mem::take(&mut self.svelg_slipp) {
+            return false;
+        }
+        if m.kind == MouseEventKind::Down(MouseButton::Left) {
+            self.svelg_slipp = true;
+        }
         if self.velger.is_some() || self.hjelp {
             return false;
         }
@@ -1168,6 +1188,22 @@ impl App {
             return true;
         }
         if m.column < v.x {
+            let (utsnitt, _) = tegn::utsnitt(self);
+            let steg = match m.kind {
+                MouseEventKind::ScrollUp => Some(-(RULL_STEG as i32)),
+                MouseEventKind::ScrollDown => Some(RULL_STEG as i32),
+                MouseEventKind::Down(MouseButton::Left) => tegn::pil_på(self, m.row).map(|opp| {
+                    let side = utsnitt.rom.max(1) as i32;
+                    if opp { -side } else { side }
+                }),
+                _ => None,
+            };
+            if let Some(steg) = steg {
+                // Tegningen holder rullet innenfor lista.
+                self.liste_rull = (self.liste_rull as i32 + steg).max(0) as u16;
+                self.liste_følger = false;
+                return utsnitt.ruller;
+            }
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
@@ -1208,12 +1244,9 @@ impl App {
         // Klikket som tar deg inn, går ikke videre, så det ikke trykker på et
         // valg i en dialog.
         if byttet {
-            self.svelg_slipp = true;
             return true;
         }
-        if m.kind == MouseEventKind::Up(MouseButton::Left) && std::mem::take(&mut self.svelg_slipp) {
-            return false;
-        }
+        self.svelg_slipp = false;
         let (id, x, y) = (sitat(&pane.id), m.column - boks.innhold.x, m.row - boks.innhold.y);
         if !self.pane_mus && m.kind == MouseEventKind::Down(MouseButton::Left) {
             self.markering = Some(Markering::ny(pane.id, self.punkt(x, y)));

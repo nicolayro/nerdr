@@ -45,19 +45,15 @@ impl Plass {
     }
 }
 
-/// Panene gruppert, med en overskrift for hver gruppe som ikke er tom. I
-/// VENTER og JOBBER står den som kom inn først, øverst, så en ny legges til
-/// nederst og ikke skyver ned dem du er i gang med. I FERDIG står den nyeste
-/// øverst, så det er de eldste som ikke får plass. Plassen gis for seg, fordi
-/// panen du er inne i, blir stående der den var selv om merket endres.
+/// Panene gruppert, med en overskrift for hver gruppe som ikke er tom. I hver
+/// gruppe står den som kom inn først, øverst, så en ny legges til nederst og
+/// ikke skyver de andre ned. Plassen gis for seg, fordi panen du er inne i,
+/// blir stående der den var selv om merket endres.
 pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> Vec<Rad<'a>> {
     let mut plassert: Vec<(&Pane, Plass)> = paner.iter().filter_map(|p| Some((p, plass(p)?))).collect();
     // Stabil, så like tider beholder rekkefølgen fra tmux.
     plassert.sort_by(|(_, a), (_, b)| {
-        a.gruppe.cmp(&b.gruppe).then_with(|| match a.gruppe {
-            Gruppe::Ferdig => b.siden.cmp(&a.siden),
-            _ => a.siden.unwrap_or(u64::MAX).cmp(&b.siden.unwrap_or(u64::MAX)),
-        })
+        a.gruppe.cmp(&b.gruppe).then_with(|| a.siden.unwrap_or(u64::MAX).cmp(&b.siden.unwrap_or(u64::MAX)))
     });
 
     let mut rader = Vec::new();
@@ -112,7 +108,7 @@ mod tester {
     }
 
     #[test]
-    fn eldste_først_i_venter_og_nyeste_først_i_ferdig() {
+    fn eldste_først_i_hver_gruppe() {
         let paner = [pane("%1"), pane("%2"), pane("%3"), pane("%4")];
         let rader = rader(&paner, |p| match p.id.as_str() {
             "%1" => plass(Merke::Spør, 20),
@@ -127,7 +123,7 @@ mod tester {
                 _ => None,
             })
             .collect();
-        assert_eq!(rekkefølge, ["%2", "%1", "%4", "%3"]);
+        assert_eq!(rekkefølge, ["%2", "%1", "%3", "%4"]);
     }
 
     #[test]

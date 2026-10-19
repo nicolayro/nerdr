@@ -90,10 +90,12 @@ worktree står med navnet til repoet den er laget fra. Lista er delt i tre:
 | **jobber** | `◐` jobber, `◌` starter |
 | **ferdig** | `○` er ferdig, og du har vært inne i den siden |
 
-I venter og jobber står den som kom inn først, øverst, med hvor lenge den har
-ventet eller jobbet til høyre. I ferdig står den nyeste øverst, dempet. Er
-det ikke plass til alle i ferdig, vises så mange
-som får plass, og overskriften sier hvor mange som ikke vises.
+I hver gruppe står den som kom inn først, øverst, så en ny legges til nederst
+uten å flytte de andre. I venter og jobber står det hvor lenge den har ventet
+eller jobbet, og ferdig er dempet. Får ikke lista plass, ruller den med
+musehjulet og følger den du velger. Pilene øverst og nederst sier hvor mange
+som er over og under, og om noen av dem venter på deg, og et klikk på en pil
+ruller en side.
 
 Når du sist var inne i en Claude, skriver nerdr i pane-optionen `@nerdr-sett`
 i tmux. Den forsvinner med panen, og det en Claude blir ferdig med mens nerdr
