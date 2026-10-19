@@ -26,9 +26,15 @@ pub fn claude(samtale: Option<&str>) -> String {
 }
 
 /// En ny Claude i en ny worktree, som Claude Code lager selv. Uten navn velger
-/// Claude Code et.
+/// Claude Code et. Navnet blir en branch, så det git ikke godtar i en branch,
+/// tas bort her og ikke mens du skriver, der `fiks.` er på vei til `fiks.test`.
 pub fn claude_i_worktree(navn: &str) -> String {
-    match navn {
+    let mut navn = worktree_navn(navn);
+    while navn.contains("..") {
+        navn = navn.replace("..", ".");
+    }
+    let navn = navn.trim_end_matches('.');
+    match navn.strip_suffix(".lock").unwrap_or(navn) {
         "" => "claude -w".into(),
         navn => format!("claude -w {navn}"),
     }
@@ -95,6 +101,9 @@ mod tester {
     fn worktree_med_og_uten_navn() {
         assert_eq!(claude_i_worktree(""), "claude -w");
         assert_eq!(claude_i_worktree("fiks-æ"), "claude -w fiks-æ");
+        assert_eq!(claude_i_worktree("fiks..test."), "claude -w fiks.test");
+        assert_eq!(claude_i_worktree("x.lock"), "claude -w x");
+        assert_eq!(claude_i_worktree("."), "claude -w");
         assert_eq!(worktree_navn("fiks_1.2-æ"), "fiks_1.2-æ");
         assert_eq!(worktree_navn("fiks testene"), "fiks-testene");
         assert_eq!(worktree_navn(";$`'\"&|/\\*a"), "a");

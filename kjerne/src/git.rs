@@ -17,16 +17,18 @@ pub fn les(mappe: &Path) -> Option<Repo> {
     let punkt_git = mappe.ancestors().map(|m| m.join(".git")).find(|g| g.exists())?;
     // I en worktree er `.git` en fil som peker til worktreens egen git-mappe,
     // `<repo>/.git/worktrees/<navn>`.
-    let git = if punkt_git.is_file() {
+    let (git, felles) = if punkt_git.is_file() {
         let peker = fs::read_to_string(&punkt_git).ok()?;
         let sti = PathBuf::from(peker.strip_prefix("gitdir:")?.trim());
-        fs::canonicalize(punkt_git.parent()?.join(sti)).ok()?
+        let git = fs::canonicalize(punkt_git.parent()?.join(sti)).ok()?;
+        let felles = match git.parent() {
+            Some(p) if p.file_name()? == "worktrees" => p.parent()?.to_path_buf(),
+            // En submodul, med git-mappa under `.git/modules`.
+            _ => git.clone(),
+        };
+        (git, felles)
     } else {
-        punkt_git.clone()
-    };
-    let felles = match git.parent() {
-        Some(p) if p.file_name()? == "worktrees" => p.parent()?.to_path_buf(),
-        _ => git.clone(),
+        (punkt_git.clone(), punkt_git)
     };
     let navn = match felles.file_name()? {
         n if n == ".git" => felles.parent()?.file_name()?,
@@ -71,6 +73,15 @@ mod tester {
         assert_eq!(repo_og_branch(&repo.join("app/src")), Some(("repo".into(), "main".into())));
         assert_eq!(repo_og_branch(&rot.join("wt")), Some(("repo".into(), "0123456".into())));
         assert_eq!(repo_og_branch(&repo.join(".claude/worktrees/rel")), Some(("repo".into(), "fiks".into())));
+        fs::remove_dir_all(rot).unwrap();
+    }
+
+    #[test]
+    fn repo_i_en_mappe_som_heter_worktrees() {
+        let rot = std::env::temp_dir().join(format!("nerdr-wt-{}", std::process::id()));
+        fs::create_dir_all(rot.join("worktrees/.git")).unwrap();
+        fs::write(rot.join("worktrees/.git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        assert_eq!(les(&rot.join("worktrees")).map(|r| r.navn).as_deref(), Some("worktrees"));
         fs::remove_dir_all(rot).unwrap();
     }
 

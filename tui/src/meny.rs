@@ -42,7 +42,6 @@ impl Valg {
     }
 }
 
-/// Panen som vises, der det nye legges.
 #[derive(Clone, Debug)]
 pub struct Her {
     pub sesjon_id: String,

@@ -105,6 +105,7 @@ pub fn alt(f: &mut Frame, app: &App) {
     tegn_liste(buf, område, app, mus.as_ref());
     tegn_faner(buf, app, mus.as_ref());
     tegn_pane(buf, app, &bokser, mus.as_ref());
+    tegn_hint(buf, område, app);
 
     if app.hjelp {
         tegn_hjelp(buf, område, &app.prefiks.navn());
@@ -161,18 +162,8 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         }
     }
 
-    // Nederst står knappene, og et hint når du har trykket prefikset eller
-    // nerdr spør.
-    let prefiks = app.prefiks.navn();
-    let hint = match () {
-        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => Some(" lukke panen? y/n".to_string()),
-        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => Some(" lukke vinduet? y/n".to_string()),
-        _ if app.etter_prefiks => Some(format!(" {prefiks} … + ny · w lista · ? mer")),
-        _ => None,
-    };
-    if let Some(hint) = hint {
-        buf.set_stringn(0, hint_y, hint, bredde as usize, VANLIG);
-    }
+    // Nederst står knappene, og hintet i stedet når du har trykket prefikset
+    // eller nerdr spør.
     for (knapp, x, tekst) in knapper(app, hint_y) {
         let pekt = mus == Some(&Mål::Knapp(knapp));
         let stil = if pekt { under_musen() } else { Style::new() };
@@ -216,6 +207,20 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         };
         buf.set_stringn(bredde, y, tegn, 1, skille);
     }
+}
+
+/// Når du har trykket prefikset eller nerdr spør. Fra stripa går hintet inn
+/// over panen, så du ser hva nerdr spør om, og derfor tegnes det etter den.
+fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
+    let prefiks = app.prefiks.navn();
+    let hint = match () {
+        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => " lukke panen? y/n".to_string(),
+        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => " lukke vinduet? y/n".to_string(),
+        _ if app.etter_prefiks => format!(" {prefiks} … + ny · w lista · ? mer"),
+        _ => return,
+    };
+    let plass = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
+    buf.set_stringn(0, område.height.saturating_sub(1), format!("{hint} "), plass as usize, VANLIG);
 }
 
 /// En Claude i lista: oppgaven som tittel, med hvor lenge den har ventet eller
@@ -353,7 +358,6 @@ fn plasser(app: &App) -> Vec<Plassert<'_>> {
         .collect()
 }
 
-/// Rader til lista, over knappene.
 fn plass(app: &App) -> u16 {
     app.visning.bottom().saturating_sub(1)
 }
@@ -489,7 +493,7 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
         buf.set_string(f.fra, 0, format!(" {} ", f.navn), stil);
     }
     if let Some(pluss) = ny_fane(app) {
-        let stil = if mus == Some(&Mål::Knapp(Knapp::NyFane)) { under_musen() } else { SVAK };
+        let stil = if mus == Some(&Mål::NyFane) { under_musen() } else { SVAK };
         buf.set_string(pluss.start, 0, " + ", stil);
     }
 }
@@ -526,11 +530,15 @@ fn knapper(app: &App, y: u16) -> Vec<(Knapp, Range<u16>, String)> {
     let (ny, hjelp) = (format!(" {prefiks}+ ny "), format!(" {prefiks}? hjelp "));
     let slutt = liste_bredde(app) - 1;
     let ny_til = ny.chars().count() as u16;
-    let hjelp_fra = slutt.saturating_sub(hjelp.chars().count() as u16).max(ny_til + 1);
-    vec![(Knapp::Ny, 0..ny_til, ny), (Knapp::Hjelp, hjelp_fra..slutt, hjelp)]
+    let hjelp_fra = slutt.saturating_sub(hjelp.chars().count() as u16);
+    let mut knapper = vec![(Knapp::Ny, 0..ny_til, ny)];
+    // Med et langt prefiks i en smal liste er det bare plass til «+ ny».
+    if hjelp_fra > ny_til {
+        knapper.push((Knapp::Hjelp, hjelp_fra..slutt, hjelp));
+    }
+    knapper
 }
 
-/// Knappen i kolonne `x` på nederste rad i lista.
 pub fn knapp_på(app: &App, x: u16) -> Option<Knapp> {
     let y = app.visning.bottom().saturating_sub(1);
     knapper(app, y).into_iter().find(|(_, r, _)| r.contains(&x)).map(|(k, ..)| k)

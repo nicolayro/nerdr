@@ -39,7 +39,6 @@ pub struct Pane {
     pub vindunavn: String,
     /// Da du sist var inne i panen i nerdr, i millisekunder siden 1970.
     pub sett: Option<u64>,
-    /// Mappa programmet i panen står i.
     pub mappe: PathBuf,
 }
 

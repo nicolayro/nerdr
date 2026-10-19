@@ -55,8 +55,6 @@ const DOBBELTKLIKK: Duration = Duration::from_millis(500);
 /// Global option i tmux med bredden på lista, og `stripe` etter når den er en
 /// stripe, så den er den samme neste gang nerdr starter.
 const LISTE_OPTION: &str = "@nerdr-liste";
-/// Står i `sist_klikket` for skillelinja, der det ellers står en pane-id.
-const SKILLE: &str = "skille";
 
 enum Hendelse {
     Tmux(Melding),
@@ -105,6 +103,8 @@ enum Mål {
     /// En pane i vinduet som tastene ikke går til.
     Pane(String),
     Knapp(Knapp),
+    /// `+` etter fanene.
+    NyFane,
     /// Streken mellom lista og panen, som kan dras.
     Skille,
     /// Indeksen i `Meny::valg`.
@@ -116,8 +116,6 @@ enum Mål {
 enum Knapp {
     Ny,
     Hjelp,
-    /// `+` etter fanene.
-    NyFane,
 }
 
 struct App {
@@ -204,8 +202,8 @@ struct App {
     /// Kolonne og rad, til terminalen mister fokus. Terminalen sier ikke fra
     /// når musen forlater vinduet.
     musen: Option<(u16, u16)>,
-    /// Kortet som sist ble klikket på, og når, så et klikk til går inn.
-    sist_klikket: Option<(String, Instant)>,
+    /// Det som sist ble klikket på, og når, så et klikk til er et dobbeltklikk.
+    sist_klikket: Option<(Mål, Instant)>,
     /// Det forrige klikket gikk ikke til panen, og det gjør ikke slippet heller.
     svelg_slipp: bool,
     /// I den aktive panen, når den ikke har slått på mus selv.
@@ -1122,31 +1120,35 @@ impl App {
             return;
         }
         let Some(Meny { her, navn, .. }) = self.meny.take() else { return };
-        let (valg, her) = match (valg, her) {
+        let sitert = |her: &meny::Her| {
+            (sitat(&format!("{}:", her.sesjon_id)), sitat(&her.pane_id), sitat(&her.mappe.to_string_lossy()))
+        };
+        match (valg, her) {
             (Valg::Mappe | Valg::Fortsett, _) => {
                 self.bytt_fokus(Fokus::Liste);
-                return self.åpne_velger(valg == Valg::Fortsett);
+                self.åpne_velger(valg == Valg::Fortsett);
             }
-            (_, None) => return,
-            (valg, Some(her)) => (valg, her),
-        };
-        let (sesjon, pane, mappe) = (sitat(&format!("{}:", her.sesjon_id)), sitat(&her.pane_id), sitat(&her.mappe.to_string_lossy()));
-        match valg {
-            Valg::Claude | Valg::Worktree => {
+            (Valg::Claude | Valg::Worktree, Some(her)) => {
                 self.bytt_fokus(Fokus::Liste);
                 let claude_kommando = match valg {
                     Valg::Worktree => start::claude_i_worktree(&navn.unwrap_or_default()),
                     _ => start::claude(None),
                 };
+                let (sesjon, _, mappe) = sitert(&her);
                 let svar = Svar::NyPane { mappe: her.mappe, claude_kommando };
                 self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{pane_id}}'"), svar);
             }
-            Valg::Terminal => self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{window_id}}'"), Svar::NyttVindu),
-            Valg::SideOmSide | Valg::OverOgUnder => {
+            (Valg::Terminal, Some(her)) => {
+                let (sesjon, _, mappe) = sitert(&her);
+                self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{window_id}}'"), Svar::NyttVindu);
+            }
+            (Valg::SideOmSide | Valg::OverOgUnder, Some(her)) => {
+                let (_, pane, mappe) = sitert(&her);
                 let retning = if valg == Valg::SideOmSide { "-h" } else { "-v" };
                 self.send(&format!("split-window {retning} -t {pane} -c {mappe} -P -F '#{{pane_id}}'"), Svar::NyDeling);
             }
-            Valg::Mappe | Valg::Fortsett => {}
+            // Valgene som trenger en pane som vises, står bare i menyen når den finnes.
+            (_, None) => {}
         }
     }
 
@@ -1205,7 +1207,7 @@ impl App {
             return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
         }
         if y < v.y {
-            let ny = tegn::ny_fane_på(self, x).then_some(Mål::Knapp(Knapp::NyFane));
+            let ny = tegn::ny_fane_på(self, x).then_some(Mål::NyFane);
             return tegn::fane_på(self, x).map(Mål::Fane).or(ny);
         }
         let inni = |r: Rect| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
@@ -1256,12 +1258,12 @@ impl App {
         }
         let v = self.visning;
         if m.column + 1 == v.x && m.kind == MouseEventKind::Down(MouseButton::Left) {
-            let dobbelt = self.sist_klikket.take().is_some_and(|(id, t)| id == SKILLE && t.elapsed() < DOBBELTKLIKK);
+            let dobbelt = self.sist_klikket.take().is_some_and(|(mål, t)| mål == Mål::Skille && t.elapsed() < DOBBELTKLIKK);
             if dobbelt {
                 self.liste_stripe = !self.liste_stripe;
                 self.lagre_liste();
             } else {
-                self.sist_klikket = Some((SKILLE.to_string(), Instant::now()));
+                self.sist_klikket = Some((Mål::Skille, Instant::now()));
                 self.drar_skille = true;
             }
             return true;
@@ -1279,7 +1281,7 @@ impl App {
         }
         if m.column < v.x && m.row + 1 == v.bottom() {
             match tegn::knapp_på(self, m.column).filter(|_| m.kind == MouseEventKind::Down(MouseButton::Left)) {
-                Some(Knapp::Ny | Knapp::NyFane) => self.åpne_meny(),
+                Some(Knapp::Ny) => self.åpne_meny(),
                 Some(Knapp::Hjelp) => self.hjelp = true,
                 None => return false,
             }
@@ -1296,27 +1298,31 @@ impl App {
                 }),
                 _ => None,
             };
-            if let Some(steg) = steg {
+            if let Some(steg) = steg.filter(|_| utsnitt.ruller) {
                 // Tegningen holder rullet innenfor lista.
                 self.liste_rull = (self.liste_rull as i32 + steg).max(0) as u16;
                 self.liste_følger = false;
-                return utsnitt.ruller;
+                return true;
             }
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
             let ute = self.fokus == Fokus::Pane;
+            // Kortet slås opp før låsen tas bort, ellers kan kortene ha flyttet
+            // seg under klikket.
+            let pane = tegn::pane_på(self, m.row);
             // Via lista, så panen du forlater, merkes som sett før du går inn.
             self.bytt_fokus(Fokus::Liste);
-            let Some(pane) = tegn::pane_på(self, m.row) else { return ute };
-            let dobbelt = self.sist_klikket.take().is_some_and(|(id, t)| id == pane.id && t.elapsed() < DOBBELTKLIKK);
+            let Some(pane) = pane else { return ute };
+            let kort = Mål::Kort(pane.id.clone());
+            let dobbelt = self.sist_klikket.take().is_some_and(|(mål, t)| mål == kort && t.elapsed() < DOBBELTKLIKK);
             if self.valgt.as_ref().map(|p| &p.id) != Some(&pane.id) {
                 self.velg(pane.clone());
             }
             if dobbelt {
                 self.gå_inn();
             } else {
-                self.sist_klikket = Some((pane.id, Instant::now()));
+                self.sist_klikket = Some((kort, Instant::now()));
             }
             return true;
         }

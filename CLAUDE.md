@@ -8,11 +8,12 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
 - `kjerne/` vet ikke hvordan noe vises: control mode (`kontroll`), enkeltstående
   tmux-kommandoer (`tmux`), panene (`paner`), hvordan et vindu er delt
   (`oppsett`), registeret (`register`), hva som venter på deg (`merke`),
-  tidligere samtaler (`samtaler`), branchen (`git`), farger fra
+  tidligere samtaler (`samtaler`), repoet og branchen (`git`), farger fra
   `capture-pane -e` (`sgr`) og å starte en Claude (`start`).
 - `tui/` er binæren. `main.rs` har TUI-et og argumentene, `kommandoer.rs`
-  `liste`, `samtaler` og `ny`, `ny.rs` mappevelgeren, `tegn.rs` tegningen og
-  `palett.rs` fargene til terminalen, som markeringen blandes av.
+  `liste`, `samtaler` og `ny`, `ny.rs` mappevelgeren, `meny.rs` «Ny»-menyen,
+  `tegn.rs` tegningen og `palett.rs` fargene til terminalen, som markeringen
+  blandes av.
 
 ## Begreper
 

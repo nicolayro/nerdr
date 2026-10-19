@@ -460,6 +460,9 @@ klikk 4 8
 sjekk "dobbeltklikk igjen gir bredden tilbake" er 58x13 dimensjon alfa
 dra 46 8 2 8
 sjekk "å dra streken helt inn gir stripa" linje_har 2 '^▎● │ '
+tast C-b
+sjekk "fra stripa står hintet over panen" linje_har 16 '^ C-b … \+ ny · w lista · \? mer'
+tast w
 dra 4 8 36 8
 sjekk "og å dra den ut gir lista tilbake" er 68x13 dimensjon alfa
 
