@@ -37,9 +37,11 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | `?` | Hjelp |
 | `q` | Avslutt, fra lista |
 
-Klikk i lista går inn i en Claude. Klikk og musehjul i sesjonen går videre når
-programmet der har slått på mus, som Claude Code i fullskjerm. Ellers ruller
-hjulet i historikken, og en tast tar deg tilbake til bunnen. Det du drar over,
+Et klikk på en Claude i lista velger den, og et dobbeltklikk går inn i den. Et
+klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Klikk og
+musehjul i sesjonen går videre når programmet der har slått på mus, som Claude
+Code i fullskjerm. Ellers ruller hjulet i historikken, og en tast tar deg
+tilbake til bunnen. Det du drar over,
 kopieres når du slipper, med `pbcopy`, `wl-copy`, `xclip` eller `xsel`. I `less`
 og `man` blir hjulet til piltaster.
 

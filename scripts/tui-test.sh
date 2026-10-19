@@ -166,8 +166,14 @@ sjekk "C-b w og j velger gamma" linje_har 6 '^▎◐  nerdr '
 sjekk "alfa venter igjen" linje_har 2 '^ ●  Fiks testene'
 
 klikk 5 2
-sjekk "klikk på andre rad går rett inn i alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
-sjekk "inne i panen viser hintet prefikset" i_panen
+sjekk "klikk på andre rad velger alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
+sjekk "og du blir i lista" i_lista
+klikk 5 2
+sjekk "et klikk til på samme kort går inn i alfa" i_panen
+klikk 5 12
+sjekk "klikk i lista utenfor kortene går ut" i_lista
+klikk 60 8
+sjekk "klikk i panen går inn" i_panen
 tast C-b w
 sjekk "C-b w går tilbake til lista" i_lista
 
@@ -188,8 +194,13 @@ tast k
 sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
 klikk 5 14
 sjekk "klikk på gamma nederst velger den" linje_har 14 '^▎○  gamma:0'
-sjekk "klikk på gamma går inn i den" i_panen
-tast C-b w
+sleep 0.6
+klikk 5 14
+sjekk "to klikk med pause mellom går ikke inn" i_lista
+klikk 5 14
+sjekk "dobbeltklikk på gamma går inn i den" i_panen
+klikk 5 2
+sjekk "klikk på alfa fra panen velger alfa og går ut i lista" linje_har 2 '^▎●  Fiks testene'
 sjekk "tilbake i lista" i_lista
 
 klikk 3 16

@@ -48,6 +48,8 @@ const STARTER_MAKS: Duration = Duration::from_secs(5 * 60);
 /// i historikken.
 const RULL_STEG: u32 = 3;
 const KOPIERT_VISES: Duration = Duration::from_millis(1500);
+/// Terminalen sender to klikk og sier ikke fra om dobbeltklikk.
+const DOBBELTKLIKK: Duration = Duration::from_millis(500);
 
 enum Hendelse {
     Tmux(Melding),
@@ -164,6 +166,8 @@ struct App {
     /// Kolonne og rad, til terminalen mister fokus. Terminalen sier ikke fra
     /// når musen forlater vinduet.
     musen: Option<(u16, u16)>,
+    /// Kortet som sist ble klikket på, og når, så et klikk til går inn.
+    sist_klikket: Option<(String, Instant)>,
     /// I den aktive panen, når den ikke har slått på mus selv.
     markering: Option<Markering>,
     /// Da markeringen sist ble kopiert, så det kan stå en liten stund.
@@ -308,6 +312,7 @@ impl App {
             lukke: None,
             visning: Rect::default(),
             musen: None,
+            sist_klikket: None,
             markering: None,
             kopiert: None,
             velger: None,
@@ -1032,16 +1037,22 @@ impl App {
             return false;
         }
         if m.column < v.x {
-            let Some(pane) = tegn::pane_på(self, m.row) else { return false };
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
+            let ute = self.fokus == Fokus::Pane;
             // Via lista, så panen du forlater, merkes som sett før du går inn.
             self.bytt_fokus(Fokus::Liste);
+            let Some(pane) = tegn::pane_på(self, m.row) else { return ute };
+            let dobbelt = self.sist_klikket.take().is_some_and(|(id, t)| id == pane.id && t.elapsed() < DOBBELTKLIKK);
             if self.valgt.as_ref().map(|p| &p.id) != Some(&pane.id) {
-                self.velg(pane);
+                self.velg(pane.clone());
             }
-            self.gå_inn();
+            if dobbelt {
+                self.gå_inn();
+            } else {
+                self.sist_klikket = Some((pane.id, Instant::now()));
+            }
             return true;
         }
 
