@@ -71,6 +71,7 @@ zoom() { maal display-message -p -t alfa:0 '#{window_zoomed_flag}'; }
 mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
 uten_klienter() { [ -z "$(maal list-clients)" ]; }
+klienter() { maal list-clients | wc -l | tr -d ' '; }
 i_lista() { linje_har 16 '^ \+ ny +\? hjelp │'; }
 i_panen() { linje_har 16 '^ C-b \+ ny +C-b \? hjelp │'; }
 nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
@@ -441,7 +442,25 @@ for i in 1 2 3 4 5 6; do
   rm "$KONFIG/sessions/ekstra$i.json"
 done
 list_straks
+sjekk "nerdr kobler til igjen når sesjonen den viste, forsvinner" er 1 klienter
 sjekk "når alt får plass igjen, er pilene borte" mangler '[↑↓] [0-9]'
+
+dra 36 8 46 8
+sjekk "å dra i streken gjør lista bredere" linje_har 2 '^▎●  Fiks testene +<1m +│ '
+sjekk "og alfa smalere" er 58x13 dimensjon alfa
+sjekk "bredden står i tmux" er 46 maal show-options -gqv @nerdr-liste
+klikk 46 8
+klikk 46 8
+sjekk "dobbeltklikk på streken gjør lista til en stripe" linje_har 2 '^▎● │ '
+sjekk "med bare tegnene" mangler 'Fiks testene'
+sjekk "også i tmux" er '46 stripe' maal show-options -gqv @nerdr-liste
+klikk 4 8
+klikk 4 8
+sjekk "dobbeltklikk igjen gir bredden tilbake" er 58x13 dimensjon alfa
+dra 46 8 2 8
+sjekk "å dra streken helt inn gir stripa" linje_har 2 '^▎● │ '
+dra 4 8 36 8
+sjekk "og å dra den ut gir lista tilbake" er 68x13 dimensjon alfa
 
 tast q
 sjekk "q avslutter" uten_klienter

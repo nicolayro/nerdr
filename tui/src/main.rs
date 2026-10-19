@@ -52,6 +52,11 @@ const RULL_STEG: u32 = 3;
 const KOPIERT_VISES: Duration = Duration::from_millis(1500);
 /// Terminalen sender to klikk og sier ikke fra om dobbeltklikk.
 const DOBBELTKLIKK: Duration = Duration::from_millis(500);
+/// Global option i tmux med bredden på lista, og `stripe` etter når den er en
+/// stripe, så den er den samme neste gang nerdr starter.
+const LISTE_OPTION: &str = "@nerdr-liste";
+/// Står i `sist_klikket` for skillelinja, der det ellers står en pane-id.
+const SKILLE: &str = "skille";
 
 enum Hendelse {
     Tmux(Melding),
@@ -73,6 +78,8 @@ enum Svar {
     /// Svaret er pane-id-en til den nye panen.
     NyDeling,
     Prefiks,
+    /// Bredden på lista fra `LISTE_OPTION`.
+    Liste,
     Ingenting,
 }
 
@@ -98,6 +105,8 @@ enum Mål {
     /// En pane i vinduet som tastene ikke går til.
     Pane(String),
     Knapp(Knapp),
+    /// Streken mellom lista og panen, som kan dras.
+    Skille,
     /// Indeksen i `Meny::valg`.
     Menyvalg(usize),
 }
@@ -113,6 +122,10 @@ enum Knapp {
 
 struct App {
     kontroll: Kontroll,
+    /// tmux kobler fra klienten når sesjonen den står i, forsvinner, som når
+    /// det siste vinduet i den lukkes. Da kobler nerdr til igjen.
+    koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>,
+    koblet_igjen: Option<Instant>,
     kø: VecDeque<Svar>,
 
     /// Panene der en Claude kjører eller starter, i lista.
@@ -139,6 +152,11 @@ struct App {
 
     /// Claude-en som er valgt i lista.
     valgt: Option<Pane>,
+    /// Bredden på lista med skillelinja, når den ikke er en stripe.
+    liste_bredde: u16,
+    /// Lista er en stripe med bare tegnene.
+    liste_stripe: bool,
+    drar_skille: bool,
     /// Første rad i lista som vises, når den ikke får plass.
     liste_rull: u16,
     /// Lista ruller så den valgte vises, til du ruller den selv.
@@ -271,9 +289,23 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
     tegn::bruk_farger(palett::les());
     let (tx, rx) = mpsc::channel();
     let tmux_tx = tx.clone();
-    let kontroll = Kontroll::start(socket, move |m| {
-        let _ = tmux_tx.send(Hendelse::Tmux(m));
-    })?;
+    let socket_eid = socket.map(String::from);
+    let koble = move || {
+        let tx = tmux_tx.clone();
+        Kontroll::start(socket_eid.as_deref(), move |m| {
+            let _ = tx.send(Hendelse::Tmux(m));
+        })
+    };
+    let kontroll = koble()?;
+    let koble_igjen = {
+        let socket = socket.map(String::from);
+        move || {
+            // Uten sesjoner ville tilkoblingen laget en, og da er det du som
+            // har avsluttet tmux.
+            tmux::kjør(socket.as_deref(), &["has-session"])?;
+            koble()
+        }
+    };
     thread::spawn(move || {
         while let Ok(e) = event::read() {
             if tx.send(Hendelse::Term(e)).is_err() {
@@ -284,7 +316,7 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 
     let mut terminal = ratatui::init();
     execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange)?;
-    let mut app = App::ny(kontroll);
+    let mut app = App::ny(kontroll, Box::new(koble_igjen));
     let res = app.løkke(&mut terminal, &rx);
     let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste, DisableFocusChange);
     ratatui::restore();
@@ -297,9 +329,11 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 }
 
 impl App {
-    fn ny(kontroll: Kontroll) -> App {
+    fn ny(kontroll: Kontroll, koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>) -> App {
         App {
             kontroll,
+            koble_igjen,
+            koblet_igjen: None,
             kø: VecDeque::new(),
             claude_paner: Vec::new(),
             alle: Vec::new(),
@@ -312,6 +346,9 @@ impl App {
             sett: HashMap::new(),
             låst: None,
             valgt: None,
+            liste_bredde: tegn::LISTE,
+            liste_stripe: false,
+            drar_skille: false,
             liste_rull: 0,
             liste_følger: true,
             vist: None,
@@ -352,11 +389,13 @@ impl App {
 
     fn løkke(&mut self, terminal: &mut DefaultTerminal, rx: &Receiver<Hendelse>) -> io::Result<()> {
         self.send("show-options -gv prefix", Svar::Prefiks);
+        self.send(&format!("show-options -gqv {LISTE_OPTION}"), Svar::Liste);
         self.list_paner();
         let mut tegne = true;
         while self.ferdig.is_none() {
             if tegne {
-                self.visning = tegn::visning(terminal.size()?);
+                let liste = if self.liste_stripe { tegn::STRIPE } else { self.liste_bredde };
+                self.visning = tegn::visning(terminal.size()?, liste);
                 let (utsnitt, valgt) = tegn::utsnitt(self);
                 self.liste_rull = match valgt.filter(|_| self.liste_følger) {
                     Some(valgt) => utsnitt.følg(valgt).rull,
@@ -408,6 +447,26 @@ impl App {
         Some(intervall.max(synk))
     }
 
+    /// Svarene på det som var sendt, kommer aldri, og den nye klienten står i
+    /// sesjonen tmux velger. Kobles det fra igjen med en gang, gir nerdr opp.
+    fn koble_til_igjen(&mut self) -> bool {
+        if self.koblet_igjen.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
+            return false;
+        }
+        let Ok(kontroll) = (self.koble_igjen)() else { return false };
+        self.kontroll = kontroll;
+        self.koblet_igjen = Some(Instant::now());
+        self.kø.clear();
+        (self.lister, self.list_igjen, self.henter) = (false, false, false);
+        self.størrelser.clear();
+        self.utdatert = true;
+        if let Some(valgt) = self.valgt.clone() {
+            self.send(&format!("switch-client -t {}", sitat(&valgt.sesjon_id)), Svar::Ingenting);
+        }
+        self.list_paner();
+        true
+    }
+
     fn send(&mut self, kommando: &str, svar: Svar) {
         match self.kontroll.send(kommando) {
             Ok(()) => self.kø.push_back(svar),
@@ -432,6 +491,9 @@ impl App {
                 false
             }
             Hendelse::Tmux(Melding::Slutt(grunn)) => {
+                if grunn.is_empty() && self.koble_til_igjen() {
+                    return true;
+                }
                 self.ferdig = Some(if grunn.is_empty() { "tmux koblet fra".into() } else { grunn });
                 false
             }
@@ -581,6 +643,15 @@ impl App {
                 self.gå_inn_i = Some(id);
                 self.list_paner();
                 false
+            }
+            Svar::Liste => {
+                let verdi = linjer.first().filter(|_| ok).map_or("", |l| l.as_str());
+                let mut ord = verdi.split_whitespace();
+                if let Some(bredde) = ord.next().and_then(|b| b.parse::<u16>().ok()) {
+                    self.liste_bredde = bredde.max(tegn::LISTE_MIN);
+                    self.liste_stripe = ord.next() == Some("stripe");
+                }
+                true
             }
             Svar::Prefiks => {
                 if let Some(prefiks) = linjer.first().filter(|_| ok).and_then(|l| taster::Prefiks::fra_tmux(l)) {
@@ -1122,6 +1193,9 @@ impl App {
             return tegn::menyvalg_på(self, x, y).map(Mål::Menyvalg);
         }
         let v = self.visning;
+        if x + 1 == v.x {
+            return Some(Mål::Skille);
+        }
         if x < v.x && y + 1 == v.bottom() {
             return tegn::knapp_på(self, x).map(Mål::Knapp);
         }
@@ -1139,6 +1213,17 @@ impl App {
     }
 
     fn håndter_mus(&mut self, m: MouseEvent) -> bool {
+        if self.drar_skille {
+            match m.kind {
+                MouseEventKind::Drag(MouseButton::Left) => self.dra_skille(m.column),
+                MouseEventKind::Up(MouseButton::Left) => {
+                    self.drar_skille = false;
+                    self.lagre_liste();
+                }
+                _ => return false,
+            }
+            return true;
+        }
         // Slippet går bare til panen når klikket gjorde det, så et klikk i
         // lista eller menyen ikke gir et slipp i Claude-en.
         if m.kind == MouseEventKind::Up(MouseButton::Left) && std::mem::take(&mut self.svelg_slipp) {
@@ -1168,6 +1253,17 @@ impl App {
             return self.dra_markering(m);
         }
         let v = self.visning;
+        if m.column + 1 == v.x && m.kind == MouseEventKind::Down(MouseButton::Left) {
+            let dobbelt = self.sist_klikket.take().is_some_and(|(id, t)| id == SKILLE && t.elapsed() < DOBBELTKLIKK);
+            if dobbelt {
+                self.liste_stripe = !self.liste_stripe;
+                self.lagre_liste();
+            } else {
+                self.sist_klikket = Some((SKILLE.to_string(), Instant::now()));
+                self.drar_skille = true;
+            }
+            return true;
+        }
         if m.row < v.y && m.column >= v.x {
             if m.row != 0 || m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
@@ -1303,6 +1399,25 @@ impl App {
             self.kopiert = Some(Instant::now());
         }
         true
+    }
+
+    /// Streken følger musen. Drar du den forbi `LISTE_MIN`, blir lista en
+    /// stripe, og drar du den ut igjen, får den bredden der musen er.
+    fn dra_skille(&mut self, x: u16) {
+        let bredde = x + 1;
+        if bredde != self.visning.x {
+            // Et klikk på streken etter å ha dratt den, er ikke et dobbeltklikk.
+            self.sist_klikket = None;
+        }
+        self.liste_stripe = bredde < (tegn::STRIPE + tegn::LISTE_MIN) / 2;
+        if !self.liste_stripe {
+            self.liste_bredde = bredde.max(tegn::LISTE_MIN).min(self.visning.right() / 2);
+        }
+    }
+
+    fn lagre_liste(&mut self) {
+        let verdi = format!("{}{}", self.liste_bredde, if self.liste_stripe { " stripe" } else { "" });
+        self.send(&format!("set-option -g {LISTE_OPTION} {}", sitat(&verdi)), Svar::Ingenting);
     }
 
     /// Der `x` og `y` i den aktive panen er, med linja regnet fra toppen av

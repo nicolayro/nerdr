@@ -97,6 +97,11 @@ musehjulet og følger den du velger. Pilene øverst og nederst sier hvor mange
 som er over og under, og om noen av dem venter på deg, og et klikk på en pil
 ruller en side.
 
+Dra i streken mellom lista og panen for å gjøre lista bredere eller smalere.
+Drar du den helt inn, blir lista en stripe med bare tegnene, og et dobbeltklikk
+på streken bytter mellom stripa og bredden du hadde. Bredden står i den globale
+tmux-optionen `@nerdr-liste`, så den er den samme neste gang.
+
 Når du sist var inne i en Claude, skriver nerdr i pane-optionen `@nerdr-sett`
 i tmux. Den forsvinner med panen, og det en Claude blir ferdig med mens nerdr
 er lukket, venter på deg neste gang.

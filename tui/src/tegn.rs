@@ -21,12 +21,15 @@ use crate::meny::Meny;
 use crate::tekst::med_tilde;
 use crate::{App, Fokus, Knapp, Lukke, Mål, hjelp};
 
-/// Bredden på lista, med skillelinja.
+/// Bredden på lista, med skillelinja, til du drar i den.
 pub const LISTE: u16 = 36;
+/// Smalere enn dette blir lista til en stripe med bare tegnene.
+pub const LISTE_MIN: u16 = 24;
+/// Stripa er peker, glyf, mellomrom og skillelinja.
+pub const STRIPE: u16 = 4;
 /// Teksten i et kort starter etter peker, glyf og to mellomrom. Glyfene har
 /// tvetydig bredde i Unicode, og mange fonter tegner dem over to kolonner.
 const TEKST_X: u16 = 4;
-const TEKST: usize = (LISTE - 1 - TEKST_X - 1) as usize;
 const OPPGAVE_LINJER: usize = 2;
 const VELGER_LINJER: u16 = 12;
 const MENY_BREDDE: u16 = 44;
@@ -73,9 +76,25 @@ fn bakgrunn(farge: &OnceLock<Option<Color>>) -> Style {
     farge.get().copied().flatten().map_or(Style::new(), |c| Style::new().bg(c))
 }
 
-/// Til høyre for lista, under faneraden.
-pub fn visning(størrelse: Size) -> Rect {
-    Rect::new(LISTE, 1, størrelse.width.saturating_sub(LISTE), størrelse.height.saturating_sub(1))
+/// Til høyre for lista, under faneraden. Lista er `liste` bred, men aldri
+/// mer enn halve skjermen.
+pub fn visning(størrelse: Size, liste: u16) -> Rect {
+    let liste = liste.min(størrelse.width / 2).max(STRIPE.min(størrelse.width));
+    Rect::new(liste, 1, størrelse.width.saturating_sub(liste), størrelse.height.saturating_sub(1))
+}
+
+/// Bredden på lista er der visningen starter.
+fn liste_bredde(app: &App) -> u16 {
+    app.visning.x
+}
+
+fn stripe(app: &App) -> bool {
+    liste_bredde(app) <= STRIPE
+}
+
+/// Teksten i et kort går fram til en kolonne før skillelinja.
+fn tekstbredde(app: &App) -> usize {
+    liste_bredde(app).saturating_sub(TEKST_X + 2) as usize
 }
 
 pub fn alt(f: &mut Frame, app: &App) {
@@ -105,7 +124,8 @@ pub fn alt(f: &mut Frame, app: &App) {
 }
 
 fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
-    let bredde = LISTE - 1;
+    let bredde = liste_bredde(app) - 1;
+    let tekst = tekstbredde(app);
     let hint_y = område.height.saturating_sub(1);
 
     let mut overskrifter = Vec::new();
@@ -118,12 +138,15 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
             Rad::Strek => {
                 if let Some(y) = på_skjermen(*y) {
                     let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
-                    buf.set_stringn(TEKST_X, y, strek, TEKST, SVAK);
+                    buf.set_stringn(TEKST_X, y, strek, tekst, SVAK);
                 }
             }
             Rad::Overskrift(gruppe) => {
                 if let Some(y) = på_skjermen(*y) {
-                    let x = buf.set_stringn(1, y, tittel(*gruppe), bredde as usize, SVAK).0 + 1;
+                    let x = match stripe(app) {
+                        true => 0,
+                        false => buf.set_stringn(1, y, tittel(*gruppe), bredde as usize, SVAK).0 + 1,
+                    };
                     let strek = "─".repeat(bredde.saturating_sub(x) as usize);
                     buf.set_stringn(x, y, strek, bredde as usize, SVAK);
                     overskrifter.push(y);
@@ -133,7 +156,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                 let Some(kort) = kort else { continue };
                 let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
                 let pekt = matches!(mus, Some(Mål::Kort(id)) if *id == pane.id);
-                tegn_kort(buf, utsnitt.skjerm(*y), &vis, kort, *merke, valgt, app.fokus, pekt);
+                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, *merke, valgt, app.fokus, pekt);
             }
         }
     }
@@ -183,13 +206,15 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
             buf.set_stringn(1, vis.end, format!(" ↓ {under} "), bredde as usize, SVAK);
         }
     }
+    // Skillelinja lyser når musen er over den, så du ser at den kan dras.
+    let skille = if matches!(mus, Some(Mål::Skille)) || app.drar_skille { VANLIG } else { SVAK };
     for y in 0..område.height {
         let tegn = match y {
             0 => "┬",
             _ if overskrifter.contains(&y) => "┤",
             _ => "│",
         };
-        buf.set_stringn(bredde, y, tegn, 1, SVAK);
+        buf.set_stringn(bredde, y, tegn, 1, skille);
     }
 }
 
@@ -209,6 +234,10 @@ impl Kort {
 }
 
 fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
+    if stripe(app) {
+        return Kort { tittel: vec![String::new()], tid: None, under: Vec::new() };
+    }
+    let tekst = tekstbredde(app);
     let ny = app.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
     let mappe = app.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny);
     let repo = app.repoer.get(&pane.id);
@@ -220,31 +249,42 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
         }
         Merke::Sett | Merke::Starter => None,
     };
-    let første = TEKST.saturating_sub(tid.as_ref().map_or(0, |t| t.chars().count() + 2));
-    let oppgave = pane.oppgave().map(|o| bryt(o, første, TEKST, OPPGAVE_LINJER)).filter(|l| !l.is_empty());
+    let første = tekst.saturating_sub(tid.as_ref().map_or(0, |t| t.chars().count() + 2));
+    let oppgave = pane.oppgave().map(|o| bryt(o, første, tekst, OPPGAVE_LINJER)).filter(|l| !l.is_empty());
     let (tittel, under) = match (ny, oppgave) {
         (Some(_), _) => (vec![kutt(&sted, første)], vec!["starter …".to_string()]),
-        (None, Some(oppgave)) => (oppgave, repo_og_branch(&sted, branch)),
-        (None, None) => (vec![kutt(&sted, første)], branch.map(|b| vec![kutt(&format!("› {b}"), TEKST)]).unwrap_or_default()),
+        (None, Some(oppgave)) => (oppgave, repo_og_branch(&sted, branch, tekst)),
+        (None, None) => (vec![kutt(&sted, første)], branch.map(|b| vec![kutt(&format!("› {b}"), tekst)]).unwrap_or_default()),
     };
     Kort { tittel, tid, under }
 }
 
 /// På én linje når begge får plass, ellers branchen på linja under, så ingen
 /// av dem kuttes før de må.
-fn repo_og_branch(sted: &str, branch: Option<&str>) -> Vec<String> {
-    let Some(branch) = branch else { return vec![kutt(sted, TEKST)] };
+fn repo_og_branch(sted: &str, branch: Option<&str>, bredde: usize) -> Vec<String> {
+    let Some(branch) = branch else { return vec![kutt(sted, bredde)] };
     let sammen = format!("{sted} › {branch}");
-    if sammen.chars().count() <= TEKST {
+    if sammen.chars().count() <= bredde {
         return vec![sammen];
     }
-    vec![kutt(sted, TEKST), kutt(&format!("› {branch}"), TEKST)]
+    vec![kutt(sted, bredde), kutt(&format!("› {branch}"), bredde)]
 }
 
 /// Kortet med første linje på rad `topp`, som kan være over skjermen når
 /// lista ruller. Bare linjene på radene i `vis` tegnes.
 #[allow(clippy::too_many_arguments)]
-fn tegn_kort(buf: &mut Buffer, topp: i32, vis: &Range<u16>, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus, pekt: bool) {
+fn tegn_kort(
+    buf: &mut Buffer,
+    topp: i32,
+    vis: &Range<u16>,
+    bredde: u16,
+    kort: &Kort,
+    merke: Merke,
+    valgt: bool,
+    fokus: Fokus,
+    pekt: bool,
+) {
+    let tekst = bredde.saturating_sub(TEKST_X + 1);
     let dempet = !valgt && merke.gruppe() == Gruppe::Ferdig;
     let bakgrunn = match () {
         _ if valgt && fokus == Fokus::Liste => Some(markert()),
@@ -260,14 +300,14 @@ fn tegn_kort(buf: &mut Buffer, topp: i32, vis: &Range<u16>, kort: &Kort, merke: 
     for (i, (linje, stil)) in linjer.enumerate() {
         let Some(y) = u16::try_from(topp + i as i32).ok().filter(|y| vis.contains(y)) else { continue };
         if let Some(bakgrunn) = bakgrunn {
-            buf.set_style(Rect::new(0, y, LISTE - 1, 1), bakgrunn);
+            buf.set_style(Rect::new(0, y, bredde, 1), bakgrunn);
         }
         buf.set_stringn(0, y, peker, 1, VANLIG);
-        buf.set_stringn(TEKST_X, y, linje, TEKST, stil);
+        buf.set_stringn(TEKST_X, y, linje, tekst as usize, stil);
         if i == 0 {
             buf.set_stringn(1, y, glyf(merke), 1, Style::new().fg(glyffarge(merke)));
             if let Some(tid) = &kort.tid {
-                høyrestilt(buf, y, TEKST_X + TEKST as u16, tid, SVAK);
+                høyrestilt(buf, y, TEKST_X + tekst, tid, SVAK);
             }
         }
     }
@@ -296,11 +336,13 @@ struct Plassert<'a> {
     kort: Option<Kort>,
 }
 
-/// Radene i lista, etter hverandre fra toppen.
+/// Radene i lista, etter hverandre fra toppen. Stripa har ingen streker
+/// mellom kortene.
 fn plasser(app: &App) -> Vec<Plassert<'_>> {
     let mut y = 0;
     app.rader()
         .into_iter()
+        .filter(|rad| !(stripe(app) && *rad == Rad::Strek))
         .map(|rad| {
             let kort = if let Rad::Pane(pane, merke) = rad { Some(kort(app, pane, merke)) } else { None };
             let høyde = kort.as_ref().map_or(1, Kort::høyde);
@@ -478,8 +520,11 @@ fn knapper(app: &App, y: u16) -> Vec<(Knapp, Range<u16>, String)> {
         Fokus::Liste => String::new(),
         Fokus::Pane => format!("{} ", app.prefiks.navn()),
     };
+    if stripe(app) {
+        return vec![(Knapp::Ny, 0..3, " + ".to_string())];
+    }
     let (ny, hjelp) = (format!(" {prefiks}+ ny "), format!(" {prefiks}? hjelp "));
-    let slutt = LISTE - 1;
+    let slutt = liste_bredde(app) - 1;
     let ny_til = ny.chars().count() as u16;
     let hjelp_fra = slutt.saturating_sub(hjelp.chars().count() as u16).max(ny_til + 1);
     vec![(Knapp::Ny, 0..ny_til, ny), (Knapp::Hjelp, hjelp_fra..slutt, hjelp)]
@@ -920,12 +965,21 @@ mod tester {
 
     #[test]
     fn repo_og_branch_på_én_linje_når_det_er_plass() {
-        assert_eq!(repo_og_branch("nerdr", Some("main")), ["nerdr › main"]);
-        assert_eq!(repo_og_branch("nerdr", None), ["nerdr"]);
+        assert_eq!(repo_og_branch("nerdr", Some("main"), 30), ["nerdr › main"]);
+        assert_eq!(repo_og_branch("nerdr", None, 30), ["nerdr"]);
         assert_eq!(
-            repo_og_branch("api-bm-customer", Some("legg-til-audit-kode")),
+            repo_og_branch("api-bm-customer", Some("legg-til-audit-kode"), 30),
             ["api-bm-customer", "› legg-til-audit-kode"]
         );
+        assert_eq!(repo_og_branch("api-bm-customer", Some("legg-til-audit-kode"), 40), ["api-bm-customer › legg-til-audit-kode"]);
+    }
+
+    #[test]
+    fn lista_får_aldri_mer_enn_halve_skjermen() {
+        assert_eq!(visning(Size::new(120, 40), 50).x, 50);
+        assert_eq!(visning(Size::new(80, 40), 50).x, 40);
+        assert_eq!(visning(Size::new(80, 40), STRIPE).x, STRIPE);
+        assert_eq!(visning(Size::new(6, 40), LISTE).x, 4);
     }
 
     #[test]
