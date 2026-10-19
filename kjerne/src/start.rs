@@ -25,6 +25,27 @@ pub fn claude(samtale: Option<&str>) -> String {
     }
 }
 
+/// En ny Claude i en ny worktree, som Claude Code lager selv. Uten navn velger
+/// Claude Code et.
+pub fn claude_i_worktree(navn: &str) -> String {
+    match navn {
+        "" => "claude -w".into(),
+        navn => format!("claude -w {navn}"),
+    }
+}
+
+/// Det som er skrevet, som navn på en worktree. Navnet skrives inn i skallet,
+/// så tegn skallet tolker, faller bort, og det kan ikke starte som et flagg
+/// eller som `..`. Mellomrom blir bindestrek.
+pub fn worktree_navn(skrevet: &str) -> String {
+    let navn: String = skrevet
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .filter(|&c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        .collect();
+    navn.trim_start_matches(['-', '.']).to_string()
+}
+
 /// Svarer med pane-id-en, eller med en feil når sesjonen finnes.
 pub fn ny_sesjon(navn: &str, mappe: &Path) -> Vec<String> {
     let mappe = mappe.to_string_lossy();
@@ -68,6 +89,17 @@ mod tester {
         assert_eq!(sesjonsnavn(Path::new("/h/git/nit.æ")), "nit-æ");
         assert_eq!(sesjonsnavn(Path::new("/h/git/a:b")), "a-b");
         assert_eq!(sesjonsnavn(Path::new("/")), "claude");
+    }
+
+    #[test]
+    fn worktree_med_og_uten_navn() {
+        assert_eq!(claude_i_worktree(""), "claude -w");
+        assert_eq!(claude_i_worktree("fiks-æ"), "claude -w fiks-æ");
+        assert_eq!(worktree_navn("fiks_1.2-æ"), "fiks_1.2-æ");
+        assert_eq!(worktree_navn("fiks testene"), "fiks-testene");
+        assert_eq!(worktree_navn(";$`'\"&|/\\*a"), "a");
+        assert_eq!(worktree_navn("-rf"), "rf");
+        assert_eq!(worktree_navn("../x"), "x");
     }
 
     #[test]

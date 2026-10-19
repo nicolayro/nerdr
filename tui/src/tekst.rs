@@ -1,6 +1,7 @@
 //! Tekst som vises likt i lista, i mappevelgeren og fra kommandoene.
 
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use nerdr_kjerne::git::Repo;
 use nerdr_kjerne::paner::Pane;
@@ -18,6 +19,20 @@ pub fn varighet(ms: u64) -> String {
 /// Navnet på mappa, eller hele stien når den ikke har noe, som `/`.
 pub fn mappenavn(mappe: &Path) -> String {
     mappe.file_name().map_or_else(|| mappe.display().to_string(), |n| n.to_string_lossy().into())
+}
+
+/// Stien med `~` for hjemmemappa. tmux gir stien uten symlenker, så
+/// hjemmemappa prøves også slik.
+pub fn med_tilde(mappe: &Path) -> String {
+    let Some(hjem) = std::env::var_os("HOME").filter(|h| !h.is_empty()).map(PathBuf::from) else {
+        return mappe.display().to_string();
+    };
+    let ekte = fs::canonicalize(&hjem).ok();
+    match [Some(&hjem), ekte.as_ref()].into_iter().flatten().find_map(|h| mappe.strip_prefix(h).ok()) {
+        Some(rest) if rest.as_os_str().is_empty() => "~".into(),
+        Some(rest) => format!("~/{}", rest.display()),
+        None => mappe.display().to_string(),
+    }
 }
 
 /// Hvor en Claude jobber: repoet, mappa utenfor git, eller vinduet i tmux når

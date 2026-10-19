@@ -8,10 +8,11 @@ use crate::ny;
 pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
 og du kan gå inn i den og skrive.";
 
-pub const TASTER: [(&str, &str); 7] = [
+pub const TASTER: [(&str, &str); 8] = [
     ("↑↓  k j", "velg Claude"),
     ("⏎", "gå inn i sesjonen"),
     ("klikk", "velg Claude, dobbeltklikk går inn"),
+    ("+", "ny Claude, worktree eller terminal"),
     ("n", "ny Claude i en mappe du velger"),
     ("C-r", "fortsett en tidligere samtale"),
     ("?", "denne hjelpen"),
@@ -19,7 +20,8 @@ pub const TASTER: [(&str, &str); 7] = [
 ];
 
 /// Etter prefikset, fra lista og fra panen.
-pub const PREFIKSTASTER: [(&str, &str); 21] = [
+pub const PREFIKSTASTER: [(&str, &str); 22] = [
+    ("+", "ny Claude, worktree eller terminal"),
     ("c", "nytt vindu i mappa til panen"),
     ("n p", "neste og forrige vindu"),
     ("0-9", "vinduet med det nummeret"),

@@ -49,6 +49,9 @@ linje_mangler() { ! linje_har "$@"; }
 har() { skjerm | grep -Eq -- "$1"; }
 mangler() { ! har "$1"; }
 i_pane() { maal capture-pane -p -t "$1" | grep -qF -- "$2"; }
+ikke_i_pane() { ! i_pane "$@"; }
+# Kolonnen, fra 1, der teksten starter på linja, regnet i tegn.
+kolonne() { skjerm | sed -n "$1p" | perl -CSA -e '$s = shift; while (<STDIN>) { print index($_, $s) + 1 }' "$2"; }
 er() {
   forventet=$1
   shift
@@ -68,8 +71,8 @@ zoom() { maal display-message -p -t alfa:0 '#{window_zoomed_flag}'; }
 mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
 uten_klienter() { [ -z "$(maal list-clients)" ]; }
-i_lista() { linje_har 16 '^ \? hjelp'; }
-i_panen() { linje_har 16 '^ C-b \? hjelp'; }
+i_lista() { linje_har 16 '^ \+ ny +\? hjelp │'; }
+i_panen() { linje_har 16 '^ C-b \+ ny +C-b \? hjelp │'; }
 nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
 gruppert() { nerdr -L "$MAAL" liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
 fra_json() { nerdr -L "$MAAL" liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
@@ -174,6 +177,7 @@ klikk 5 12
 sjekk "klikk i lista utenfor kortene går ut" i_lista
 klikk 60 8
 sjekk "klikk i panen går inn" i_panen
+sjekk "uten at klikket kommer fram i alfa" ikke_i_pane alfa '^[[<0;'
 tast C-b w
 sjekk "C-b w går tilbake til lista" i_lista
 
@@ -203,12 +207,12 @@ klikk 5 2
 sjekk "klikk på alfa fra panen velger alfa og går ut i lista" linje_har 2 '^▎●  Fiks testene'
 sjekk "tilbake i lista" i_lista
 
-klikk 3 16
+klikk 30 16
 sjekk "klikk på «? hjelp» viser hjelpen" har 'trykk en tast for å lukke'
 tast x
 sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
 tast '?'
-sjekk "? viser hjelpen med prefikstastene" har 'C-b c +nytt vindu i mappa til panen'
+sjekk "? viser hjelpen med +" har '\+ +ny Claude, worktree eller terminal'
 tast x
 sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
 
@@ -262,8 +266,62 @@ sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
 
 tast k k k k k k k k
 sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
+
+tast +
+sjekk "+ åpner menyen" har 'c  Claude her'
+sjekk "menyen sier hvor det nye havner" har 'i ~/nerdr'
+sjekk "i et git-repo kan du lage en worktree" har 'w  Claude i en ny worktree'
+tast Escape
+sjekk "Esc lukker menyen" mangler 'Claude her'
+sjekk "og du er i lista" i_lista
+
+tast + t
+sjekk "t gir en terminal i et nytt vindu i alfa" linjer 2 maal list-windows -t alfa
+sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
+sjekk "og du er inne i den" i_panen
+tast C-b '&' y
+sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
+
+tast C-b +
+sjekk "C-b + åpner menyen fra panen" har 'c  Claude her'
+tast c
+sjekk "c skriver inn claude i et nytt vindu i alfa" i_pane alfa:1 claude
+sjekk "nerdr er inne i den nye, med ◌" linje_har 16 '^ C-b \+ ny'
+sjekk "kortet sier «starter …»" har 'starter …'
+tast C-b '&' y
+sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
+
+tast C-b w + w
+sjekk "w spør etter navnet på worktreen" har 'navn › '
+tast -l 'fiks testene;'
+sjekk "mellomrom blir bindestrek, og ; faller bort" har 'navn › fiks-testene '
+tast Enter
+sjekk "Enter skriver inn claude -w med navnet" i_pane alfa:1 'claude -w fiks-testene'
+tast C-b '&' y
+sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
+tast C-b w
+
+tast + %
+sjekk "% fra menyen deler alfa" linjer 2 maal list-panes -t alfa:0
+sjekk "og du er inne i den nye panen" er 1 pane_indeks
+sjekk "fra panen" i_panen
+tast C-b x y
+sjekk "lukket igjen" linjer 1 maal list-panes -t alfa:0
+tast C-b w
+
+klikk 3 16
+sjekk "klikk på «+ ny» åpner menyen" har 'c  Claude her'
+klikk 100 15
+sjekk "klikk utenfor lukker den" mangler 'Claude her'
+klikk "$(kolonne 1 ' + ')" 1
+sjekk "klikk på + etter fanene åpner menyen" har 'c  Claude her'
+klikk 40 7
+sjekk "klikk på «terminal her» gir et nytt vindu" linjer 2 maal list-windows -t alfa
+tast C-b '&' y
+sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
+tast C-b w
 tast C-b
-sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … w lista · c vindu · \? mer'
+sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … \+ ny · w lista · \? mer'
 
 tast %
 sjekk "% deler alfa" linjer 2 maal list-panes -t alfa:0
@@ -338,7 +396,7 @@ sjekk "boksen er tilbake" har '╭'
 
 tast C-b c
 sjekk "C-b c fra lista lager alfa:1" linjer 2 maal list-windows -t alfa
-sjekk "to faner øverst" linje_har 1 '┬─ [^ ]+ ─ [^ ]+ ─'
+sjekk "to faner øverst" linje_har 1 '┬─ [^ ]+ ─ [^ +][^ ]* ─'
 sjekk "nerdr er inne i det nye vinduet" i_panen
 tast -l 'i vindu 1'
 sjekk "det du skriver, havner i alfa:1" i_pane alfa:1 'i vindu 1'
@@ -358,7 +416,7 @@ tast C-b 1 C-b '&'
 sjekk "C-b & spør" linje_har 16 'lukke vinduet\? y/n'
 tast y
 sjekk "y lukker vinduet" linjer 1 maal list-windows -t alfa
-sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ ]+ ─'
+sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ +][^ ]* ─'
 tast C-b w
 
 tast q

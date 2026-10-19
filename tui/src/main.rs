@@ -3,6 +3,7 @@ mod grupper;
 mod hjelp;
 mod kommandoer;
 mod markering;
+mod meny;
 mod ny;
 mod palett;
 mod taster;
@@ -24,6 +25,7 @@ use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::register::{self, Claude};
 use nerdr_kjerne::sgr::{self, Linje};
 use markering::{Markering, Punkt};
+use meny::{Meny, Valg};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
     self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
@@ -68,6 +70,8 @@ enum Svar {
     /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
     NySesjon { navn: String, mappe: PathBuf, claude_kommando: String },
     NyPane { mappe: PathBuf, claude_kommando: String },
+    /// Svaret er pane-id-en til den nye panen.
+    NyDeling,
     Prefiks,
     Ingenting,
 }
@@ -93,6 +97,18 @@ enum Mål {
     Fane(String),
     /// En pane i vinduet som tastene ikke går til.
     Pane(String),
+    Knapp(Knapp),
+    /// Indeksen i `Meny::valg`.
+    Menyvalg(usize),
+}
+
+/// Det i lista og på fanestreken som gjør noe når du klikker.
+#[derive(Clone, Copy, PartialEq)]
+enum Knapp {
+    Ny,
+    Hjelp,
+    /// `+` etter fanene.
+    NyFane,
 }
 
 struct App {
@@ -168,12 +184,15 @@ struct App {
     musen: Option<(u16, u16)>,
     /// Kortet som sist ble klikket på, og når, så et klikk til går inn.
     sist_klikket: Option<(String, Instant)>,
+    /// Slippet etter klikket som tok deg inn i panen, skal ikke til panen.
+    svelg_slipp: bool,
     /// I den aktive panen, når den ikke har slått på mus selv.
     markering: Option<Markering>,
     /// Da markeringen sist ble kopiert, så det kan stå en liten stund.
     kopiert: Option<Instant>,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
+    meny: Option<Meny>,
     hjelp: bool,
     /// Pane-id → mappe og starttid for Claude-er nerdr har startet, til de
     /// står i registeret. Oppstarten tar flere sekunder, og så lenge vises de
@@ -313,9 +332,11 @@ impl App {
             visning: Rect::default(),
             musen: None,
             sist_klikket: None,
+            svelg_slipp: false,
             markering: None,
             kopiert: None,
             velger: None,
+            meny: None,
             hjelp: false,
             nye: HashMap::new(),
             gå_inn_i: None,
@@ -405,12 +426,16 @@ impl App {
             }
             Hendelse::Term(Event::Key(k)) if k.kind == KeyEventKind::Press => self.tast(k),
             Hendelse::Term(Event::Mouse(m)) => self.mus(m),
-            Hendelse::Term(Event::Paste(tekst)) => match &mut self.velger {
-                Some(velger) => {
+            Hendelse::Term(Event::Paste(tekst)) => match (&mut self.velger, &mut self.meny) {
+                (Some(velger), _) => {
                     velger.skriv(&tekst);
                     true
                 }
-                None => {
+                (None, Some(meny)) => {
+                    meny.skriv(&tekst);
+                    true
+                }
+                (None, None) => {
                     self.lim_inn(&tekst);
                     false
                 }
@@ -552,6 +577,13 @@ impl App {
                 }
                 false
             }
+            Svar::NyDeling => {
+                let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
+                self.bytt_fokus(Fokus::Pane);
+                self.aktiver(&id);
+                self.list_paner();
+                true
+            }
             Svar::NyttVindu => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
                 self.vis_vindu(id);
@@ -597,6 +629,7 @@ impl App {
                 return;
             }
             KeyCode::Char('?') => return self.hjelp = true,
+            KeyCode::Char('+') => return self.åpne_meny(),
             _ => {}
         }
         let (Some(aktiv), Some(vindu)) = (self.aktiv().cloned(), self.vist.as_ref().map(|v| sitat(v))) else {
@@ -911,6 +944,33 @@ impl App {
             }
             return true;
         }
+        if let Some(meny) = &mut self.meny {
+            let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+            match (k.code, &mut meny.navn) {
+                (KeyCode::Char('c'), _) if ctrl => self.meny = None,
+                (KeyCode::Esc, Some(_)) => meny.navn = None,
+                (KeyCode::Esc, None) => self.meny = None,
+                (KeyCode::Enter, Some(_)) => self.velg_ny(Valg::Worktree),
+                (KeyCode::Backspace, Some(navn)) => {
+                    navn.pop();
+                }
+                (KeyCode::Char('u'), Some(navn)) if ctrl => navn.clear(),
+                (KeyCode::Char(c), Some(_)) if !ctrl => meny.skriv(c.encode_utf8(&mut [0; 4])),
+                (_, Some(_)) => return false,
+                (KeyCode::Up | KeyCode::Char('k'), None) => meny.flytt(-1),
+                (KeyCode::Down | KeyCode::Char('j'), None) => meny.flytt(1),
+                (KeyCode::Enter, None) => {
+                    let valg = meny.valg()[meny.valgt];
+                    self.velg_ny(valg);
+                }
+                (KeyCode::Char(c), None) if !ctrl => {
+                    let Some(valg) = meny.valg().into_iter().find(|v| v.tast() == c) else { return false };
+                    self.velg_ny(valg);
+                }
+                _ => return false,
+            }
+            return true;
+        }
         if let Some(lukke) = self.lukke.take() {
             if k.code == KeyCode::Char('y') {
                 let kommando = match lukke {
@@ -946,11 +1006,63 @@ impl App {
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
             KeyCode::Enter => self.gå_inn(),
             KeyCode::Char('n') => self.åpne_velger(false),
+            KeyCode::Char('+') => self.åpne_meny(),
             KeyCode::Char('r') if k.modifiers.contains(KeyModifiers::CONTROL) => self.åpne_velger(true),
             KeyCode::Char('?') => self.hjelp = true,
             _ => return false,
         }
         true
+    }
+
+    /// «Her» er panen som vises, også når den er en terminal ved siden av
+    /// Claude-en.
+    fn åpne_meny(&mut self) {
+        let her = self.aktiv().map(|p| meny::Her {
+            sesjon_id: p.sesjon_id.clone(),
+            pane_id: p.id.clone(),
+            mappe: p.mappe.clone(),
+            git: git::les(&p.mappe).is_some(),
+        });
+        self.meny = Some(Meny::ny(her));
+    }
+
+    /// En worktree spør først om navnet, og startes når det er skrevet.
+    ///
+    /// Det som startes en Claude, går via lista, så du går inn i den nye selv
+    /// om du åpnet menyen fra en pane.
+    fn velg_ny(&mut self, valg: Valg) {
+        let Some(meny) = &mut self.meny else { return };
+        if valg == Valg::Worktree && meny.navn.is_none() {
+            meny.navn = Some(String::new());
+            return;
+        }
+        let Some(Meny { her, navn, .. }) = self.meny.take() else { return };
+        let (valg, her) = match (valg, her) {
+            (Valg::Mappe | Valg::Fortsett, _) => {
+                self.bytt_fokus(Fokus::Liste);
+                return self.åpne_velger(valg == Valg::Fortsett);
+            }
+            (_, None) => return,
+            (valg, Some(her)) => (valg, her),
+        };
+        let (sesjon, pane, mappe) = (sitat(&format!("{}:", her.sesjon_id)), sitat(&her.pane_id), sitat(&her.mappe.to_string_lossy()));
+        match valg {
+            Valg::Claude | Valg::Worktree => {
+                self.bytt_fokus(Fokus::Liste);
+                let claude_kommando = match valg {
+                    Valg::Worktree => start::claude_i_worktree(&navn.unwrap_or_default()),
+                    _ => start::claude(None),
+                };
+                let svar = Svar::NyPane { mappe: her.mappe, claude_kommando };
+                self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{pane_id}}'"), svar);
+            }
+            Valg::Terminal => self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{window_id}}'"), Svar::NyttVindu),
+            Valg::SideOmSide | Valg::OverOgUnder => {
+                let retning = if valg == Valg::SideOmSide { "-h" } else { "-v" };
+                self.send(&format!("split-window {retning} -t {pane} -c {mappe} -P -F '#{{pane_id}}'"), Svar::NyDeling);
+            }
+            Valg::Mappe | Valg::Fortsett => {}
+        }
     }
 
     fn åpne_velger(&mut self, fortsett: bool) {
@@ -994,12 +1106,19 @@ impl App {
         if self.velger.is_some() || self.hjelp {
             return None;
         }
+        if self.meny.is_some() {
+            return tegn::menyvalg_på(self, x, y).map(Mål::Menyvalg);
+        }
         let v = self.visning;
+        if x < v.x && y + 1 == v.bottom() {
+            return tegn::knapp_på(self, x).map(Mål::Knapp);
+        }
         if x < v.x {
             return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
         }
         if y < v.y {
-            return tegn::fane_på(self, x).map(Mål::Fane);
+            let ny = tegn::ny_fane_på(self, x).then_some(Mål::Knapp(Knapp::NyFane));
+            return tegn::fane_på(self, x).map(Mål::Fane).or(ny);
         }
         let inni = |r: Rect| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
         let boks = self.bokser().into_iter().find(|b| inni(b.ramme.unwrap_or(b.innhold)))?;
@@ -1011,6 +1130,18 @@ impl App {
         if self.velger.is_some() || self.hjelp {
             return false;
         }
+        if self.meny.is_some() {
+            if m.kind != MouseEventKind::Down(MouseButton::Left) {
+                return false;
+            }
+            let valg = tegn::menyvalg_på(self, m.column, m.row).and_then(|i| Some(self.meny.as_ref()?.valg()[i]));
+            match valg {
+                Some(valg) => self.velg_ny(valg),
+                None if !tegn::i_menyen(self, m.column, m.row) => self.meny = None,
+                None => {}
+            }
+            return true;
+        }
         if self.markering.as_ref().is_some_and(|m| m.drar)
             && matches!(m.kind, MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left))
         {
@@ -1018,23 +1149,23 @@ impl App {
         }
         let v = self.visning;
         if m.row < v.y && m.column >= v.x {
-            if m.row == 0
-                && m.kind == MouseEventKind::Down(MouseButton::Left)
-                && let Some(vindu) = tegn::fane_på(self, m.column)
-            {
+            if m.row != 0 || m.kind != MouseEventKind::Down(MouseButton::Left) {
+                return false;
+            }
+            if let Some(vindu) = tegn::fane_på(self, m.column) {
                 self.vis_vindu(vindu);
-                return true;
+            } else if tegn::ny_fane_på(self, m.column) {
+                self.åpne_meny();
             }
-            return false;
+            return true;
         }
-        // Hintet nederst i lista er veien til hjelpen.
-        let hint = m.row + 1 == v.bottom() && self.lukke.is_none() && !self.etter_prefiks;
-        if m.column < v.x && hint {
-            if m.kind == MouseEventKind::Down(MouseButton::Left) {
-                self.hjelp = true;
-                return true;
+        if m.column < v.x && m.row + 1 == v.bottom() {
+            match tegn::knapp_på(self, m.column).filter(|_| m.kind == MouseEventKind::Down(MouseButton::Left)) {
+                Some(Knapp::Ny | Knapp::NyFane) => self.åpne_meny(),
+                Some(Knapp::Hjelp) => self.hjelp = true,
+                None => return false,
             }
-            return false;
+            return true;
         }
         if m.column < v.x {
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
@@ -1073,6 +1204,15 @@ impl App {
         }
         if !inni(boks.innhold) {
             return byttet;
+        }
+        // Klikket som tar deg inn, går ikke videre, så det ikke trykker på et
+        // valg i en dialog.
+        if byttet {
+            self.svelg_slipp = true;
+            return true;
+        }
+        if m.kind == MouseEventKind::Up(MouseButton::Left) && std::mem::take(&mut self.svelg_slipp) {
+            return false;
         }
         let (id, x, y) = (sitat(&pane.id), m.column - boks.innhold.x, m.row - boks.innhold.y);
         if !self.pane_mus && m.kind == MouseEventKind::Down(MouseButton::Left) {

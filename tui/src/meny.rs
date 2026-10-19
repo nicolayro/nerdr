@@ -1,0 +1,112 @@
+//! «Ny»-menyen: alt nerdr kan lage, bak én tast og én knapp, så du ikke må
+//! kunne tmux for å få en ny Claude, terminal eller worktree.
+
+use std::path::PathBuf;
+
+use nerdr_kjerne::start;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Valg {
+    Claude,
+    Worktree,
+    Terminal,
+    SideOmSide,
+    OverOgUnder,
+    Mappe,
+    Fortsett,
+}
+
+impl Valg {
+    pub fn tast(self) -> char {
+        match self {
+            Valg::Claude => 'c',
+            Valg::Worktree => 'w',
+            Valg::Terminal => 't',
+            Valg::SideOmSide => '%',
+            Valg::OverOgUnder => '"',
+            Valg::Mappe => 'm',
+            Valg::Fortsett => 'r',
+        }
+    }
+
+    pub fn tekst(self) -> &'static str {
+        match self {
+            Valg::Claude => "Claude her",
+            Valg::Worktree => "Claude i en ny worktree",
+            Valg::Terminal => "terminal her",
+            Valg::SideOmSide => "del side om side",
+            Valg::OverOgUnder => "del over og under",
+            Valg::Mappe => "Claude i en annen mappe",
+            Valg::Fortsett => "fortsett en samtale",
+        }
+    }
+}
+
+/// Panen som vises, der det nye legges.
+#[derive(Clone, Debug)]
+pub struct Her {
+    pub sesjon_id: String,
+    pub pane_id: String,
+    pub mappe: PathBuf,
+    pub git: bool,
+}
+
+pub struct Meny {
+    pub her: Option<Her>,
+    pub valgt: usize,
+    /// Navnet på worktreen, når det skrives inn.
+    pub navn: Option<String>,
+}
+
+impl Meny {
+    pub fn ny(her: Option<Her>) -> Meny {
+        Meny { her, valgt: 0, navn: None }
+    }
+
+    /// Uten en pane som vises, er det ikke noe «her», og en worktree krever git.
+    pub fn valg(&self) -> Vec<Valg> {
+        let her = [Valg::Claude, Valg::Worktree, Valg::Terminal, Valg::SideOmSide, Valg::OverOgUnder];
+        let git = self.her.as_ref().is_some_and(|h| h.git);
+        her.into_iter()
+            .filter(|v| self.her.is_some() && (*v != Valg::Worktree || git))
+            .chain([Valg::Mappe, Valg::Fortsett])
+            .collect()
+    }
+
+    pub fn flytt(&mut self, steg: isize) {
+        let siste = self.valg().len() as isize - 1;
+        self.valgt = (self.valgt as isize + steg).clamp(0, siste) as usize;
+    }
+
+    pub fn skriv(&mut self, tekst: &str) {
+        if let Some(navn) = &mut self.navn {
+            *navn = start::worktree_navn(&format!("{navn}{tekst}"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tester {
+    use super::*;
+
+    fn her(git: bool) -> Option<Her> {
+        Some(Her { sesjon_id: "$0".into(), pane_id: "%0".into(), mappe: PathBuf::from("/h"), git })
+    }
+
+    #[test]
+    fn worktree_bare_i_git_og_bare_mapper_uten_pane() {
+        assert!(Meny::ny(her(true)).valg().contains(&Valg::Worktree));
+        assert!(!Meny::ny(her(false)).valg().contains(&Valg::Worktree));
+        assert_eq!(Meny::ny(None).valg(), [Valg::Mappe, Valg::Fortsett]);
+    }
+
+    #[test]
+    fn navnet_tar_bare_det_skallet_tåler() {
+        let mut meny = Meny::ny(her(true));
+        meny.skriv("x");
+        assert_eq!(meny.navn, None);
+        meny.navn = Some(String::new());
+        meny.skriv("-fiks; ls");
+        assert_eq!(meny.navn.as_deref(), Some("fiks-ls"));
+    }
+}

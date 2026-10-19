@@ -8,7 +8,7 @@ use std::{env, fs};
 
 use nerdr_kjerne::samtaler;
 
-use crate::tekst::{mappenavn, varighet};
+use crate::tekst::{mappenavn, med_tilde, varighet};
 
 /// Mappene det søkes i, kolonseparert som `PATH`. Kandidatene er mappene rett
 /// under dem.
@@ -49,12 +49,7 @@ impl Velger {
         let hjem = PathBuf::from(env::var("HOME").unwrap_or_default());
         let mapper = kandidater(&røtter(&mapper(), &hjem))
             .into_iter()
-            .map(|mappe| {
-                let vis = mappe
-                    .strip_prefix(&hjem)
-                    .map_or_else(|_| mappe.display().to_string(), |r| format!("~/{}", r.display()));
-                Kandidat { mappe, vis, samtale: None, alder: None }
-            })
+            .map(|mappe| Kandidat { vis: med_tilde(&mappe), mappe, samtale: None, alder: None })
             .collect();
         let nå = SystemTime::now();
         let samtaler = samtaler::siste(prosjekter, SAMTALER, kjører)

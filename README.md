@@ -32,6 +32,7 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | --- | --- |
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
+| `+` | Ny Claude, worktree eller terminal |
 | `n` | Ny Claude i en mappe du velger |
 | `C-r` | Fortsett en tidligere samtale |
 | `?` | Hjelp |
@@ -56,6 +57,7 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 
 | Etter prefikset | Hva |
 | --- | --- |
+| `+` | Ny Claude, worktree eller terminal |
 | `c` | Nytt vindu i mappa til panen |
 | `n` `p` | Neste og forrige vindu |
 | `0`–`9` | Vinduet med det nummeret |
@@ -98,6 +100,19 @@ i tmux. Den forsvinner med panen, og det en Claude blir ferdig med mens nerdr
 er lukket, venter på deg neste gang.
 
 ### Starte og fortsette
+
+`+` åpner en meny med alt nerdr kan lage. Fra panen er det prefikset og `+`,
+og med musen «+ ny» nederst i lista eller `+` etter fanene. Det nye legges i
+mappa og sesjonen til panen som vises:
+
+| | |
+| --- | --- |
+| `c` | Claude i et nytt vindu |
+| `w` | Claude i en ny worktree, med `claude -w` og navnet du skriver. Bare i et git-repo. |
+| `t` | Terminal i et nytt vindu |
+| `%` `"` | Del vinduet side om side eller over og under |
+| `m` | Claude i en annen mappe, som `n` |
+| `r` | Fortsett en samtale, som `C-r` |
 
 `n` åpner en popup der du søker fram en mappe, og `⏎` starter `claude` der i en
 tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den et nytt vindu.

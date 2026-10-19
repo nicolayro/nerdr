@@ -17,7 +17,9 @@ use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf, tittel};
 use crate::ny::Velger;
 use crate::tekst::{sted, varighet};
-use crate::{App, Fokus, Lukke, Mål, hjelp};
+use crate::meny::Meny;
+use crate::tekst::med_tilde;
+use crate::{App, Fokus, Knapp, Lukke, Mål, hjelp};
 
 /// Bredden på lista, med skillelinja.
 pub const LISTE: u16 = 36;
@@ -27,6 +29,7 @@ const TEKST_X: u16 = 4;
 const TEKST: usize = (LISTE - 1 - TEKST_X - 1) as usize;
 const OPPGAVE_LINJER: usize = 2;
 const VELGER_LINJER: u16 = 12;
+const MENY_BREDDE: u16 = 44;
 
 const ORANSJE: Color = Color::Rgb(217, 119, 87);
 const GRØNN: Color = Color::Indexed(108);
@@ -89,6 +92,10 @@ pub fn alt(f: &mut Frame, app: &App) {
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
+    } else if let Some(meny) = &app.meny {
+        if let Some(markør) = tegn_meny(buf, område, meny, mus.as_ref()) {
+            f.set_cursor_position(markør);
+        }
     } else if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app, &bokser)) {
         let i = boks.innhold;
         if x < i.width && y < i.height {
@@ -132,17 +139,30 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         }
     }
 
-    // Hintet sier noe bare når du har trykket prefikset eller nerdr spør. Ellers
-    // står bare veien til hjelpen der, dempet.
+    // Nederst står knappene, og et hint når du har trykket prefikset eller
+    // nerdr spør.
     let prefiks = app.prefiks.navn();
-    let (hint, stil) = match app.fokus {
-        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => (" lukke panen? y/n".to_string(), VANLIG),
-        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => (" lukke vinduet? y/n".to_string(), VANLIG),
-        _ if app.etter_prefiks => (format!(" {prefiks} … w lista · c vindu · ? mer"), VANLIG),
-        Fokus::Liste => (" ? hjelp".to_string(), SVAK),
-        Fokus::Pane => (format!(" {prefiks} ? hjelp"), SVAK),
+    let hint = match () {
+        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => Some(" lukke panen? y/n".to_string()),
+        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => Some(" lukke vinduet? y/n".to_string()),
+        _ if app.etter_prefiks => Some(format!(" {prefiks} … + ny · w lista · ? mer")),
+        _ => None,
     };
-    buf.set_stringn(0, hint_y, hint, bredde as usize, stil);
+    if let Some(hint) = hint {
+        buf.set_stringn(0, hint_y, hint, bredde as usize, VANLIG);
+    }
+    for (knapp, x, tekst) in knapper(app, hint_y) {
+        let pekt = mus == Some(&Mål::Knapp(knapp));
+        let stil = if pekt { under_musen() } else { Style::new() };
+        let (pluss, tekststil) = match (knapp, app.fokus) {
+            (Knapp::Ny, Fokus::Liste) => (Style::new().fg(ORANSJE), VANLIG),
+            _ => (SVAK, SVAK),
+        };
+        buf.set_string(x.start, hint_y, &tekst, tekststil.patch(stil));
+        if let Some(i) = tekst.find('+') {
+            buf.set_string(x.start + tekst[..i].chars().count() as u16, hint_y, "+", pluss.patch(stil));
+        }
+    }
 
     // Overskriftene treffer skillestreken, og øverst går streken videre til
     // fanene. Står bare FERDIG i lista, er den nederst, og da går streken over
@@ -381,6 +401,10 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
         };
         buf.set_string(f.fra, 0, format!(" {} ", f.navn), stil);
     }
+    if let Some(pluss) = ny_fane(app) {
+        let stil = if mus == Some(&Mål::Knapp(Knapp::NyFane)) { under_musen() } else { SVAK };
+        buf.set_string(pluss.start, 0, " + ", stil);
+    }
 }
 
 /// Vinduet til fanen i kolonne `x`.
@@ -388,15 +412,55 @@ pub fn fane_på(app: &App, x: u16) -> Option<String> {
     faner(app).into_iter().find(|f| (f.fra..f.til).contains(&x)).map(|f| f.vindu)
 }
 
-/// En boks med ramme midt på skjermen, med tittel øverst og hint nederst,
-/// eller `None` når skjermen er for liten.
-fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str, hint: &str) -> Option<Rect> {
+/// `+` etter fanene, når et vindu vises og det er plass til den.
+fn ny_fane(app: &App) -> Option<Range<u16>> {
+    app.valgt.as_ref()?;
+    let fra = faner(app).last().map_or(app.visning.x + 1, |f| f.til + 1);
+    (fra + 3 <= app.visning.right()).then_some(fra..fra + 3)
+}
+
+pub fn ny_fane_på(app: &App, x: u16) -> bool {
+    ny_fane(app).is_some_and(|r| r.contains(&x))
+}
+
+/// «+ ny» til venstre og «? hjelp» til høyre på nederste rad i lista. Fra
+/// panen står prefikset foran. Når hintet står der, er de borte.
+fn knapper(app: &App, y: u16) -> Vec<(Knapp, Range<u16>, String)> {
+    if app.lukke.is_some() || app.etter_prefiks || y == 0 {
+        return Vec::new();
+    }
+    let prefiks = match app.fokus {
+        Fokus::Liste => String::new(),
+        Fokus::Pane => format!("{} ", app.prefiks.navn()),
+    };
+    let (ny, hjelp) = (format!(" {prefiks}+ ny "), format!(" {prefiks}? hjelp "));
+    let slutt = LISTE - 1;
+    let ny_til = ny.chars().count() as u16;
+    let hjelp_fra = slutt.saturating_sub(hjelp.chars().count() as u16).max(ny_til + 1);
+    vec![(Knapp::Ny, 0..ny_til, ny), (Knapp::Hjelp, hjelp_fra..slutt, hjelp)]
+}
+
+/// Knappen i kolonne `x` på nederste rad i lista.
+pub fn knapp_på(app: &App, x: u16) -> Option<Knapp> {
+    let y = app.visning.bottom().saturating_sub(1);
+    knapper(app, y).into_iter().find(|(_, r, _)| r.contains(&x)).map(|(k, ..)| k)
+}
+
+/// Der en boks på `bredde` og `høyde` står midt på skjermen, eller `None` når
+/// skjermen er for liten.
+fn midt_på(område: Rect, bredde: u16, høyde: u16) -> Option<Rect> {
     let bredde = område.width.saturating_sub(4).min(bredde);
     let høyde = område.height.saturating_sub(2).min(høyde);
     if bredde < 12 || høyde < 5 {
         return None;
     }
-    let boks = Rect::new((område.width - bredde) / 2, (område.height - høyde) / 3, bredde, høyde);
+    Some(Rect::new((område.width - bredde) / 2, (område.height - høyde) / 3, bredde, høyde))
+}
+
+/// En boks med ramme midt på skjermen, med tittel øverst og hint nederst.
+fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str, hint: &str) -> Option<Rect> {
+    let boks = midt_på(område, bredde, høyde)?;
+    let bredde = boks.width;
     let ramme = Style::new().fg(ORANSJE);
     buf.set_style(boks, Style::reset());
     for y in boks.top()..boks.bottom() {
@@ -448,6 +512,74 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str) {
     linje("", Style::new());
     linje(hjelp::BARE_TMUX, SVAK);
     linje(&hjelp::mapper(), SVAK);
+}
+
+/// Hele skjermen, regnet fra visningen, som slutter nederst til høyre.
+fn skjerm(app: &App) -> Rect {
+    let v = app.visning;
+    Rect::new(0, 0, v.right(), v.bottom())
+}
+
+/// Radene over valgene: hvor det nye legges, og en tom rad.
+fn meny_topp(meny: &Meny) -> u16 {
+    if meny.her.is_some() { 2 } else { 0 }
+}
+
+fn meny_boks(område: Rect, meny: &Meny) -> Option<Rect> {
+    let høyde = match meny.navn {
+        Some(_) => 5,
+        None => meny_topp(meny) + meny.valg().len() as u16 + 2,
+    };
+    midt_på(område, MENY_BREDDE, høyde)
+}
+
+/// Gir der markøren skal stå når navnet på en worktree skrives inn.
+fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -> Option<(u16, u16)> {
+    let (tittel, hint) = match meny.navn {
+        Some(_) => ("ny worktree", "⏎ start · esc tilbake"),
+        None => ("ny", "⏎ velg · esc avbryt"),
+    };
+    let plass = meny_boks(område, meny)?;
+    let ramme = boks(buf, område, plass.width, plass.height, tittel, hint)?;
+    let (x, indre) = (ramme.x + 2, (ramme.width - 4) as usize);
+    if let Some(navn) = &meny.navn {
+        let y = ramme.y + 1;
+        let etter = buf.set_stringn(x, y, "navn › ", indre, Style::new().fg(ORANSJE)).0;
+        let markør = buf.set_stringn(etter, y, navn, indre.saturating_sub(7), VANLIG).0;
+        buf.set_stringn(x, y + 2, "Uten navn velger Claude et.", indre, SVAK);
+        return Some((markør, y));
+    }
+    if let Some(her) = &meny.her {
+        let sti = kutt_foran(&med_tilde(&her.mappe), indre.saturating_sub(2));
+        buf.set_stringn(x, ramme.y + 1, format!("i {sti}"), indre, SVAK);
+    }
+    for (i, valg) in meny.valg().into_iter().enumerate() {
+        let y = ramme.y + 1 + meny_topp(meny) + i as u16;
+        let rad = Rect::new(ramme.x + 1, y, ramme.width - 2, 1);
+        let valgt = i == meny.valgt;
+        if valgt {
+            buf.set_style(rad, markert());
+            buf.set_string(ramme.x + 1, y, "▎", VANLIG);
+        } else if mus == Some(&Mål::Menyvalg(i)) {
+            buf.set_style(rad, under_musen());
+        }
+        buf.set_string(x, y, valg.tast().to_string(), Style::new().fg(ORANSJE));
+        buf.set_stringn(x + 3, y, valg.tekst(), indre.saturating_sub(3), if valgt { STERK } else { VANLIG });
+    }
+    None
+}
+
+/// Valget i menyen på `x` og `y`, som indeks i `Meny::valg`.
+pub fn menyvalg_på(app: &App, x: u16, y: u16) -> Option<usize> {
+    let meny = app.meny.as_ref().filter(|m| m.navn.is_none())?;
+    let ramme = meny_boks(skjerm(app), meny)?;
+    let i = y.checked_sub(ramme.y + 1 + meny_topp(meny))? as usize;
+    ((ramme.x + 1..ramme.right() - 1).contains(&x) && i < meny.valg().len()).then_some(i)
+}
+
+pub fn i_menyen(app: &App, x: u16, y: u16) -> bool {
+    let ramme = app.meny.as_ref().and_then(|m| meny_boks(skjerm(app), m));
+    ramme.is_some_and(|r| r.contains((x, y).into()))
 }
 
 /// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
@@ -513,6 +645,15 @@ fn kutt(tekst: &str, bredde: usize) -> String {
     kuttet
 }
 
+/// Som `kutt`, men fra starten, for stier der slutten sier mest.
+fn kutt_foran(tekst: &str, bredde: usize) -> String {
+    let antall = tekst.chars().count();
+    if antall <= bredde {
+        return tekst.to_string();
+    }
+    ['…'].into_iter().chain(tekst.chars().skip(antall + 1 - bredde.max(1))).collect()
+}
+
 /// Bryter på mellomrom over høyst `maks` linjer, der den første er `første`
 /// bred, og ender med … når teksten ikke får plass.
 fn bryt(tekst: &str, første: usize, bredde: usize, maks: usize) -> Vec<String> {
@@ -544,7 +685,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
         return;
     }
     if app.valgt.is_none() {
-        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, SVAK);
+        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. + starter en ny.", v.width as usize, SVAK);
         return;
     }
     // Den aktive har vanlig farge når du er inne i vinduet, så du ser hvor
@@ -717,6 +858,12 @@ mod tester {
         );
         assert_eq!(bryt("en to tre fire", 7, 7, 2), ["en to", "tre…"]);
         assert_eq!(bryt("Langtordsomikkefårplass", 10, 10, 2), ["Langtords…"]);
+    }
+
+    #[test]
+    fn kutter_stier_foran() {
+        assert_eq!(kutt_foran("~/git/nerdr", 20), "~/git/nerdr");
+        assert_eq!(kutt_foran("~/git/nerdr", 8), "…t/nerdr");
     }
 
     #[test]
