@@ -133,12 +133,12 @@ registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
 vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
   "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
-sjekk "alfa står under VENTER med ●, med oppgaven som tittel" linje_har 2 '^▎●  Fiks testene +│'
-sjekk "under står mappa og branchen, og <1m til høyre" linje_har 3 '^▎   nerdr · main +<1m │'
+sjekk "alfa står under VENTER med ●, med oppgaven som tittel og <1m til høyre" linje_har 2 '^▎●  Fiks testene +<1m │'
+sjekk "under står repoet og branchen" linje_har 3 '^▎   nerdr › main +│'
 sjekk "fanen står på en strek som fortsetter overskriften med ┬" linje_har 1 '^ VENTER .*┬─ [^ ]+ ─'
 sjekk "JOBBER treffer skillestreken med ┤" linje_har 5 '^ JOBBER .*┤'
-sjekk "gamma står under JOBBER med ◐, og uten oppgave er mappa tittelen" linje_har 6 '^ ◐  nerdr +│'
-sjekk "under gamma står branchen og <1m" linje_har 7 '^    main +<1m │'
+sjekk "gamma står under JOBBER med ◐, og uten oppgave er repoet tittelen" linje_har 6 '^ ◐  nerdr +<1m │'
+sjekk "under gamma står branchen" linje_har 7 '^    › main +│'
 sjekk "beta har ingen Claude og vises ikke" mangler beta
 sjekk "alfa får størrelsen til boksen" er 68x13 dimensjon alfa
 
@@ -166,15 +166,15 @@ sjekk "C-b w og j velger gamma" linje_har 6 '^▎◐  nerdr '
 sjekk "alfa venter igjen" linje_har 2 '^ ●  Fiks testene'
 
 klikk 5 2
-sjekk "klikk på andre rad går rett inn i alfa" linje_har 2 '^▎●  Fiks testene +│'
+sjekk "klikk på andre rad går rett inn i alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
 sjekk "inne i panen viser hintet prefikset" i_panen
 tast C-b w
 sjekk "C-b w går tilbake til lista" i_lista
 
 registrer gamma gamma idle
 list_straks
-sjekk "gamma blir ferdig og havner under VENTER med ◆, og uten cwd står gamma:0" linje_har 5 '^ ◆  gamma:0 +│'
-sjekk "uten branch står bare tiden under" linje_har 6 '^ +<1m │'
+sjekk "gamma blir ferdig og havner under VENTER med ◆, og uten cwd står gamma:0" linje_har 5 '^ ◆  gamma:0 +<1m │'
+sjekk "uten repo er kortet én linje" linje_har 6 '^ +│'
 sjekk "streken mellom kortene i VENTER" linje_har 4 '┈'
 
 tast j Enter
@@ -185,7 +185,7 @@ sjekk "FERDIG treffer skillestreken" linje_har 13 '^ FERDIG .*┤'
 sjekk "nerdr har skrevet når du var inne i gamma, i @nerdr-sett" sett_er_tall gamma
 
 tast k
-sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +│'
+sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
 klikk 5 14
 sjekk "klikk på gamma nederst velger den" linje_har 14 '^▎○  gamma:0'
 sjekk "klikk på gamma går inn i den" i_panen
@@ -250,7 +250,7 @@ sjekk "Esc går tilbake til lista" i_lista
 sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
 
 tast k k k k k k k k
-sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +│'
+sjekk "k opp til alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
 tast C-b
 sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … w lista · c vindu · \? mer'
 
@@ -297,7 +297,7 @@ maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}
 tast C-b ')'
 sjekk "C-b ) går til neste Claude" linje_mangler 2 '^▎'
 tast C-b '('
-sjekk "C-b ( går tilbake til alfa" linje_har 2 '^▎●  Fiks testene +│'
+sjekk "C-b ( går tilbake til alfa" linje_har 2 '^▎●  Fiks testene +<1m │'
 # Et vindu som endrer størrelse, gjør det like etter byttet.
 sleep 0.5
 sjekk "ingen vindu endrer størrelse når du bytter Claude" [ ! -s "$KONFIG/storrelser" ]
@@ -358,6 +358,7 @@ sjekk "nerdr liste grupperer som TUI-et: alfa venter, og prosjekt.ny og gamma er
 sjekk "nerdr liste --json har tilstanden fra Claude" er 'venter klar klar ' fra_json tilstand
 sjekk "nerdr liste --json har merket" er 'spør sett sett ' fra_json merke
 sjekk "nerdr liste --json har gruppen" er 'venter ferdig ferdig ' fra_json gruppe
+sjekk "nerdr liste --json har repoet der det er et" er 'nerdr ' fra_json repo
 sjekk "nerdr liste --json har versjon" inneholder "$(nerdr -L "$MAAL" liste --json)" '"versjon":1'
 sjekk "alle tre har sett med et tall" er 3 sett_i_json
 sjekk "nerdr samtaler viser Fiks testene i annet, med id" inneholder "$(nerdr samtaler)" 'abc-123  annet  Fiks testene'

@@ -109,8 +109,8 @@ struct App {
     konfig: PathBuf,
     /// Pane-id → Claude-en som kjører i panen.
     claude: HashMap<String, Claude>,
-    /// Pane-id → branchen mappa til Claude-en står på.
-    brancher: HashMap<String, String>,
+    /// Pane-id → repoet og branchen mappa til Claude-en står i.
+    repoer: HashMap<String, git::Repo>,
     /// Pane-id → da du sist var inne i panen, også skrevet til panen i tmux.
     /// En Claude nerdr ikke har sett før, regnes som sett, så ingenting havner
     /// i «venter på deg» første gang nerdr starter.
@@ -281,7 +281,7 @@ impl App {
             sist_listet: None,
             konfig: konfigkatalog(),
             claude: HashMap::new(),
-            brancher: HashMap::new(),
+            repoer: HashMap::new(),
             sett: HashMap::new(),
             låst: None,
             valgt: None,
@@ -450,12 +450,12 @@ impl App {
                             && (startet.elapsed() < STARTER_MAKS || inne(id))
                     });
                 }
-                self.brancher = self
+                self.repoer = self
                     .claude
                     .iter()
                     .filter_map(|(id, s)| Some((id, s.mappe.as_deref()?)))
                     .chain(self.nye.iter().map(|(id, (m, _))| (id, m.as_path())))
-                    .filter_map(|(id, mappe)| Some((id.clone(), git::branch(mappe)?)))
+                    .filter_map(|(id, mappe)| Some((id.clone(), git::les(mappe)?)))
                     .collect();
                 self.claude_paner = alle
                     .iter()

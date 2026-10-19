@@ -1,19 +1,43 @@
-//! Branchen en mappe står på, lest fra `.git/HEAD` uten å starte git.
+//! Repoet og branchen en mappe står i, lest fra `.git` uten å starte git.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Branchen, eller de sju første tegnene av commiten når HEAD ikke peker på en.
-pub fn branch(mappe: &Path) -> Option<String> {
-    let git = mappe.ancestors().map(|m| m.join(".git")).find(|g| g.exists())?;
-    // I en worktree er `.git` en fil som peker til worktreens egen git-mappe.
-    let git = if git.is_file() {
-        let peker = fs::read_to_string(&git).ok()?;
+#[derive(Clone, Debug, PartialEq)]
+pub struct Repo {
+    /// Navnet på repoet. En worktree får navnet til repoet den er laget fra,
+    /// ikke sin egen mappe, som `claude -w` legger under `.claude/worktrees`.
+    pub navn: String,
+    /// Branchen, eller de sju første tegnene av commiten når HEAD ikke peker
+    /// på en.
+    pub branch: Option<String>,
+}
+
+pub fn les(mappe: &Path) -> Option<Repo> {
+    let punkt_git = mappe.ancestors().map(|m| m.join(".git")).find(|g| g.exists())?;
+    // I en worktree er `.git` en fil som peker til worktreens egen git-mappe,
+    // `<repo>/.git/worktrees/<navn>`.
+    let git = if punkt_git.is_file() {
+        let peker = fs::read_to_string(&punkt_git).ok()?;
         let sti = PathBuf::from(peker.strip_prefix("gitdir:")?.trim());
-        git.parent()?.join(sti)
+        fs::canonicalize(punkt_git.parent()?.join(sti)).ok()?
     } else {
-        git
+        punkt_git.clone()
     };
+    let felles = match git.parent() {
+        Some(p) if p.file_name()? == "worktrees" => p.parent()?.to_path_buf(),
+        _ => git.clone(),
+    };
+    let navn = match felles.file_name()? {
+        n if n == ".git" => felles.parent()?.file_name()?,
+        // Et bart repo, som `nerdr.git`.
+        n => n,
+    };
+    let navn = navn.to_string_lossy();
+    Some(Repo { navn: navn.strip_suffix(".git").unwrap_or(&navn).to_string(), branch: branch(&git) })
+}
+
+fn branch(git: &Path) -> Option<String> {
     let head = fs::read_to_string(git.join("HEAD")).ok()?;
     let head = head.trim();
     match head.strip_prefix("ref: refs/heads/") {
@@ -27,7 +51,7 @@ mod tester {
     use super::*;
 
     #[test]
-    fn leser_branch_i_repo_worktree_og_løsrevet_head() {
+    fn leser_repo_og_branch_i_repo_worktree_og_løsrevet_head() {
         let rot = std::env::temp_dir().join(format!("nerdr-git-{}", std::process::id()));
         let repo = rot.join("repo");
         fs::create_dir_all(repo.join(".git/worktrees/wt")).unwrap();
@@ -37,9 +61,27 @@ mod tester {
         fs::create_dir_all(rot.join("wt")).unwrap();
         let peker = format!("gitdir: {}\n", repo.join(".git/worktrees/wt").display());
         fs::write(rot.join("wt/.git"), peker).unwrap();
+        // Relativ peker, som med worktree.useRelativePaths.
+        fs::create_dir_all(repo.join(".git/worktrees/rel")).unwrap();
+        fs::write(repo.join(".git/worktrees/rel/HEAD"), "ref: refs/heads/fiks\n").unwrap();
+        fs::create_dir_all(repo.join(".claude/worktrees/rel")).unwrap();
+        fs::write(repo.join(".claude/worktrees/rel/.git"), "gitdir: ../../../.git/worktrees/rel\n").unwrap();
 
-        assert_eq!(branch(&repo.join("app/src")).as_deref(), Some("main"));
-        assert_eq!(branch(&rot.join("wt")).as_deref(), Some("0123456"));
+        let repo_og_branch = |m: &Path| les(m).map(|r| (r.navn, r.branch.unwrap_or_default()));
+        assert_eq!(repo_og_branch(&repo.join("app/src")), Some(("repo".into(), "main".into())));
+        assert_eq!(repo_og_branch(&rot.join("wt")), Some(("repo".into(), "0123456".into())));
+        assert_eq!(repo_og_branch(&repo.join(".claude/worktrees/rel")), Some(("repo".into(), "fiks".into())));
+        fs::remove_dir_all(rot).unwrap();
+    }
+
+    #[test]
+    fn bart_repo_uten_endelse() {
+        let rot = std::env::temp_dir().join(format!("nerdr-bart-{}", std::process::id()));
+        fs::create_dir_all(rot.join("nerdr.git/worktrees/wt")).unwrap();
+        fs::write(rot.join("nerdr.git/worktrees/wt/HEAD"), "ref: refs/heads/main\n").unwrap();
+        fs::create_dir_all(rot.join("wt")).unwrap();
+        fs::write(rot.join("wt/.git"), format!("gitdir: {}\n", rot.join("nerdr.git/worktrees/wt").display())).unwrap();
+        assert_eq!(les(&rot.join("wt")).map(|r| r.navn).as_deref(), Some("nerdr"));
         fs::remove_dir_all(rot).unwrap();
     }
 }

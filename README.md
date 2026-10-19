@@ -77,8 +77,8 @@ det er de samme som i tmux, og virker både fra lista og fra panen:
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
 
-Hver Claude viser oppgaven, og under den mappen og branchen den jobber i. Lista
-er delt i tre:
+Hver Claude viser oppgaven, og under den repoet og branchen den jobber i. En
+worktree står med navnet til repoet den er laget fra. Lista er delt i tre:
 
 | | |
 | --- | --- |
@@ -113,7 +113,7 @@ med et `versjon`-felt.
 
 | | |
 | --- | --- |
-| `nerdr liste` | Claude-ene i tmux, gruppert som i TUI-et, med pane, mappe, branch og oppgave |
+| `nerdr liste` | Claude-ene i tmux, gruppert som i TUI-et, med pane, mappe, repo, branch og oppgave |
 | `nerdr samtaler` | Tidligere samtaler, nyest først, med id, mappe og tittel |
 | `nerdr ny <mappe>` | Start en Claude i mappa, som `n` |
 | `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som `C-r` |

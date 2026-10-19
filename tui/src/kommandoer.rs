@@ -18,7 +18,7 @@ use serde_json::json;
 
 use crate::grupper::{self, Plass, Rad, glyf, tittel};
 use crate::ny;
-use crate::tekst::{mappenavn, varighet};
+use crate::tekst::{mappenavn, sted, varighet};
 
 const VERSJON: u32 = 1;
 
@@ -43,6 +43,7 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
                 _ => None,
             })
             .map(|(p, m, c)| {
+                let repo = c.mappe.as_deref().and_then(git::les);
                 json!({
                     "pane": p.id,
                     "sesjon": p.sesjon,
@@ -52,7 +53,8 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
                     "gruppe": m.gruppe().navn(),
                     "endret": c.endret,
                     "mappe": c.mappe,
-                    "branch": c.mappe.as_deref().and_then(git::branch),
+                    "repo": repo.as_ref().map(|r| &r.navn),
+                    "branch": repo.and_then(|r| r.branch),
                     "oppgave": p.oppgave(),
                     "samtale": c.samtale,
                     "sett": p.sett,
@@ -72,8 +74,9 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
             Rad::Overskrift(gruppe) => ut += &format!("{}\n", tittel(*gruppe)),
             Rad::Pane(p, m) => {
                 let mappe = claude.get(&p.id).and_then(|c| c.mappe.as_deref());
-                let navn = mappe.map_or_else(|| format!("{}:{}", p.sesjon, p.vindu), mappenavn);
-                let branch = mappe.and_then(git::branch).map(|b| format!(" › {b}")).unwrap_or_default();
+                let repo = mappe.and_then(git::les);
+                let navn = sted(p, mappe, repo.as_ref());
+                let branch = repo.and_then(|r| r.branch).map(|b| format!(" › {b}")).unwrap_or_default();
                 let oppgave = p.oppgave().map(|o| format!("  {o}")).unwrap_or_default();
                 let _ = writeln!(ut, "{}  {:<5}  {navn}{branch}{oppgave}", glyf(*m), p.id);
             }

@@ -2,6 +2,9 @@
 
 use std::path::Path;
 
+use nerdr_kjerne::git::Repo;
+use nerdr_kjerne::paner::Pane;
+
 /// Kort nok til å stå ytterst på en linje i et kort.
 pub fn varighet(ms: u64) -> String {
     match ms / 60_000 {
@@ -15,6 +18,16 @@ pub fn varighet(ms: u64) -> String {
 /// Navnet på mappa, eller hele stien når den ikke har noe, som `/`.
 pub fn mappenavn(mappe: &Path) -> String {
     mappe.file_name().map_or_else(|| mappe.display().to_string(), |n| n.to_string_lossy().into())
+}
+
+/// Hvor en Claude jobber: repoet, mappa utenfor git, eller vinduet i tmux når
+/// mappa er ukjent.
+pub fn sted(pane: &Pane, mappe: Option<&Path>, repo: Option<&Repo>) -> String {
+    match (repo, mappe) {
+        (Some(repo), _) => repo.navn.clone(),
+        (None, Some(mappe)) => mappenavn(mappe),
+        (None, None) => format!("{}:{}", pane.sesjon, pane.vindu),
+    }
 }
 
 #[cfg(test)]

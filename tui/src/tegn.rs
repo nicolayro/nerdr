@@ -16,7 +16,7 @@ use crate::markering;
 use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf, tittel};
 use crate::ny::Velger;
-use crate::tekst::{mappenavn, varighet};
+use crate::tekst::{sted, varighet};
 use crate::{App, Fokus, Lukke, Mål, hjelp};
 
 /// Bredden på lista, med skillelinja.
@@ -160,44 +160,52 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     }
 }
 
-/// En sesjon i lista: oppgaven som tittel, og under den mappa, branchen og hvor
-/// lenge den har ventet eller jobbet. Uten oppgave er mappa tittelen.
+/// En Claude i lista: oppgaven som tittel, med hvor lenge den har ventet eller
+/// jobbet til høyre, og under den repoet og branchen. Uten oppgave er repoet
+/// tittelen.
 struct Kort {
     tittel: Vec<String>,
-    /// Mappa når den ikke er tittelen, eller at Claude starter.
-    under: Option<String>,
-    branch: Option<String>,
     tid: Option<String>,
+    under: Vec<String>,
 }
 
 impl Kort {
     fn høyde(&self) -> u16 {
-        let under = self.under.is_some() || self.branch.is_some() || self.tid.is_some();
-        self.tittel.len() as u16 + under as u16
+        (self.tittel.len() + self.under.len()) as u16
     }
 }
 
 fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
-    let ny = app.nye.get(&pane.id).map(|(mappe, _)| mappe);
-    let mappe = app
-        .claude
-        .get(&pane.id)
-        .and_then(|c| c.mappe.as_deref())
-        .or(ny.map(|m| m.as_path()))
-        .map_or_else(|| format!("{}:{}", pane.sesjon, pane.vindu), mappenavn);
+    let ny = app.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
+    let mappe = app.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny);
+    let repo = app.repoer.get(&pane.id);
+    let sted = sted(pane, mappe, repo);
+    let branch = repo.and_then(|r| r.branch.as_deref());
     let tid = match merke {
         Merke::Spør | Merke::Ulest | Merke::Jobber => {
             app.claude.get(&pane.id).map(|c| varighet(crate::nå_ms().saturating_sub(c.endret)))
         }
         Merke::Sett | Merke::Starter => None,
     };
-    let oppgave = pane.oppgave().map(|o| bryt(o, TEKST, OPPGAVE_LINJER)).filter(|l| !l.is_empty());
+    let første = TEKST.saturating_sub(tid.as_ref().map_or(0, |t| t.chars().count() + 2));
+    let oppgave = pane.oppgave().map(|o| bryt(o, første, TEKST, OPPGAVE_LINJER)).filter(|l| !l.is_empty());
     let (tittel, under) = match (ny, oppgave) {
-        (Some(_), _) => (vec![mappe], Some("starter …".to_string())),
-        (None, Some(oppgave)) => (oppgave, Some(mappe)),
-        (None, None) => (vec![mappe], None),
+        (Some(_), _) => (vec![kutt(&sted, første)], vec!["starter …".to_string()]),
+        (None, Some(oppgave)) => (oppgave, repo_og_branch(&sted, branch)),
+        (None, None) => (vec![kutt(&sted, første)], branch.map(|b| vec![kutt(&format!("› {b}"), TEKST)]).unwrap_or_default()),
     };
-    Kort { tittel, under, branch: app.brancher.get(&pane.id).cloned(), tid }
+    Kort { tittel, tid, under }
+}
+
+/// På én linje når begge får plass, ellers branchen på linja under, så ingen
+/// av dem kuttes før de må.
+fn repo_og_branch(sted: &str, branch: Option<&str>) -> Vec<String> {
+    let Some(branch) = branch else { return vec![kutt(sted, TEKST)] };
+    let sammen = format!("{sted} › {branch}");
+    if sammen.chars().count() <= TEKST {
+        return vec![sammen];
+    }
+    vec![kutt(sted, TEKST), kutt(&format!("› {branch}"), TEKST)]
 }
 
 fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: bool, fokus: Fokus, pekt: bool) {
@@ -216,21 +224,13 @@ fn tegn_kort(buf: &mut Buffer, område: Rect, kort: &Kort, merke: Merke, valgt: 
         buf.set_stringn(0, y, peker, 1, VANLIG);
     }
     buf.set_stringn(1, område.y, glyf(merke), 1, Style::new().fg(glyffarge(merke)));
-    for (linje, y) in kort.tittel.iter().zip(område.top()..område.bottom()) {
-        buf.set_stringn(TEKST_X, y, linje, TEKST, tittelstil);
-    }
-
-    let y = område.y + kort.tittel.len() as u16;
-    if y >= område.bottom() {
-        return;
-    }
-    let mut slutt = TEKST_X + TEKST as u16;
     if let Some(tid) = &kort.tid {
-        slutt = høyrestilt(buf, y, slutt, tid, SVAK).saturating_sub(2);
+        høyrestilt(buf, område.y, TEKST_X + TEKST as u16, tid, SVAK);
     }
-    let bredde = slutt.saturating_sub(TEKST_X) as usize;
-    let under: Vec<&str> = [&kort.under, &kort.branch].into_iter().flatten().map(String::as_str).collect();
-    buf.set_stringn(TEKST_X, y, kutt(&under.join(" · "), bredde), bredde, SVAK);
+    let linjer = kort.tittel.iter().map(|l| (l, tittelstil)).chain(kort.under.iter().map(|l| (l, SVAK)));
+    for ((linje, stil), y) in linjer.zip(område.top()..område.bottom()) {
+        buf.set_stringn(TEKST_X, y, linje, TEKST, stil);
+    }
 }
 
 /// Tekst som slutter foran kolonne `slutt`. Gir kolonnen den starter i.
@@ -418,7 +418,7 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
 fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str) {
     const BREDDE: u16 = 58;
     let indre = (BREDDE - 4) as usize;
-    let om = bryt(hjelp::OM, indre, 3);
+    let om = bryt(hjelp::OM, indre, indre, 3);
     let høyde = om.len() + 1 + hjelp::TASTER.len() + 1 + hjelp::PREFIKSTASTER.len() + 1 + hjelp::MERKER.len() + 1 + 2 + 2;
     let Some(boks) = boks(buf, område, BREDDE, høyde as u16, "nerdr", "trykk en tast for å lukke") else { return };
     let x = boks.x + 2;
@@ -513,13 +513,15 @@ fn kutt(tekst: &str, bredde: usize) -> String {
     kuttet
 }
 
-/// Bryter på mellomrom over høyst `maks` linjer, og ender med … når teksten
-/// ikke får plass.
-fn bryt(tekst: &str, bredde: usize, maks: usize) -> Vec<String> {
+/// Bryter på mellomrom over høyst `maks` linjer, der den første er `første`
+/// bred, og ender med … når teksten ikke får plass.
+fn bryt(tekst: &str, første: usize, bredde: usize, maks: usize) -> Vec<String> {
+    let plass = |i: usize| if i == 0 { første } else { bredde };
     let mut linjer: Vec<String> = Vec::new();
     for ord in tekst.split_whitespace() {
+        let i = linjer.len().saturating_sub(1);
         match linjer.last_mut() {
-            Some(l) if l.chars().count() + 1 + ord.chars().count() <= bredde => {
+            Some(l) if l.chars().count() + 1 + ord.chars().count() <= plass(i) => {
                 l.push(' ');
                 l.push_str(ord);
             }
@@ -528,9 +530,10 @@ fn bryt(tekst: &str, bredde: usize, maks: usize) -> Vec<String> {
     }
     let for_lang = linjer.len() > maks;
     linjer.truncate(maks);
-    let mut linjer: Vec<String> = linjer.iter().map(|l| kutt(l, bredde)).collect();
-    if for_lang && let Some(siste) = linjer.last_mut() {
-        *siste = siste.chars().take(bredde.saturating_sub(1)).chain(['…']).collect();
+    let mut linjer: Vec<String> = linjer.iter().enumerate().map(|(i, l)| kutt(l, plass(i))).collect();
+    let siste = linjer.len().saturating_sub(1);
+    if for_lang && let Some(l) = linjer.last_mut() {
+        *l = l.chars().take(plass(siste).saturating_sub(1)).chain(['…']).collect();
     }
     linjer
 }
@@ -707,13 +710,30 @@ mod tester {
 
     #[test]
     fn bryter_på_ord_og_kutter_det_som_ikke_får_plass() {
-        assert_eq!(bryt("Fiks testene", 31, 2), ["Fiks testene"]);
+        assert_eq!(bryt("Fiks testene", 31, 31, 2), ["Fiks testene"]);
         assert_eq!(
-            bryt("Forbindelser i Newcustomere2elocal for case", 31, 2),
+            bryt("Forbindelser i Newcustomere2elocal for case", 31, 31, 2),
             ["Forbindelser i", "Newcustomere2elocal for case"]
         );
-        assert_eq!(bryt("en to tre fire", 7, 2), ["en to", "tre…"]);
-        assert_eq!(bryt("Langtordsomikkefårplass", 10, 2), ["Langtords…"]);
+        assert_eq!(bryt("en to tre fire", 7, 7, 2), ["en to", "tre…"]);
+        assert_eq!(bryt("Langtordsomikkefårplass", 10, 10, 2), ["Langtords…"]);
+    }
+
+    #[test]
+    fn første_linje_kan_være_kortere() {
+        assert_eq!(bryt("en to tre", 5, 9, 2), ["en to", "tre"]);
+        assert_eq!(bryt("en to tre", 2, 9, 2), ["en", "to tre"]);
+        assert_eq!(bryt("en to tre fire fem", 2, 9, 2), ["en", "to tre…"]);
+    }
+
+    #[test]
+    fn repo_og_branch_på_én_linje_når_det_er_plass() {
+        assert_eq!(repo_og_branch("nerdr", Some("main")), ["nerdr › main"]);
+        assert_eq!(repo_og_branch("nerdr", None), ["nerdr"]);
+        assert_eq!(
+            repo_og_branch("api-bm-customer", Some("legg-til-audit-kode")),
+            ["api-bm-customer", "› legg-til-audit-kode"]
+        );
     }
 
     #[test]
