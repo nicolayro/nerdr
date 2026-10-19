@@ -12,7 +12,7 @@ mod tekst;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
@@ -59,6 +59,8 @@ const LISTE_OPTION: &str = "@nerdr-liste";
 enum Hendelse {
     Tmux(Melding),
     Term(Event),
+    /// Prosjektene til mappevelgeren, lest i en egen tråd.
+    Prosjekter(Vec<PathBuf>),
 }
 
 /// Hva neste svar fra tmux gjelder. Svarene kommer i samme rekkefølge som
@@ -124,6 +126,8 @@ struct App {
     /// det siste vinduet i den lukkes. Da kobler nerdr til igjen.
     koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>,
     koblet_igjen: Option<Instant>,
+    /// For det som leses i egne tråder.
+    tx: Sender<Hendelse>,
     kø: VecDeque<Svar>,
 
     /// Panene der en Claude kjører eller starter, i lista.
@@ -304,6 +308,7 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
             koble()
         }
     };
+    let prosjekter_tx = tx.clone();
     thread::spawn(move || {
         while let Ok(e) = event::read() {
             if tx.send(Hendelse::Term(e)).is_err() {
@@ -314,7 +319,7 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 
     let mut terminal = ratatui::init();
     execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange)?;
-    let mut app = App::ny(kontroll, Box::new(koble_igjen));
+    let mut app = App::ny(kontroll, Box::new(koble_igjen), prosjekter_tx);
     let res = app.løkke(&mut terminal, &rx);
     let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste, DisableFocusChange);
     ratatui::restore();
@@ -327,9 +332,10 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 }
 
 impl App {
-    fn ny(kontroll: Kontroll, koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>) -> App {
+    fn ny(kontroll: Kontroll, koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>, tx: Sender<Hendelse>) -> App {
         App {
             kontroll,
+            tx,
             koble_igjen,
             koblet_igjen: None,
             kø: VecDeque::new(),
@@ -512,6 +518,13 @@ impl App {
                     self.lim_inn(&tekst);
                     false
                 }
+            },
+            Hendelse::Prosjekter(prosjekter) => match &mut self.velger {
+                Some(velger) => {
+                    velger.legg_til(prosjekter);
+                    true
+                }
+                None => false,
             },
             Hendelse::Term(Event::FocusLost) => self.musen.take().is_some(),
             Hendelse::Term(Event::Resize(..)) => true,
@@ -1155,9 +1168,16 @@ impl App {
         }
     }
 
+    /// Prosjektene under mappene tar tid å lese i store repoer, så velgeren
+    /// viser mappene først og får prosjektene når de er lest.
     fn åpne_velger(&mut self, fortsett: bool) {
         let kjører: HashSet<String> = self.claude.values().filter_map(|s| s.samtale.clone()).collect();
-        self.velger = Some(ny::Velger::ny(fortsett, &self.konfig.join("projects"), &kjører));
+        let velger = ny::Velger::ny(fortsett, &self.konfig.join("projects"), &kjører);
+        let (mapper, tx) = (velger.toppmapper(), self.tx.clone());
+        thread::spawn(move || {
+            let _ = tx.send(Hendelse::Prosjekter(ny::prosjekter(&mapper)));
+        });
+        self.velger = Some(velger);
     }
 
     /// `paste-buffer -p` legger på markørene for bracketed paste bare når panen

@@ -103,6 +103,9 @@ printf '#!/bin/sh\ncat > "%s/kopiert"\n' "$KONFIG" > "$KONFIG/bin/pbcopy"
 chmod +x "$KONFIG/bin/pbcopy"
 # HOME for nerdr, så mappevelgeren viser disse mappene og ikke brukerens egne.
 mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/kode/tredje"
+# Et prosjekt dypere nede, som en app i et monorepo, og et som er lastet ned.
+mkdir -p "$KONFIG/git/annet/apps/web/node_modules/pakke"
+touch "$KONFIG/git/annet/apps/web/package.json" "$KONFIG/git/annet/apps/web/node_modules/pakke/package.json"
 # En tidligere samtale i annet, og en tom en som ikke skal vises.
 mkdir -p "$KONFIG/projects/annet"
 printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
@@ -221,12 +224,13 @@ sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
 tast n
 sjekk "n åpner menyen med «Claude i en mappe» først" linje_har 5 '▎n  Claude i en mappe'
 tast n
-sjekk "n i menyen åpner popupen med 3 mapper" linje_har 2 'mappe › .*3/3'
+sjekk "n i menyen åpner popupen med 3 mapper og 1 prosjekt" linje_har 2 'mappe › .*4/4'
 sjekk "~/git/annet står først og er valgt" linje_har 3 '▎~/git/annet'
 sjekk "så ~/git/prosjekt.ny" linje_har 4 '~/git/prosjekt\.ny'
 sjekk "så mappa i kode" linje_har 5 '~/kode/tredje'
+sjekk "og prosjektet i annet, men ikke det i node_modules" linje_har 6 '~/git/annet/apps/web +│'
 tast -l pny
-sjekk "«pny» treffer bare prosjekt.ny" linje_har 2 'mappe › pny .*1/3'
+sjekk "«pny» treffer bare prosjekt.ny" linje_har 2 'mappe › pny .*1/4'
 sjekk "prosjekt.ny er valgt" linje_har 3 '▎~/git/prosjekt\.ny'
 
 tast Enter
@@ -244,7 +248,7 @@ sjekk "og mister «starter …»" linje_mangler 7 'starter'
 tast C-b w n n
 sjekk "popupen åpner igjen" har 'mappe ›'
 tast -l pny
-sjekk "«pny» igjen" linje_har 2 '1/3'
+sjekk "«pny» igjen" linje_har 2 '1/4'
 tast Enter
 sjekk "samme mappe igjen gir et nytt vindu i prosjekt-ny" linjer 2 maal list-windows -t prosjekt-ny
 sjekk "nerdr er inne i det nye vinduet" i_panen

@@ -710,7 +710,8 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
     let søk = kutt(&velger.søk, indre.saturating_sub(prompt.chars().count() + 8));
     let etter = buf.set_stringn(x, y, prompt, indre, Style::new().fg(ORANSJE)).0;
     let markør = buf.set_stringn(etter, y, &søk, indre, VANLIG).0;
-    let antall = format!("{}/{}", treff.len(), velger.antall());
+    let søker = if velger.søker && !velger.fortsett { " …" } else { "" };
+    let antall = format!("{}/{}{søker}", treff.len(), velger.antall());
     buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
 
     let linjer = (høyde - 3) as usize;
@@ -732,9 +733,20 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
         }
         // Mappenavnet foran tittelen til en samtale er grått.
         let mappe = k.samtale.as_ref().and_then(|_| k.vis.find("  ")).map_or(0, |i| k.vis[..i].chars().count());
-        for (n, c) in kutt(&k.vis, plass).chars().enumerate() {
+        // En sti som ikke får plass, kuttes foran, så mappa du velger, vises.
+        let lengde = k.vis.chars().count();
+        let foran = k.samtale.is_none() && lengde > plass;
+        let vis = if foran { kutt_foran(&k.vis, plass) } else { kutt(&k.vis, plass) };
+        let hopp = if foran { lengde + 1 - plass } else { 0 };
+        for (n, c) in vis.chars().enumerate() {
+            // Tegnet i `k.vis` som står her. … foran står for det som er kuttet.
+            let i = match (foran, n) {
+                (true, 0) => None,
+                (true, n) => Some(hopp + n - 1),
+                (false, n) => Some(n),
+            };
             let stil = match () {
-                _ if t.tegn.contains(&n) => Style::new().fg(ORANSJE),
+                _ if i.is_some_and(|i| t.tegn.contains(&i)) => Style::new().fg(ORANSJE),
                 _ if n < mappe => SVAK,
                 _ => stil,
             };

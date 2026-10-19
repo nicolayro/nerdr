@@ -15,6 +15,14 @@ use crate::tekst::{mappenavn, med_tilde, varighet};
 pub const MAPPER_VARIABEL: &str = "NERDR_MAPPER";
 const STANDARD_MAPPER: &str = "~/git";
 pub const SAMTALER: usize = 50;
+/// En mappe med en av disse er et prosjekt, som en app i et monorepo.
+const PROSJEKTFILER: [&str; 8] =
+    ["package.json", "pom.xml", "build.gradle", "build.gradle.kts", "Cargo.toml", "go.mod", "pyproject.toml", "deno.json"];
+/// Bygget, lastet ned eller testdata, og aldri et sted du starter en Claude.
+const HOPP_OVER: [&str; 12] =
+    ["node_modules", "target", "build", "dist", "out", "vendor", "__pycache__", "test", "tests", "__tests__", "fixtures", "mocks"];
+/// Så mange nivåer under mappene i `NERDR_MAPPER` søkes det etter prosjekter.
+const PROSJEKT_DYBDE: usize = 4;
 
 pub struct Kandidat {
     pub mappe: PathBuf,
@@ -38,6 +46,8 @@ pub struct Velger {
     samtaler: Vec<Kandidat>,
     pub søk: String,
     pub valgt: usize,
+    /// Prosjektene under mappene er ikke lest ennå.
+    pub søker: bool,
     /// Tidligere samtaler vises i stedet for mappene.
     pub fortsett: bool,
 }
@@ -63,7 +73,26 @@ impl Velger {
                 }
             })
             .collect();
-        Velger { mapper, samtaler, søk: String::new(), valgt: 0, fortsett }
+        Velger { mapper, samtaler, søk: String::new(), valgt: 0, søker: true, fortsett }
+    }
+
+    /// Mappene rett under dem i `NERDR_MAPPER`, der prosjektene søkes.
+    pub fn toppmapper(&self) -> Vec<PathBuf> {
+        self.mapper.iter().map(|k| k.mappe.clone()).collect()
+    }
+
+    /// Prosjektene kommer etter at velgeren er åpnet, så den du har valgt,
+    /// blir stående valgt.
+    pub fn legg_til(&mut self, prosjekter: Vec<PathBuf>) {
+        let valgt = self.valgt().map(|k| k.mappe.clone());
+        let nye = prosjekter.into_iter().filter(|p| !self.mapper.iter().any(|k| &k.mappe == p)).collect::<Vec<_>>();
+        self.mapper.extend(nye.into_iter().map(|mappe| Kandidat { vis: med_tilde(&mappe), mappe, samtale: None, alder: None }));
+        self.søker = false;
+        if !self.fortsett
+            && let Some(i) = valgt.and_then(|v| self.treff().iter().position(|t| t.kandidat.mappe == v))
+        {
+            self.valgt = i;
+        }
     }
 
     fn kandidater(&self) -> &[Kandidat] {
@@ -85,7 +114,7 @@ impl Velger {
             .kandidater()
             .iter()
             .filter_map(|k| {
-                let (poeng, tegn) = poeng(&self.søk, &k.vis)?;
+                let (poeng, tegn) = poeng_for(k, &self.søk)?;
                 Some((poeng, Treff { kandidat: k, tegn }))
             })
             .collect();
@@ -144,6 +173,48 @@ fn kandidater(røtter: &[PathBuf]) -> Vec<PathBuf> {
     alle
 }
 
+/// Prosjektene under `mapper`, nivå for nivå, uten skjulte mapper og det i
+/// `HOPP_OVER`. Mappene selv er ikke med.
+pub fn prosjekter(mapper: &[PathBuf]) -> Vec<PathBuf> {
+    let mut ut = Vec::new();
+    for mappe in mapper {
+        let_etter_prosjekter(mappe, 0, &mut ut);
+    }
+    ut
+}
+
+fn let_etter_prosjekter(mappe: &Path, dybde: usize, ut: &mut Vec<PathBuf>) {
+    let Ok(filer) = fs::read_dir(mappe) else { return };
+    let (mut under, mut prosjekt) = (Vec::new(), false);
+    for fil in filer.flatten() {
+        let (navn, Ok(type_)) = (fil.file_name(), fil.file_type()) else { continue };
+        let navn = navn.to_string_lossy();
+        if type_.is_file() && PROSJEKTFILER.contains(&&*navn) {
+            prosjekt = true;
+        } else if type_.is_dir() && !navn.starts_with('.') && !HOPP_OVER.contains(&&*navn) {
+            under.push(fil.path());
+        }
+    }
+    if prosjekt && dybde > 0 {
+        ut.push(mappe.to_path_buf());
+    }
+    if dybde < PROSJEKT_DYBDE {
+        under.sort();
+        for mappe in under {
+            let_etter_prosjekter(&mappe, dybde + 1, ut);
+        }
+    }
+}
+
+/// En mappe der søket treffer i siste del av stien, er den du leter etter, og
+/// står foran mappene under den, som `app` og `web` inne i en app.
+fn poeng_for(k: &Kandidat, søk: &str) -> Option<(i32, Vec<usize>)> {
+    let (poeng, tegn) = poeng(søk, &k.vis)?;
+    let siste_del = k.vis.chars().collect::<Vec<_>>().iter().rposition(|&c| c == '/').map_or(0, |i| i + 1);
+    let i_siste = k.samtale.is_none() && tegn.first().is_some_and(|&i| i >= siste_del);
+    Some((poeng + if i_siste { 20 } else { 0 }, tegn))
+}
+
 /// Treffer når bokstavene i `søk` står i samme rekkefølge i `tekst`, uten å
 /// skille store og små. Bokstaver som står inntil hverandre og bokstaver først i
 /// et ord gir mer, så `ner` velger `nerdr` framfor `annet-er`. Hver
@@ -198,10 +269,38 @@ mod tester {
     }
 
     #[test]
+    fn prosjekter_under_mappene_uten_det_som_er_bygget() {
+        let rot = env::temp_dir().join(format!("nerdr-prosjekter-{}", std::process::id()));
+        for (m, fil) in [
+            ("mono", "package.json"),
+            ("mono/apps/web", "package.json"),
+            ("mono/libs/felles", "pom.xml"),
+            ("mono/apps/web/node_modules/pakke", "package.json"),
+            ("mono/apps/web/tests/mock", "package.json"),
+            ("mono/.skjult/app", "Cargo.toml"),
+            ("mono/a/b/c/d/e", "go.mod"),
+            ("mono/docs", "README.md"),
+        ] {
+            fs::create_dir_all(rot.join(m)).unwrap();
+            fs::write(rot.join(m).join(fil), "").unwrap();
+        }
+        let funnet: Vec<_> = prosjekter(&[rot.join("mono")]).iter().map(|p| p.strip_prefix(&rot).unwrap().to_path_buf()).collect();
+        assert_eq!(funnet, [Path::new("mono/apps/web"), Path::new("mono/libs/felles")]);
+        fs::remove_dir_all(rot).unwrap();
+    }
+
+    #[test]
     fn røtter_fra_hjem_med_eller_uten_tilde() {
         let hjem = Path::new("/h");
         let røtter = røtter("~/git: kode ::/abs/sti:~", hjem);
         assert_eq!(røtter, [Path::new("/h/git"), Path::new("/h/kode"), Path::new("/abs/sti"), Path::new("/h")]);
+    }
+
+    #[test]
+    fn treff_i_siste_del_av_stien_står_først() {
+        let mappe = |vis: &str| Kandidat { mappe: PathBuf::from(vis), vis: vis.into(), samtale: None, alder: None };
+        let p = |vis: &str| poeng_for(&mappe(vis), "kontorfront").unwrap().0;
+        assert!(p("~/git/awl/apps/kontorfront-skjema") > p("~/git/awl/apps/kontorfront-fond/app"));
     }
 
     #[test]
