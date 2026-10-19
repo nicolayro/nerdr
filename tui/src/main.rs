@@ -1088,8 +1088,7 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
             KeyCode::Enter => self.gå_inn(),
-            KeyCode::Char('n') => self.åpne_velger(false),
-            KeyCode::Char('+') => self.åpne_meny(),
+            KeyCode::Char('n' | '+') => self.åpne_meny(),
             KeyCode::Char('r') if k.modifiers.contains(KeyModifiers::CONTROL) => self.åpne_velger(true),
             KeyCode::Char('?') => self.hjelp = true,
             _ => return false,
@@ -1097,16 +1096,23 @@ impl App {
         true
     }
 
-    /// «Her» er panen som vises, også når den er en terminal ved siden av
-    /// Claude-en.
-    fn åpne_meny(&mut self) {
-        let her = self.aktiv().map(|p| meny::Her {
+    /// Panen som vises, også når den er en terminal ved siden av Claude-en.
+    fn her(&self) -> Option<meny::Her> {
+        self.aktiv().map(|p| meny::Her {
             sesjon_id: p.sesjon_id.clone(),
             pane_id: p.id.clone(),
             mappe: p.mappe.clone(),
             git: git::les(&p.mappe).is_some(),
-        });
-        self.meny = Some(Meny::ny(her));
+        })
+    }
+
+    fn åpne_meny(&mut self) {
+        self.meny = Some(Meny::ny(self.her()));
+    }
+
+    fn ny_terminal(&mut self, her: &meny::Her) {
+        let (sesjon, mappe) = (sitat(&format!("{}:", her.sesjon_id)), sitat(&her.mappe.to_string_lossy()));
+        self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{window_id}}'"), Svar::NyttVindu);
     }
 
     /// En worktree spør først om navnet, og startes når det er skrevet.
@@ -1138,10 +1144,7 @@ impl App {
                 let svar = Svar::NyPane { mappe: her.mappe, claude_kommando };
                 self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{pane_id}}'"), svar);
             }
-            (Valg::Terminal, Some(her)) => {
-                let (sesjon, _, mappe) = sitert(&her);
-                self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F '#{{window_id}}'"), Svar::NyttVindu);
-            }
+            (Valg::Terminal, Some(her)) => self.ny_terminal(&her),
             (Valg::SideOmSide | Valg::OverOgUnder, Some(her)) => {
                 let (_, pane, mappe) = sitert(&her);
                 let retning = if valg == Valg::SideOmSide { "-h" } else { "-v" };
@@ -1274,8 +1277,10 @@ impl App {
             }
             if let Some(vindu) = tegn::fane_på(self, m.column) {
                 self.vis_vindu(vindu);
-            } else if tegn::ny_fane_på(self, m.column) {
-                self.åpne_meny();
+            } else if tegn::ny_fane_på(self, m.column)
+                && let Some(her) = self.her()
+            {
+                self.ny_terminal(&her);
             }
             return true;
         }

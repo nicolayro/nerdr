@@ -24,7 +24,7 @@ impl Valg {
             Valg::Terminal => 't',
             Valg::SideOmSide => '%',
             Valg::OverOgUnder => '"',
-            Valg::Mappe => 'm',
+            Valg::Mappe => 'n',
             Valg::Fortsett => 'r',
         }
     }
@@ -36,7 +36,7 @@ impl Valg {
             Valg::Terminal => "terminal her",
             Valg::SideOmSide => "del side om side",
             Valg::OverOgUnder => "del over og under",
-            Valg::Mappe => "Claude i en annen mappe",
+            Valg::Mappe => "Claude i en mappe",
             Valg::Fortsett => "fortsett en samtale",
         }
     }
@@ -62,14 +62,29 @@ impl Meny {
         Meny { her, valgt: 0, navn: None }
     }
 
-    /// Uten en pane som vises, er det ikke noe «her», og en worktree krever git.
-    pub fn valg(&self) -> Vec<Valg> {
-        let her = [Valg::Claude, Valg::Worktree, Valg::Terminal, Valg::SideOmSide, Valg::OverOgUnder];
+    /// Claude-ene først, så en tom rad og terminalene. Uten en pane som vises,
+    /// er det ikke noe «her», og en worktree krever git.
+    pub fn rader(&self) -> Vec<Option<Valg>> {
+        let her = self.her.is_some();
         let git = self.her.as_ref().is_some_and(|h| h.git);
-        her.into_iter()
-            .filter(|v| self.her.is_some() && (*v != Valg::Worktree || git))
-            .chain([Valg::Mappe, Valg::Fortsett])
-            .collect()
+        let mut rader: Vec<Option<Valg>> = [Valg::Mappe, Valg::Claude, Valg::Worktree, Valg::Fortsett]
+            .into_iter()
+            .filter(|v| match v {
+                Valg::Claude => her,
+                Valg::Worktree => git,
+                _ => true,
+            })
+            .map(Some)
+            .collect();
+        if her {
+            rader.push(None);
+            rader.extend([Valg::Terminal, Valg::SideOmSide, Valg::OverOgUnder].map(Some));
+        }
+        rader
+    }
+
+    pub fn valg(&self) -> Vec<Valg> {
+        self.rader().into_iter().flatten().collect()
     }
 
     pub fn flytt(&mut self, steg: isize) {

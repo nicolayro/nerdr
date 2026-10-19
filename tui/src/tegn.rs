@@ -175,6 +175,10 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         if let Some(i) = tekst.find('+') {
             buf.set_string(x.start + tekst[..i].chars().count() as u16, hint_y, "+", pluss.patch(stil));
         }
+        // Tasten i klammene er dempet, så knappen leses som «+ ny».
+        if let Some(i) = tekst.find('[') {
+            buf.set_string(x.start + tekst[..i].chars().count() as u16, hint_y, &tekst[i..], SVAK.patch(stil));
+        }
     }
 
     // Overskriftene treffer skillestreken, og øverst går streken videre til
@@ -514,20 +518,22 @@ pub fn ny_fane_på(app: &App, x: u16) -> bool {
     ny_fane(app).is_some_and(|r| r.contains(&x))
 }
 
-/// «+ ny» til venstre og «? hjelp» til høyre på nederste rad i lista. Fra
-/// panen står prefikset foran. Når hintet står der, er de borte.
+/// «+ ny» til venstre og «hjelp» til høyre på nederste rad i lista, med
+/// tastene i klammer. Når hintet står der, er de borte.
 fn knapper(app: &App, y: u16) -> Vec<(Knapp, Range<u16>, String)> {
     if app.lukke.is_some() || app.etter_prefiks || y == 0 {
         return Vec::new();
     }
-    let prefiks = match app.fokus {
-        Fokus::Liste => String::new(),
-        Fokus::Pane => format!("{} ", app.prefiks.navn()),
-    };
     if stripe(app) {
         return vec![(Knapp::Ny, 0..3, " + ".to_string())];
     }
-    let (ny, hjelp) = (format!(" {prefiks}+ ny "), format!(" {prefiks}? hjelp "));
+    let (ny, hjelp) = match app.fokus {
+        Fokus::Liste => (" + ny [n] ".to_string(), " hjelp [?] ".to_string()),
+        Fokus::Pane => {
+            let prefiks = app.prefiks.navn();
+            (format!(" + ny [{prefiks} +] "), format!(" hjelp [{prefiks} ?] "))
+        }
+    };
     let slutt = liste_bredde(app) - 1;
     let ny_til = ny.chars().count() as u16;
     let hjelp_fra = slutt.saturating_sub(hjelp.chars().count() as u16);
@@ -626,7 +632,7 @@ fn meny_topp(meny: &Meny) -> u16 {
 fn meny_boks(område: Rect, meny: &Meny) -> Option<Rect> {
     let høyde = match meny.navn {
         Some(_) => 5,
-        None => meny_topp(meny) + meny.valg().len() as u16 + 2,
+        None => meny_topp(meny) + meny.rader().len() as u16 + 2,
     };
     midt_på(område, MENY_BREDDE, høyde)
 }
@@ -651,8 +657,9 @@ fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -
         let sti = kutt_foran(&med_tilde(&her.mappe), indre.saturating_sub(2));
         buf.set_stringn(x, ramme.y + 1, format!("i {sti}"), indre, SVAK);
     }
-    for (i, valg) in meny.valg().into_iter().enumerate() {
-        let y = ramme.y + 1 + meny_topp(meny) + i as u16;
+    let valg = meny.rader().into_iter().enumerate().filter_map(|(rad, valg)| Some((rad, valg?)));
+    for (i, (rad, valg)) in valg.enumerate() {
+        let y = ramme.y + 1 + meny_topp(meny) + rad as u16;
         let rad = Rect::new(ramme.x + 1, y, ramme.width - 2, 1);
         let valgt = i == meny.valgt;
         if valgt {
@@ -671,8 +678,11 @@ fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -
 pub fn menyvalg_på(app: &App, x: u16, y: u16) -> Option<usize> {
     let meny = app.meny.as_ref().filter(|m| m.navn.is_none())?;
     let ramme = meny_boks(skjerm(app), meny)?;
-    let i = y.checked_sub(ramme.y + 1 + meny_topp(meny))? as usize;
-    ((ramme.x + 1..ramme.right() - 1).contains(&x) && i < meny.valg().len()).then_some(i)
+    let rad = y.checked_sub(ramme.y + 1 + meny_topp(meny))? as usize;
+    let rader = meny.rader();
+    rader.get(rad).copied().flatten()?;
+    let i = rader[..rad].iter().flatten().count();
+    (ramme.x + 1..ramme.right() - 1).contains(&x).then_some(i)
 }
 
 pub fn i_menyen(app: &App, x: u16, y: u16) -> bool {
@@ -783,7 +793,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
         return;
     }
     if app.valgt.is_none() {
-        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. + starter en ny.", v.width as usize, SVAK);
+        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, SVAK);
         return;
     }
     // Den aktive har vanlig farge når du er inne i vinduet, så du ser hvor

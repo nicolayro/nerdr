@@ -32,8 +32,7 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | --- | --- |
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
-| `+` | Ny Claude, worktree eller terminal |
-| `n` | Ny Claude i en mappe du velger |
+| `n` `+` | Ny Claude, worktree eller terminal |
 | `C-r` | Fortsett en tidligere samtale |
 | `?` | Hjelp |
 | `q` | Avslutt, fra lista |
@@ -109,21 +108,22 @@ er lukket, venter på deg neste gang.
 
 ### Starte og fortsette
 
-`+` åpner en meny med alt nerdr kan lage. Fra panen er det prefikset og `+`,
-og med musen «+ ny» nederst i lista eller `+` etter fanene. Det nye legges i
-mappa og sesjonen til panen som vises:
+`n` eller `+` åpner en meny med alt nerdr kan lage. Fra panen er det
+prefikset og `+`, og med musen «+ ny» nederst i lista. Det som ikke har en egen
+mappe, legges i mappa og sesjonen til panen som vises:
 
 | | |
 | --- | --- |
+| `n` | Claude i en mappe du velger |
 | `c` | Claude i et nytt vindu |
 | `w` | Claude i en ny worktree, med `claude -w` og navnet du skriver. Bare i et git-repo. |
-| `t` | Terminal i et nytt vindu |
-| `%` `"` | Del vinduet side om side eller over og under |
-| `m` | Claude i en annen mappe, som `n` |
 | `r` | Fortsett en samtale, som `C-r` |
+| `t` | Terminal i et nytt vindu, som `+` etter fanene |
+| `%` `"` | Del vinduet side om side eller over og under |
 
-`n` åpner en popup der du søker fram en mappe, og `⏎` starter `claude` der i en
-tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den et nytt vindu.
+`n` i menyen åpner en popup der du søker fram en mappe, og `⏎` starter `claude`
+der i en tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den et nytt
+vindu.
 
 `C-r` viser de siste samtalene dine med mappe, tittel og alder, og `⏎`
 fortsetter den du velger, i mappa den hørte til. Samtaler som kjører, står ikke

@@ -73,8 +73,8 @@ mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
 uten_klienter() { [ -z "$(maal list-clients)" ]; }
 klienter() { maal list-clients | wc -l | tr -d ' '; }
-i_lista() { linje_har 16 '^ \+ ny +\? hjelp │'; }
-i_panen() { linje_har 16 '^ C-b \+ ny +C-b \? hjelp │'; }
+i_lista() { linje_har 16 '^ \+ ny \[n\] +hjelp \[\?\] │'; }
+i_panen() { linje_har 16 '^ \+ ny \[C-b \+\] +hjelp \[C-b \?\] │'; }
 nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
 gruppert() { nerdr -L "$MAAL" liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
 fra_json() { nerdr -L "$MAAL" liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
@@ -214,12 +214,14 @@ sjekk "klikk på «? hjelp» viser hjelpen" har 'trykk en tast for å lukke'
 tast x
 sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
 tast '?'
-sjekk "? viser hjelpen med +" har '\+ +ny Claude, worktree eller terminal'
+sjekk "? viser hjelpen med n og +" har 'n  \+ +ny Claude, worktree eller terminal'
 tast x
 sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
 
 tast n
-sjekk "n åpner popupen med 3 mapper" linje_har 2 'mappe › .*3/3'
+sjekk "n åpner menyen med «Claude i en mappe» først" linje_har 5 '▎n  Claude i en mappe'
+tast n
+sjekk "n i menyen åpner popupen med 3 mapper" linje_har 2 'mappe › .*3/3'
 sjekk "~/git/annet står først og er valgt" linje_har 3 '▎~/git/annet'
 sjekk "så ~/git/prosjekt.ny" linje_har 4 '~/git/prosjekt\.ny'
 sjekk "så mappa i kode" linje_har 5 '~/kode/tredje'
@@ -239,7 +241,7 @@ list_straks
 sjekk "i registeret får prosjekt.ny vanlig merke" linje_har 6 '^▎○  prosjekt\.ny'
 sjekk "og mister «starter …»" linje_mangler 7 'starter'
 
-tast C-b w n
+tast C-b w n n
 sjekk "popupen åpner igjen" har 'mappe ›'
 tast -l pny
 sjekk "«pny» igjen" linje_har 2 '1/3'
@@ -259,7 +261,7 @@ tast Enter
 sjekk "Enter lager sesjonen annet og skriver inn claude --resume abc-123" i_pane annet 'claude --resume abc-123'
 sjekk "nerdr er inne i annet" i_panen
 
-tast C-b w n
+tast C-b w n n
 sjekk "popupen åpner" har 'mappe ›'
 tast Escape
 sjekk "Esc lukker popupen" mangler 'mappe ›'
@@ -288,7 +290,7 @@ tast C-b +
 sjekk "C-b + åpner menyen fra panen" har 'c  Claude her'
 tast c
 sjekk "c skriver inn claude i et nytt vindu i alfa" i_pane alfa:1 claude
-sjekk "nerdr er inne i den nye, med ◌" linje_har 16 '^ C-b \+ ny'
+sjekk "nerdr er inne i den nye" i_panen
 sjekk "kortet sier «starter …»" har 'starter …'
 tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
@@ -316,8 +318,14 @@ sjekk "klikk på «+ ny» åpner menyen" har 'c  Claude her'
 klikk 100 15
 sjekk "klikk utenfor lukker den" mangler 'Claude her'
 klikk "$(kolonne 1 ' + ')" 1
-sjekk "klikk på + etter fanene åpner menyen" har 'c  Claude her'
-klikk 40 7
+sjekk "klikk på + etter fanene gir en terminal i et nytt vindu" linjer 2 maal list-windows -t alfa
+sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
+tast C-b '&' y
+sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
+tast C-b w
+klikk 3 16
+sjekk "menyen har en tom rad før terminalene" linje_har 9 '│ +│'
+klikk 40 10
 sjekk "klikk på «terminal her» gir et nytt vindu" linjer 2 maal list-windows -t alfa
 sjekk "slippene etter klikkene i menyen kommer ikke fram i alfa" ikke_i_pane alfa '^[[<0;'
 tast C-b '&' y

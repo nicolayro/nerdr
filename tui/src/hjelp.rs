@@ -8,12 +8,11 @@ use crate::ny;
 pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
 og du kan gå inn i den og skrive.";
 
-pub const TASTER: [(&str, &str); 8] = [
+pub const TASTER: [(&str, &str); 7] = [
     ("↑↓  k j", "velg Claude"),
     ("⏎", "gå inn i sesjonen"),
     ("klikk", "velg Claude, dobbeltklikk går inn"),
-    ("+", "ny Claude, worktree eller terminal"),
-    ("n", "ny Claude i en mappe du velger"),
+    ("n  +", "ny Claude, worktree eller terminal"),
     ("C-r", "fortsett en tidligere samtale"),
     ("?", "denne hjelpen"),
     ("q", "avslutt"),
@@ -56,7 +55,7 @@ pub const MERKER: [(Merke, &str); 5] = [
 pub const BARE_TMUX: &str = "Bare Claude som kjører i tmux, vises.";
 
 pub fn mapper() -> String {
-    format!("n søker i {} ({}).", ny::mapper(), ny::MAPPER_VARIABEL)
+    format!("Mappene søkes i {} ({}).", ny::mapper(), ny::MAPPER_VARIABEL)
 }
 
 pub fn tekst() -> String {
