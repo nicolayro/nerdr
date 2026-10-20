@@ -121,6 +121,7 @@ enum Mål {
 enum Knapp {
     Ny,
     Hjelp,
+    Avslutt,
 }
 
 struct App {
@@ -1338,6 +1339,7 @@ impl App {
             match tegn::knapp_på(self, m.column).filter(|_| m.kind == MouseEventKind::Down(MouseButton::Left)) {
                 Some(Knapp::Ny) => self.åpne_meny(),
                 Some(Knapp::Hjelp) => self.hjelp = true,
+                Some(Knapp::Avslutt) => self.ferdig = Some(String::new()),
                 None => return false,
             }
             return true;

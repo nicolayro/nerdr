@@ -440,20 +440,26 @@ fn knapper(app: &App, y: u16) -> Vec<(Knapp, Range<u16>, String)> {
     if stripe(app) {
         return vec![(Knapp::Ny, 0..3, " + ".to_string())];
     }
-    let (ny, hjelp) = match app.fokus {
-        Fokus::Liste => (" + ny [n] ".to_string(), " hjelp [?] ".to_string()),
+    let (ny, hjelp, avslutt) = match app.fokus {
+        Fokus::Liste => (" + ny [n] ".to_string(), " hjelp [?] ".to_string(), " avslutt [q] ".to_string()),
         Fokus::Pane => {
             let prefiks = app.prefiks.navn();
-            (format!(" + ny [{prefiks} +] "), format!(" hjelp [{prefiks} ?] "))
+            (format!(" + ny [{prefiks} +] "), format!(" hjelp [{prefiks} ?] "), format!(" avslutt [{prefiks} d] "))
         }
     };
     let slutt = liste_bredde(app) - 1;
     let ny_til = ny.chars().count() as u16;
-    let hjelp_fra = slutt.saturating_sub(hjelp.chars().count() as u16);
     let mut knapper = vec![(Knapp::Ny, 0..ny_til, ny)];
-    // Med et langt prefiks i en smal liste er det bare plass til «+ ny».
-    if hjelp_fra > ny_til {
-        knapper.push((Knapp::Hjelp, hjelp_fra..slutt, hjelp));
+    // «avslutt» går foran «hjelp» når det ikke er plass til begge, for fra
+    // panen går q til Claude, og uten tmux vet du ikke om prefikset og d.
+    let mut fra = slutt;
+    for (knapp, tekst) in [(Knapp::Avslutt, avslutt), (Knapp::Hjelp, hjelp)] {
+        let til = fra;
+        fra = fra.saturating_sub(tekst.chars().count() as u16);
+        if fra <= ny_til {
+            break;
+        }
+        knapper.push((knapp, fra..til, tekst));
     }
     knapper
 }

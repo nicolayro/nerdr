@@ -30,9 +30,10 @@ cargo install --locked --git https://github.com/nicolayro/nerdr nerdr
 
 ## 3. Sett mappene for nye Claude-sesjoner
 
-`n` i nerdr starter en Claude i en mappe brukeren velger blant mappene rett
-under `~/git`. Spør hvor brukeren har koden sin. Er det andre steder, sett
-`NERDR_MAPPER` i skallets oppstartsfil, kolonseparert:
+`n` i nerdr starter en Claude i en mappe brukeren velger. Velgeren viser
+mappene brukeren har brukt Claude i, og mappene rett under `~/git`. Spør hvor
+brukeren har koden sin. Er det ikke `~/git`, sett `NERDR_MAPPER` i skallets
+oppstartsfil, kolonseparert:
 
 ```
 export NERDR_MAPPER=~/git:~/kode
@@ -45,9 +46,28 @@ export NERDR_MAPPER=~/git:~/kode
   ikke nerdr den. `n` i nerdr starter en Claude i tmux, og `C-r` fortsetter en
   tidligere samtale.
 - `?` i nerdr viser tastene. `nerdr --help` viser det samme i terminalen.
+- nerdr avsluttes med `q` fra lista, med prefikset og `d` fra panen, eller
+  med «avslutt» nederst i lista. Claude-ene kjører videre i tmux.
 - Du kan selv bruke `nerdr liste`, `nerdr samtaler` og `nerdr ny` med
   `--json`, for eksempel for å svare på hvilke Claude-er som venter på
   brukeren, eller for å fortsette en samtale.
+
+## Hjelpe brukeren med oppsettet senere
+
+nerdr er en klient til tmux. tmux kjører terminalene og Claude-ene, og nerdr
+viser dem. nerdr lagrer ingenting selv. Det den husker, står i tmux-optioner,
+og resten er miljøvariabler i skallets oppstartsfil. `nerdr --help` viser
+tastene og hvilket prefiks og hvilke mapper som gjelder.
+
+| Brukeren vil | Svar |
+| --- | --- |
+| stoppe alt | `tmux kill-server`. Spør først, for det stopper alle Claude-er og terminaler i tmux. |
+| se en Claude som mangler i lista | Den kjører ikke i tmux. Avslutt den, og fortsett samtalen med `C-r` i nerdr. |
+| ha en mappe i velgeren | Sett mappa over den i `NERDR_MAPPER`. Eller start en Claude der med `nerdr ny <mappe>` og skriv noe til den, så står mappa i velgeren etter det. |
+| et annet prefiks | nerdr bruker prefikset fra `~/.tmux.conf`, ellers `C-b`. `NERDR_PREFIKS=C-a` endrer bare nerdr. |
+| endre utseendet | Prefikset og `b`. |
+| beholde utseendet og bredden etter at tmux er stoppet | Valgene står i `@nerdr-utseende` og `@nerdr-liste`, som forsvinner med tmux-serveren. Les verdiene med `tmux show-options -gqv @nerdr-utseende`, og legg dem i `~/.tmux.conf`, som `set -g @nerdr-utseende "farge=mye plass=tett"` og `set -g @nerdr-liste 46`. |
+| tilbake til standardutseendet | `tmux set-option -gu @nerdr-utseende`, og fjern linja i `~/.tmux.conf` hvis den finnes. |
 
 ## Oppdatere og fjerne
 

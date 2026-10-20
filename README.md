@@ -37,6 +37,11 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | `?` | Hjelp |
 | `q` | Avslutt, fra lista |
 
+Nederst i lista står «avslutt» med tasten som virker der du er: `q` fra lista,
+og prefikset og `d` fra panen. Claude-ene kjører videre i tmux når nerdr
+avslutter, og er der neste gang du starter nerdr. `tmux kill-server` stopper
+tmux og alt som kjører i det.
+
 Et klikk på en Claude i lista velger den, og et dobbeltklikk går inn i den. Et
 klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Klikk og
 musehjul i sesjonen går videre når programmet der har slått på mus, som Claude
@@ -121,8 +126,9 @@ mappe, legges i mappa og sesjonen til panen som vises:
 
 `n` i menyen åpner en popup der du søker fram en mappe, og `⏎` starter `claude`
 der i en tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den et nytt
-vindu. Mappene er de rett under `NERDR_MAPPER` og prosjektene under dem, inntil
-fire nivåer ned, som appene i et monorepo. Et prosjekt er en mappe med
+vindu. Først står mappene du har brukt Claude i, sist brukt først, så du ikke
+trenger å sette noe. Så kommer mappene rett under `NERDR_MAPPER` og prosjektene
+under dem, inntil fire nivåer ned, som appene i et monorepo. Et prosjekt er en mappe med
 `package.json`, `pom.xml`, `build.gradle`, `Cargo.toml`, `go.mod`,
 `pyproject.toml` eller `deno.json`, utenfor `node_modules`, `target`, `build`
 og testmapper. Prosjektene kommer i lista når de er lest, og til da står det
@@ -176,7 +182,7 @@ linje til oppgaven, fet repo og tegnet til venstre. `tittel`, `uthev` og
 
 | | |
 | --- | --- |
-| `NERDR_MAPPER` | Mappene mappevelgeren søker i, kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
+| `NERDR_MAPPER` | Mappene mappevelgeren viser mappene under, i tillegg til dem du har brukt Claude i. Kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
 | `NERDR_PREFIKS` | Prefikset, skrevet som i tmux: `C-a`, `M-a` eller `C-Space`. Standard er prefikset i tmux-oppsettet ditt, ellers `C-b`. Det endrer ikke tmux, bare nerdr. |
 | `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `linjer`. Når du har valgt paner i utseende-menyen, gjelder det i stedet. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |

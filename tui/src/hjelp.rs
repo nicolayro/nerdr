@@ -56,7 +56,7 @@ pub const MERKER: [(Merke, &str); 5] = [
 pub const BARE_TMUX: &str = "Bare Claude som kjører i tmux, vises.";
 
 pub fn mapper() -> String {
-    format!("Mappene søkes i {} ({}).", ny::mapper(), ny::MAPPER_VARIABEL)
+    format!("Mappene er de du har brukt, og i {} ({}).", ny::mapper(), ny::MAPPER_VARIABEL)
 }
 
 pub fn tekst() -> String {

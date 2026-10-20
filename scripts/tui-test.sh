@@ -71,10 +71,10 @@ vindu_indeks() { maal display-message -p -t alfa '#{window_index}'; }
 zoom() { maal display-message -p -t alfa:0 '#{window_zoomed_flag}'; }
 mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
-uten_klienter() { [ -z "$(maal list-clients)" ]; }
+uten_klienter() { [ -z "$(tmux -L "${1:-$MAAL}" list-clients)" ]; }
 klienter() { maal list-clients | wc -l | tr -d ' '; }
-i_lista() { linje_har 16 '^ \+ ny \[n\] +hjelp \[\?\] │'; }
-i_panen() { linje_har 16 '^ \+ ny \[C-b \+\] +hjelp \[C-b \?\] │'; }
+i_lista() { linje_har 16 '^ \+ ny \[n\] +hjelp \[\?\] +avslutt \[q\] │'; }
+i_panen() { linje_har 16 '^ \+ ny \[C-b \+\] +avslutt \[C-b d\] │'; }
 nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
 gruppert() { nerdr -L "$MAAL" liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
 fra_json() { nerdr -L "$MAAL" liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
@@ -106,6 +106,10 @@ mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/kode/tredje"
 # Et prosjekt dypere nede, som en app i et monorepo, og et som er lastet ned.
 mkdir -p "$KONFIG/git/annet/apps/web/node_modules/pakke"
 touch "$KONFIG/git/annet/apps/web/package.json" "$KONFIG/git/annet/apps/web/node_modules/pakke/package.json"
+# En samtale uten meldinger i en mappe utenfor NERDR_MAPPER, som mappevelgeren
+# viser. Den skrives først, så annet er brukt sist.
+mkdir -p "$KONFIG/eget" "$KONFIG/projects/eget"
+printf '{"type":"user","cwd":"%s"}\n' "$KONFIG/eget" > "$KONFIG/projects/eget/tom.jsonl"
 # En tidligere samtale i annet, og en tom en som ikke skal vises.
 mkdir -p "$KONFIG/projects/annet"
 printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
@@ -230,8 +234,8 @@ klikk 5 3
 sjekk "klikk på alfa fra panen velger alfa og går ut i lista" linje_har 3 '^▎ ●  Fiks testene'
 sjekk "tilbake i lista" i_lista
 
-klikk 30 16
-sjekk "klikk på «? hjelp» viser hjelpen" har 'trykk en tast for å lukke'
+klikk 15 16
+sjekk "klikk på «hjelp» viser hjelpen" har 'trykk en tast for å lukke'
 tast x
 sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
 tast '?'
@@ -242,13 +246,14 @@ sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
 tast n
 sjekk "n åpner menyen med «Claude i en mappe» først" linje_har 5 '▎n  Claude i en mappe'
 tast n
-sjekk "n i menyen åpner popupen med 3 mapper og 1 prosjekt" linje_har 2 'mappe › .*4/4'
-sjekk "~/git/annet står først og er valgt" linje_har 3 '▎~/git/annet'
-sjekk "så ~/git/prosjekt.ny" linje_har 4 '~/git/prosjekt\.ny'
-sjekk "så mappa i kode" linje_har 5 '~/kode/tredje'
-sjekk "og prosjektet i annet, men ikke det i node_modules" linje_har 6 '~/git/annet/apps/web +│'
+sjekk "n i menyen åpner popupen med 4 mapper og 1 prosjekt" linje_har 2 'mappe › .*5/5'
+sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 3 '▎~/git/annet'
+sjekk "så ~/eget, som er brukt før" linje_har 4 '~/eget'
+sjekk "så ~/git/prosjekt.ny" linje_har 5 '~/git/prosjekt\.ny'
+sjekk "så mappa i kode" linje_har 6 '~/kode/tredje'
+sjekk "og prosjektet i annet, men ikke det i node_modules" linje_har 7 '~/git/annet/apps/web +│'
 tast -l pny
-sjekk "«pny» treffer bare prosjekt.ny" linje_har 2 'mappe › pny .*1/4'
+sjekk "«pny» treffer bare prosjekt.ny" linje_har 2 'mappe › pny .*1/5'
 sjekk "prosjekt.ny er valgt" linje_har 3 '▎~/git/prosjekt\.ny'
 
 tast Enter
@@ -264,7 +269,7 @@ sjekk "i registeret får prosjekt.ny vanlig merke" linje_har 6 '^▎ ○  prosje
 tast C-b w n n
 sjekk "popupen åpner igjen" har 'mappe ›'
 tast -l pny
-sjekk "«pny» igjen" linje_har 2 '1/4'
+sjekk "«pny» igjen" linje_har 2 '1/5'
 tast Enter
 sjekk "samme mappe igjen gir et nytt vindu i prosjekt-ny" linjer 2 maal list-windows -t prosjekt-ny
 sjekk "nerdr er inne i det nye vinduet" i_panen
@@ -495,8 +500,8 @@ tast w
 dra 4 8 36 8
 sjekk "og å dra den ut gir lista tilbake" er 68x13 dimensjon alfa
 
-tast q
-sjekk "q avslutter" uten_klienter
+klikk 28 16
+sjekk "klikk på «avslutt» avslutter" uten_klienter
 
 sjekk "nerdr liste grupperer som TUI-et: alfa venter, og gamma og prosjekt.ny er sett, nyest først" \
   er 'VENTER: ● nerdr, FERDIG: ○ prosjekt.ny, ○ gamma:0, ' gruppert
@@ -527,6 +532,8 @@ vert new-session -d -s tom "NERDR_PREFIKS=C-a CLAUDE_CONFIG_DIR=$KONFIG $NERDR -
 sjekk "uten tmux-server lager nerdr en sesjon" linjer 1 tmux -L "$TOM" list-sessions
 vert send-keys -t tom C-a
 sjekk "NERDR_PREFIKS gir et annet prefiks, og hintet viser det" vert_har tom 'C-a … \+ ny · w lista'
+vert send-keys -t tom w q
+sjekk "q avslutter" uten_klienter "$TOM"
 sjekk "uten tmux sier nerdr fra" inneholder "$(PATH=/finnes-ikke "$NERDR" 2>&1)" 'fant ikke tmux'
 
 echo "$antall sjekker, alle grønne"

@@ -82,7 +82,35 @@ fn samtale(sti: &Path, id: String, endret: SystemTime) -> Option<Samtale> {
     mappe.is_dir().then_some(Samtale { id, mappe, tittel, endret })
 }
 
+/// Mappene Claude Code har kjørt i, sist brukt først. Hver mappe i `katalog`
+/// hører til én mappe, og den står i den nyeste samtalen der. Mapper som ikke
+/// finnes lenger, er ikke med.
+pub fn mapper(katalog: &Path) -> Vec<PathBuf> {
+    let mut mapper: Vec<(SystemTime, PathBuf)> = fs::read_dir(katalog)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|prosjekt| {
+            let (endret, sti) = fs::read_dir(prosjekt.path())
+                .ok()?
+                .flatten()
+                .filter(|fil| fil.path().extension().is_some_and(|e| e == "jsonl"))
+                .filter_map(|fil| Some((fil.metadata().ok()?.modified().ok()?, fil.path())))
+                .max()?;
+            let mappe = hale(&sti)?.lines().rev().find_map(|l| serde_json::from_str::<Linje>(l).ok()?.cwd)?;
+            mappe.is_dir().then_some((endret, mappe))
+        })
+        .collect();
+    mapper.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut sett = HashSet::new();
+    mapper.into_iter().map(|(_, m)| m).filter(|m| sett.insert(m.clone())).collect()
+}
+
 fn les(sti: &Path) -> Option<(PathBuf, String)> {
+    tolk(&hale(sti)?)
+}
+
+fn hale(sti: &Path) -> Option<String> {
     let mut fil = File::open(sti).ok()?;
     let lengde = fil.metadata().ok()?.len();
     let fra = lengde.saturating_sub(HALE);
@@ -91,8 +119,7 @@ fn les(sti: &Path) -> Option<(PathBuf, String)> {
     fil.read_to_end(&mut bytes).ok()?;
     let tekst = String::from_utf8_lossy(&bytes);
     // Midt i fila er første linje bare en bit, og den hoppes over.
-    let tekst = if fra > 0 { tekst.split_once('\n').map_or("", |(_, r)| r) } else { &tekst };
-    tolk(tekst)
+    Some(if fra > 0 { tekst.split_once('\n').map_or("", |(_, r)| r).to_string() } else { tekst.into_owned() })
 }
 
 /// Tittelen er den brukeren har gitt, ellers den Claude har laget, ellers
@@ -164,6 +191,28 @@ mod tester {
         assert_eq!(titler, ["Ny", "Gammel"]);
         assert_eq!(finn(&rot, "gammel").map(|s| s.tittel).as_deref(), Some("Gammel"));
         assert_eq!(finn(&rot, "../-a-nerdr/ny"), None);
+        fs::remove_dir_all(rot).unwrap();
+    }
+
+    #[test]
+    fn mappene_sist_brukt_først_også_uten_meldinger() {
+        let rot = std::env::temp_dir().join(format!("nerdr-mapper-{}", std::process::id()));
+        let skriv = |prosjekt: &str, id: &str, mappe: &Path, sekunder: u64| {
+            fs::create_dir_all(rot.join(prosjekt)).unwrap();
+            fs::create_dir_all(mappe).unwrap();
+            let sti = rot.join(prosjekt).join(format!("{id}.jsonl"));
+            fs::write(&sti, format!("{{\"type\":\"user\",\"cwd\":\"{}\"}}\n", mappe.display())).unwrap();
+            let tid = SystemTime::UNIX_EPOCH + Duration::from_secs(sekunder);
+            File::options().write(true).open(&sti).unwrap().set_modified(tid).unwrap();
+        };
+        let (a, b) = (rot.join("mapper/a"), rot.join("mapper/b"));
+        skriv("-a", "1", &a, 100);
+        skriv("-a", "2", &a, 300);
+        skriv("-b", "1", &b, 200);
+        skriv("-borte", "1", &rot.join("mapper/borte"), 400);
+        fs::remove_dir(rot.join("mapper/borte")).unwrap();
+
+        assert_eq!(mapper(&rot), [a, b]);
         fs::remove_dir_all(rot).unwrap();
     }
 }

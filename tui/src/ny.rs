@@ -43,6 +43,7 @@ pub struct Treff<'a> {
 
 pub struct Velger {
     mapper: Vec<Kandidat>,
+    toppmapper: Vec<PathBuf>,
     samtaler: Vec<Kandidat>,
     pub søk: String,
     pub valgt: usize,
@@ -54,13 +55,18 @@ pub struct Velger {
 
 impl Velger {
     /// `prosjekter` er `~/.claude/projects`, og samtalene i `kjører` er i gang
-    /// og vises ikke.
+    /// og vises ikke. Mappene du har brukt Claude i, står først, så velgeren
+    /// er til nytte uten at `NERDR_MAPPER` er satt.
     pub fn ny(fortsett: bool, prosjekter: &Path, kjører: &HashSet<String>) -> Velger {
         let hjem = PathBuf::from(env::var("HOME").unwrap_or_default());
-        let mapper = kandidater(&røtter(&mapper(), &hjem))
-            .into_iter()
-            .map(|mappe| Kandidat { vis: med_tilde(&mappe), mappe, samtale: None, alder: None })
-            .collect();
+        let toppmapper = kandidater(&røtter(&mapper(), &hjem));
+        let mut mapper = Vec::new();
+        let brukte = samtaler::mapper(prosjekter).into_iter().filter(|m| !skjult(m));
+        for mappe in brukte.chain(toppmapper.iter().cloned()) {
+            if !mapper.iter().any(|k: &Kandidat| k.mappe == mappe) {
+                mapper.push(Kandidat { vis: med_tilde(&mappe), mappe, samtale: None, alder: None });
+            }
+        }
         let nå = SystemTime::now();
         let samtaler = samtaler::siste(prosjekter, SAMTALER, kjører)
             .into_iter()
@@ -73,12 +79,13 @@ impl Velger {
                 }
             })
             .collect();
-        Velger { mapper, samtaler, søk: String::new(), valgt: 0, søker: true, fortsett }
+        Velger { mapper, toppmapper, samtaler, søk: String::new(), valgt: 0, søker: true, fortsett }
     }
 
-    /// Mappene rett under dem i `NERDR_MAPPER`, der prosjektene søkes.
+    /// Mappene rett under dem i `NERDR_MAPPER`, der prosjektene søkes. Ikke
+    /// mappene du har brukt Claude i, for en av dem kan være `~`.
     pub fn toppmapper(&self) -> Vec<PathBuf> {
-        self.mapper.iter().map(|k| k.mappe.clone()).collect()
+        self.toppmapper.clone()
     }
 
     /// Prosjektene kommer etter at velgeren er åpnet, så den du har valgt,
@@ -155,6 +162,12 @@ fn røtter(mapper: &str, hjem: &Path) -> Vec<PathBuf> {
         .filter(|m| !m.is_empty())
         .map(|m| hjem.join(m.strip_prefix('~').map_or(m, |r| r.trim_start_matches('/'))))
         .collect()
+}
+
+/// En worktree i `.claude/worktrees` eller en mappe som `~/.config` er ikke
+/// et sted du starter en ny Claude.
+fn skjult(mappe: &Path) -> bool {
+    mappe.components().any(|d| d.as_os_str().to_string_lossy().starts_with('.'))
 }
 
 fn kandidater(røtter: &[PathBuf]) -> Vec<PathBuf> {
