@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use serde::Deserialize;
 
@@ -39,6 +40,7 @@ struct Oppføring {
     status_updated_at: Option<u64>,
     cwd: Option<PathBuf>,
     session_id: Option<String>,
+    kind: Option<String>,
 }
 
 /// Pane-id → Claude for hver Claude som kjører i tmux.
@@ -60,6 +62,38 @@ pub fn les(katalog: &Path) -> HashMap<String, Claude> {
         }
     }
     nyest.into_iter().map(|(pane, (_, claude))| (pane, claude)).collect()
+}
+
+/// Claude-ene du bruker utenfor tmux, som i en vanlig terminalfane. En som
+/// krasjet, lar fila ligge igjen, så prosessen i filnavnet må leve.
+pub fn utenfor_tmux(katalog: &Path) -> usize {
+    let Ok(filer) = fs::read_dir(katalog) else { return 0 };
+    filer
+        .flatten()
+        .filter(|fil| {
+            let sti = fil.path();
+            let Some(pid) = sti.file_stem().and_then(|s| s.to_str()) else { return false };
+            sti.extension().is_some_and(|e| e == "json")
+                && fs::read_to_string(&sti).is_ok_and(|t| utenfor(&t))
+                && lever(pid)
+        })
+        .count()
+}
+
+/// Andre verdier av `kind` enn `interactive` telles ikke, siden nerdr ikke vet
+/// hva de er.
+fn utenfor(tekst: &str) -> bool {
+    serde_json::from_str::<Oppføring>(tekst)
+        .is_ok_and(|o| o.tmux.is_none() && o.kind.as_deref().is_none_or(|k| k == "interactive"))
+}
+
+fn lever(pid: &str) -> bool {
+    pid.chars().all(|c| c.is_ascii_digit())
+        && Command::new("kill")
+            .args(["-0", pid])
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
 }
 
 fn tolk(tekst: &str) -> Option<(String, u64, Claude)> {
@@ -89,6 +123,16 @@ mod tester {
         assert_eq!(tolk(t), Some(("%37".into(), 5, claude)));
         let uten = r#"{"tmux":"a:@1.%2","status":"idle","updatedAt":5}"#;
         assert_eq!(tolk(uten).map(|(_, _, s)| s.endret), Some(5));
+    }
+
+    #[test]
+    fn utenfor_tmux_er_interaktive_uten_tmux() {
+        assert!(utenfor(r#"{"kind":"interactive","status":"idle"}"#));
+        assert!(utenfor(r#"{"status":"idle"}"#));
+        assert!(!utenfor(r#"{"kind":"interactive","tmux":"a:@1.%2"}"#));
+        assert!(!utenfor(r#"{"kind":"print"}"#));
+        assert!(lever(&std::process::id().to_string()));
+        assert!(!lever("1; ls"));
     }
 
     #[test]

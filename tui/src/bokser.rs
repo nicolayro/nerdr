@@ -12,21 +12,10 @@
 use nerdr_kjerne::oppsett::{Celle, Innhold};
 use ratatui::layout::Rect;
 
-pub const RAMMER_VARIABEL: &str = "NERDR_RAMMER";
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Rammer {
     Bokser,
     Linjer,
-}
-
-impl Rammer {
-    pub fn fra(verdi: Option<&str>) -> Rammer {
-        match verdi {
-            Some("bokser") => Rammer::Bokser,
-            _ => Rammer::Linjer,
-        }
-    }
 }
 
 /// Kolonner mellom rammen og innholdet, til venstre og høyre.

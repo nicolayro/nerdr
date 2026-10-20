@@ -740,13 +740,44 @@ fn bryt(tekst: &str, første: usize, bredde: usize, maks: usize) -> Vec<String> 
     linjer
 }
 
+/// Det som står i stedet for panen når lista er tom, skrevet for den som
+/// ikke kjenner tmux.
+fn tom_liste(utenfor_tmux: usize) -> Vec<String> {
+    let mut avsnitt = vec![
+        "Her er det tomt foreløpig.".to_string(),
+        "nerdr viser Claude-ene dine som kjører i tmux, og lar deg bytte mellom dem. Trykk n for å \
+         starte en ny Claude i en av mappene dine, eller C-r for å fortsette en samtale du har hatt før."
+            .to_string(),
+    ];
+    avsnitt.push(match utenfor_tmux {
+        0 => return avsnitt,
+        1 => "Du har én Claude åpen i en vanlig terminal, utenfor tmux, og den ser ikke nerdr. Vil du ha \
+              den her, avslutter du den der den kjører, og fortsetter samtalen med C-r."
+            .to_string(),
+        n => format!(
+            "Du har {n} Claude-er åpne i vanlige terminaler, utenfor tmux, og dem ser ikke nerdr. Vil du ha \
+             en av dem her, avslutter du den der den kjører, og fortsetter samtalen med C-r."
+        ),
+    });
+    avsnitt
+}
+
 fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
     let v = app.visning;
     if v.width == 0 {
         return;
     }
     if app.valgt.is_none() {
-        buf.set_stringn(v.x + 2, v.y + 1, "Ingen Claude-sesjoner i tmux. n starter en ny.", v.width as usize, SVAK);
+        let bredde = v.width.saturating_sub(4).min(64) as usize;
+        let mut y = v.y + 1..v.bottom();
+        for (i, avsnitt) in tom_liste(app.utenfor_tmux).iter().enumerate() {
+            let stil = if i == 0 { VANLIG } else { SVAK };
+            for linje in bryt(avsnitt, bredde, bredde, usize::MAX) {
+                let Some(y) = y.next() else { return };
+                buf.set_stringn(v.x + 2, y, linje, bredde, stil);
+            }
+            y.next();
+        }
         return;
     }
     // Den aktive har vanlig farge når du er inne i vinduet, så du ser hvor

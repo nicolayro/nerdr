@@ -184,7 +184,6 @@ linje til oppgaven, fet repo og tegnet til venstre. `tittel`, `uthev` og
 | --- | --- |
 | `NERDR_MAPPER` | Mappene mappevelgeren viser mappene under, i tillegg til dem du har brukt Claude i. Kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
 | `NERDR_PREFIKS` | Prefikset, skrevet som i tmux: `C-a`, `M-a` eller `C-Space`. Standard er prefikset i tmux-oppsettet ditt, ellers `C-b`. Det endrer ikke tmux, bare nerdr. |
-| `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `linjer`. Når du har valgt paner i utseende-menyen, gjelder det i stedet. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |
 | `nerdr -L <socket>` | tmux-serveren, som `tmux -L`. |
 

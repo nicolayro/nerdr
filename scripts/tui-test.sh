@@ -141,11 +141,12 @@ maal set -g default-command /bin/cat
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
 registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
+maal set -g @nerdr-utseende paner=bokser
 
 vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
-  "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
+  "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
-sjekk "standard er bokser, under streken øverst" linje_har 1 '^─+┬─ [^ ]+ ─'
+sjekk "paner=bokser fra tmux gir bokser, under streken øverst" linje_har 1 '^─+┬─ [^ ]+ ─'
 sjekk "overskriften har antallet" linje_har 2 '^ VENTER 1 +│'
 sjekk "alfa har ●, repoet og <1m i toppkanten" linje_har 3 '^╭─ ●  nerdr ─+ <1m ─╮'
 sjekk "så oppgaven" linje_har 4 '^│ Fiks testene +│'
@@ -528,8 +529,15 @@ sjekk "en id som ikke er bokstaver, tall og -, skrives ikke inn i skallet" \
   inneholder "$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje" --fortsett 'abc; ls')" 'er ikke en id for en samtale'
 maal kill-server
 
+# Den nye serveren gir panene de samme id-ene, så Claude-ene fra før ville
+# stått i lista. Igjen er bare en Claude i en vanlig terminal, med testen som
+# prosessen.
+rm "$KONFIG"/sessions/*.json
+printf '{"kind":"interactive","status":"idle"}' > "$KONFIG/sessions/$$.json"
 vert new-session -d -s tom "NERDR_PREFIKS=C-a CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $TOM; sleep 30"
 sjekk "uten tmux-server lager nerdr en sesjon" linjer 1 tmux -L "$TOM" list-sessions
+sjekk "uten Claude forklarer nerdr hva lista er" vert_har tom 'Her er det tomt foreløpig'
+sjekk "og at én Claude kjører utenfor tmux" vert_har tom 'Du har én Claude åpen i en vanlig'
 vert send-keys -t tom C-a
 sjekk "NERDR_PREFIKS gir et annet prefiks, og hintet viser det" vert_har tom 'C-a … \+ ny · w lista'
 vert send-keys -t tom w q

@@ -146,6 +146,8 @@ struct App {
     konfig: PathBuf,
     /// Pane-id → Claude-en som kjører i panen.
     claude: HashMap<String, Claude>,
+    /// Lest bare når lista er tom, for det er da du lurer på hvor de er.
+    utenfor_tmux: usize,
     /// Pane-id → repoet og branchen mappa til Claude-en står i.
     repoer: HashMap<String, git::Repo>,
     /// Pane-id → da du sist var inne i panen, også skrevet til panen i tmux.
@@ -351,6 +353,7 @@ impl App {
             sist_listet: None,
             konfig: konfigkatalog(),
             claude: HashMap::new(),
+            utenfor_tmux: 0,
             repoer: HashMap::new(),
             sett: HashMap::new(),
             låst: None,
@@ -378,7 +381,7 @@ impl App {
             størrelser: HashMap::new(),
             fokus: Fokus::Liste,
             prefiks: taster::Prefiks::fra_miljø().unwrap_or_default(),
-            utseende: Utseende::ny(bokser::Rammer::fra(env::var(bokser::RAMMER_VARIABEL).ok().as_deref())),
+            utseende: Utseende::ny(bokser::Rammer::Linjer),
             utseende_meny: None,
             etter_prefiks: false,
             lukke: None,
@@ -564,6 +567,8 @@ impl App {
                 self.sist_listet = Some(Instant::now());
                 self.claude = register::les(&self.konfig.join("sessions"));
                 let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
+                let tom = !alle.iter().any(|p| self.claude.contains_key(&p.id));
+                self.utenfor_tmux = if tom { register::utenfor_tmux(&self.konfig.join("sessions")) } else { 0 };
                 self.husk_sett(&alle);
                 if ok {
                     let inne = |id: &String| self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| &v.id == id);
