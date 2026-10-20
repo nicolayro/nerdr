@@ -141,6 +141,22 @@ registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
 vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
   "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode NERDR_RAMMER=bokser CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
+sjekk "standard er linjer, under streken øverst" linje_har 1 '^─+┬─ [^ ]+ ─'
+sjekk "overskriften har antallet og treffer skillestreken" linje_har 2 '^ VENTER 1 ─+┤'
+sjekk "alfa har oppgaven som tittel, og <1m og ● til høyre" linje_har 3 '^▎ Fiks testene +<1m ● │'
+sjekk "under står repoet og branchen" linje_har 4 '^▎ nerdr › main +│'
+sjekk "gamma står under JOBBER med ◐, og uten oppgave er repoet tittelen" linje_har 7 '^  nerdr +<1m ◐ │'
+tast C-b b
+sjekk "C-b b åpner utseende-menyen" har 'lista +original +bokser +linjer'
+tast Left
+sjekk "← på lista gir bokser, med ● og tiden i toppkanten" linje_har 3 '^╭─ ● ─+ <1m ─╮'
+tast Down Down Down Right
+sjekk "uten tid står ● til høyre i toppkanten" linje_har 3 '^╭─+ ● ─╮'
+sjekk "valget står i tmux" er 'bokser bokser middels vanlig skjul' maal show-options -gqv @nerdr-utseende
+tast Left Up Up Up Left Escape
+sjekk "Esc lukker menyen" mangler 'lista +original'
+sjekk "resten av testen bruker originalen" er 'bokser original middels vanlig vis' maal show-options -gqv @nerdr-utseende
+
 sjekk "alfa står under VENTER med ●, med oppgaven som tittel og <1m til høyre" linje_har 2 '^▎●  Fiks testene +<1m │'
 sjekk "under står repoet og branchen" linje_har 3 '^▎   nerdr › main +│'
 sjekk "fanen står på en strek som fortsetter overskriften med ┬" linje_har 1 '^ VENTER .*┬─ [^ ]+ ─'
@@ -402,11 +418,11 @@ sjekk "C-b x y lukker den nye" linjer 1 maal list-panes -t alfa:0
 sjekk "uten split fyller Claude-en hele visningen igjen" er 68x13 dimensjon alfa:0
 tast C-b w
 
-tast C-b B
-sjekk "C-b B gir linjer, og alfa blir større" er 74x15 dimensjon alfa
+tast C-b b Up Right Escape
+sjekk "linjer rundt panene i menyen gjør alfa større" er 74x15 dimensjon alfa
 sjekk "med linjer er det ingen bokser" mangler '╭'
-tast C-b B
-sjekk "C-b B igjen gir bokser" er 68x13 dimensjon alfa
+tast C-b b Up Left Escape
+sjekk "og bokser igjen" er 68x13 dimensjon alfa
 sjekk "boksen er tilbake" har '╭'
 
 tast C-b c

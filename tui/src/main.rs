@@ -9,6 +9,7 @@ mod palett;
 mod taster;
 mod tegn;
 mod tekst;
+mod utseende;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -26,6 +27,7 @@ use nerdr_kjerne::register::{self, Claude};
 use nerdr_kjerne::sgr::{self, Linje};
 use markering::{Markering, Punkt};
 use meny::{Meny, Valg};
+use utseende::Utseende;
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
     self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
@@ -80,6 +82,7 @@ enum Svar {
     Prefiks,
     /// Bredden på lista fra `LISTE_OPTION`.
     Liste,
+    Utseende,
     Ingenting,
 }
 
@@ -197,7 +200,9 @@ struct App {
 
     fokus: Fokus,
     prefiks: taster::Prefiks,
-    rammer: bokser::Rammer,
+    utseende: Utseende,
+    /// Utseende-menyen er åpen, med aksen som er markert.
+    utseende_meny: Option<usize>,
     /// Prefikset er trykket, og neste tast er en kommando.
     etter_prefiks: bool,
     /// Det som lukkes hvis du svarer `y`.
@@ -372,7 +377,8 @@ impl App {
             størrelser: HashMap::new(),
             fokus: Fokus::Liste,
             prefiks: taster::Prefiks::fra_miljø().unwrap_or_default(),
-            rammer: bokser::Rammer::fra(env::var(bokser::RAMMER_VARIABEL).ok().as_deref()),
+            utseende: Utseende::ny(bokser::Rammer::fra(env::var(bokser::RAMMER_VARIABEL).ok().as_deref())),
+            utseende_meny: None,
             etter_prefiks: false,
             lukke: None,
             visning: Rect::default(),
@@ -395,6 +401,7 @@ impl App {
             self.send("show-options -gv prefix", Svar::Prefiks);
         }
         self.send(&format!("show-options -gqv {LISTE_OPTION}"), Svar::Liste);
+        self.send(&format!("show-options -gqv {}", utseende::OPTION), Svar::Utseende);
         self.list_paner();
         let mut tegne = true;
         while self.ferdig.is_none() {
@@ -665,6 +672,13 @@ impl App {
                 }
                 true
             }
+            Svar::Utseende => {
+                if let Some(tekst) = linjer.first().filter(|_| ok) {
+                    self.utseende.les(tekst);
+                    self.utdatert = true;
+                }
+                true
+            }
             Svar::Prefiks => {
                 if let Some(prefiks) = linjer.first().filter(|_| ok).and_then(|l| taster::Prefiks::fra_tmux(l)) {
                     self.prefiks = prefiks;
@@ -714,12 +728,8 @@ impl App {
                 return;
             }
             KeyCode::Char('d') if !ctrl => return self.ferdig = Some(String::new()),
-            KeyCode::Char('B') => {
-                self.rammer = match self.rammer {
-                    bokser::Rammer::Linjer => bokser::Rammer::Bokser,
-                    bokser::Rammer::Bokser => bokser::Rammer::Linjer,
-                };
-                self.utdatert = true;
+            KeyCode::Char('b' | 'B') if !ctrl => {
+                self.utseende_meny = Some(1);
                 return;
             }
             KeyCode::Char('?') => return self.hjelp = true,
@@ -906,7 +916,7 @@ impl App {
     fn bokser(&self) -> Vec<Boks> {
         let v = self.visning;
         if let Some(oppsett) = self.oppsett() {
-            return bokser::plasser(&oppsett, v, self.rammer);
+            return bokser::plasser(&oppsett, v, self.utseende.paner);
         }
         let boks = |p: &Pane| Boks {
             pane: p.id.clone(),
@@ -995,7 +1005,7 @@ impl App {
         let Some(oppsett) = self.alle.iter().find(|p| p.vindu_id == vindu).and_then(|p| oppsett::tolk(&p.oppsett)) else {
             return;
         };
-        let ekstra = bokser::ekstra(&oppsett, self.rammer);
+        let ekstra = bokser::ekstra(&oppsett, self.utseende.paner);
         if v.width <= ekstra.0 || v.height <= ekstra.1 {
             return;
         }
@@ -1013,6 +1023,30 @@ impl App {
     fn tast(&mut self, k: KeyEvent) -> bool {
         if self.hjelp {
             self.hjelp = false;
+            return true;
+        }
+        if let Some(akse) = self.utseende_meny {
+            let steg = match k.code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
+                    self.utseende_meny = None;
+                    return true;
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.utseende_meny = Some(akse.saturating_sub(1));
+                    return true;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.utseende_meny = Some((akse + 1).min(utseende::AKSER.len() - 1));
+                    return true;
+                }
+                KeyCode::Left | KeyCode::Char('h') => -1,
+                KeyCode::Right | KeyCode::Char('l' | ' ') => 1,
+                _ => return false,
+            };
+            self.utseende.endre(akse, steg);
+            // Rammene endrer hvor mye plass tmux får.
+            self.utdatert = true;
+            self.send(&format!("set-option -g {} {}", utseende::OPTION, sitat(&self.utseende.tekst())), Svar::Ingenting);
             return true;
         }
         if let Some(velger) = &mut self.velger {
@@ -1209,7 +1243,7 @@ impl App {
     /// under en mus som står stille.
     fn under_musen(&self) -> Option<Mål> {
         let (x, y) = self.musen?;
-        if self.velger.is_some() || self.hjelp {
+        if self.velger.is_some() || self.hjelp || self.utseende_meny.is_some() {
             return None;
         }
         if self.meny.is_some() {
@@ -1255,7 +1289,7 @@ impl App {
         if m.kind == MouseEventKind::Down(MouseButton::Left) {
             self.svelg_slipp = true;
         }
-        if self.velger.is_some() || self.hjelp {
+        if self.velger.is_some() || self.hjelp || self.utseende_meny.is_some() {
             return false;
         }
         if self.meny.is_some() {

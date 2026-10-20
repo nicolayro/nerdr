@@ -14,11 +14,14 @@ use ratatui::style::{Color, Modifier, Style};
 use crate::bokser::{Boks, Rammer};
 use crate::markering;
 use crate::palett::{Rgb, bland};
-use crate::grupper::{Rad, glyf, tittel};
+use crate::grupper::{Rad, glyf};
 use crate::ny::Velger;
 use crate::meny::Meny;
 use crate::tekst::{med_tilde, sted, varighet};
+use crate::utseende::{AKSER, Utseende};
 use crate::{App, Fokus, Knapp, Lukke, Mål, hjelp};
+
+mod kort;
 
 /// Bredden på lista, med skillelinja, til du drar i den.
 pub const LISTE: u16 = 36;
@@ -26,15 +29,14 @@ pub const LISTE: u16 = 36;
 pub const LISTE_MIN: u16 = 24;
 /// Stripa er peker, glyf, mellomrom og skillelinja.
 pub const STRIPE: u16 = 4;
-/// Teksten i et kort starter etter peker, glyf og to mellomrom. Glyfene har
-/// tvetydig bredde i Unicode, og mange fonter tegner dem over to kolonner.
-const TEKST_X: u16 = 4;
-const OPPGAVE_LINJER: usize = 2;
 const VELGER_LINJER: u16 = 12;
 const MENY_BREDDE: u16 = 44;
 
-const ORANSJE: Color = Color::Rgb(217, 119, 87);
+const ORANSJE_RGB: Rgb = (217, 119, 87);
+const ORANSJE: Color = Color::Rgb(ORANSJE_RGB.0, ORANSJE_RGB.1, ORANSJE_RGB.2);
 const GRØNN: Color = Color::Indexed(108);
+/// Fargen 108 i 256-paletten, til å blande toner av.
+const GRØNN_RGB: Rgb = (135, 175, 135);
 // Gråtonene i 256-paletten er faste og følger ikke fargetemaet, så teksten har
 // standardfargen til terminalen og skiller seg bare med fet og svak.
 const STERK: Style = Style::new().add_modifier(Modifier::BOLD);
@@ -46,33 +48,30 @@ const SVAK: Style = Style::new().add_modifier(Modifier::DIM);
 const MARKERT_ANDEL: f32 = 0.12;
 const UNDER_MUSEN_ANDEL: f32 = 0.06;
 
-static MARKERT: OnceLock<Option<Color>> = OnceLock::new();
-static UNDER_MUSEN: OnceLock<Option<Color>> = OnceLock::new();
+/// Forgrunns- og bakgrunnsfargen til terminalen.
+static FARGER: OnceLock<Option<(Rgb, Rgb)>> = OnceLock::new();
 
-/// Valgt kort og fane får terminalens bakgrunn blandet med litt av forgrunnen,
-/// så markeringen er like diskré i alle fargetemaer. Svarer ikke terminalen,
-/// står de uten bakgrunn, med peker og fet tekst.
 pub fn bruk_farger(farger: Option<(Rgb, Rgb)>) {
-    let blandet = |andel| {
-        farger.map(|(fg, bg)| {
-            let (r, g, b) = bland(bg, fg, andel);
-            Color::Rgb(r, g, b)
-        })
-    };
-    let _ = MARKERT.set(blandet(MARKERT_ANDEL));
-    let _ = UNDER_MUSEN.set(blandet(UNDER_MUSEN_ANDEL));
+    let _ = FARGER.set(farger);
 }
 
+/// `andel` av `farge`, eller av forgrunnen, blandet inn i bakgrunnen til
+/// terminalen, så det passer til alle fargetemaer. `None` når terminalen ikke
+/// har sagt hvilke farger den har.
+fn tonet(farge: Option<Rgb>, andel: f32) -> Option<Color> {
+    let (fg, bg) = FARGER.get().copied().flatten()?;
+    let (r, g, b) = bland(bg, farge.unwrap_or(fg), andel);
+    Some(Color::Rgb(r, g, b))
+}
+
+/// Valgt kort og fane får litt av forgrunnen i bakgrunnen. Uten farger fra
+/// terminalen står de uten bakgrunn, med peker og fet tekst.
 fn markert() -> Style {
-    bakgrunn(&MARKERT)
+    tonet(None, MARKERT_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
 
 fn under_musen() -> Style {
-    bakgrunn(&UNDER_MUSEN)
-}
-
-fn bakgrunn(farge: &OnceLock<Option<Color>>) -> Style {
-    farge.get().copied().flatten().map_or(Style::new(), |c| Style::new().bg(c))
+    tonet(None, UNDER_MUSEN_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
 
 /// Til høyre for lista, under faneraden. Lista er `liste` bred, men aldri
@@ -91,11 +90,6 @@ fn stripe(app: &App) -> bool {
     liste_bredde(app) <= STRIPE
 }
 
-/// Teksten i et kort går fram til en kolonne før skillelinja.
-fn tekstbredde(app: &App) -> usize {
-    liste_bredde(app).saturating_sub(TEKST_X + 2) as usize
-}
-
 pub fn alt(f: &mut Frame, app: &App) {
     let område = f.area();
     let buf = f.buffer_mut();
@@ -108,6 +102,8 @@ pub fn alt(f: &mut Frame, app: &App) {
 
     if app.hjelp {
         tegn_hjelp(buf, område, &app.prefiks.navn());
+    } else if let Some(akse) = app.utseende_meny {
+        tegn_utseende(buf, område, &app.utseende, akse);
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
@@ -125,11 +121,11 @@ pub fn alt(f: &mut Frame, app: &App) {
 
 fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let bredde = liste_bredde(app) - 1;
-    let tekst = tekstbredde(app);
     let hint_y = område.height.saturating_sub(1);
 
     let mut overskrifter = Vec::new();
     let (rader, utsnitt) = liste(app);
+    let antall = kort::antall(rader.iter().map(|p| &p.rad));
     let vis = utsnitt.rader();
     let på_skjermen = |y: u16| u16::try_from(utsnitt.skjerm(y)).ok().filter(|y| vis.contains(y));
     for Plassert { y, rad, kort, .. } in &rader {
@@ -137,30 +133,25 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
             Rad::Tom => {}
             Rad::Strek => {
                 if let Some(y) = på_skjermen(*y) {
-                    let strek = "┈".repeat(bredde.saturating_sub(TEKST_X + 1) as usize);
-                    buf.set_stringn(TEKST_X, y, strek, tekst, SVAK);
+                    kort::strek(app.utseende, buf, y, bredde);
                 }
             }
             Rad::Overskrift(gruppe) => {
-                if let Some(y) = på_skjermen(*y) {
-                    let x = match stripe(app) {
-                        true => 0,
-                        false => buf.set_stringn(1, y, tittel(*gruppe), bredde as usize, SVAK).0 + 1,
-                    };
-                    let strek = "─".repeat(bredde.saturating_sub(x) as usize);
-                    buf.set_stringn(x, y, strek, bredde as usize, SVAK);
+                if let Some(y) = på_skjermen(*y)
+                    && kort::overskrift(app.utseende, buf, y, bredde, *gruppe, &antall, stripe(app))
+                {
                     overskrifter.push(y);
                 }
             }
             Rad::Pane(pane, _) => {
                 let Some(kort) = kort else { continue };
-                let valgt = app.valgt.as_ref().is_some_and(|v| v.id == pane.id);
+                let valgt = er_valgt(app, pane);
                 let bakgrunn = match () {
                     _ if valgt && app.fokus == Fokus::Liste => Some(markert()),
                     _ if matches!(mus, Some(Mål::Kort(id)) if *id == pane.id) => Some(under_musen()),
                     _ => None,
                 };
-                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, valgt, bakgrunn);
+                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, bakgrunn);
             }
         }
     }
@@ -230,99 +221,44 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     buf.set_stringn(0, område.height.saturating_sub(1), format!("{hint} "), plass as usize, VANLIG);
 }
 
+fn er_valgt(app: &App, pane: &Pane) -> bool {
+    app.valgt.as_ref().is_some_and(|v| v.id == pane.id)
+}
+
 /// En Claude i lista: oppgaven som tittel, med hvor lenge den har ventet eller
-/// jobbet til høyre, og under den repoet og branchen. Uten oppgave er repoet
-/// tittelen.
-struct Kort {
-    merke: Merke,
-    tittel: Vec<String>,
-    tid: Option<String>,
-    under: Vec<String>,
-}
-
-impl Kort {
-    fn høyde(&self) -> u16 {
-        (self.tittel.len() + self.under.len()) as u16
-    }
-}
-
-fn kort(app: &App, pane: &Pane, merke: Merke) -> Kort {
-    if stripe(app) {
-        return Kort { merke, tittel: vec![String::new()], tid: None, under: Vec::new() };
-    }
-    let tekst = tekstbredde(app);
+/// jobbet, og repoet og branchen. Uten oppgave er repoet tittelen.
+fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
     let ny = app.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
     let mappe = app.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny);
     let repo = app.repoer.get(&pane.id);
-    let sted = sted(pane, mappe, repo);
-    let branch = repo.and_then(|r| r.branch.as_deref());
     let tid = match merke {
         Merke::Spør | Merke::Ulest | Merke::Jobber => {
             app.claude.get(&pane.id).map(|c| varighet(crate::nå_ms().saturating_sub(c.endret)))
         }
         Merke::Sett | Merke::Starter => None,
     };
-    let første = tekst.saturating_sub(tid.as_ref().map_or(0, |t| t.chars().count() + 2));
-    let oppgave = pane.oppgave().map(|o| bryt(o, første, tekst, OPPGAVE_LINJER)).filter(|l| !l.is_empty());
-    let (tittel, under) = match (ny, oppgave) {
-        (Some(_), _) => (vec![kutt(&sted, første)], vec!["starter …".to_string()]),
-        (None, Some(oppgave)) => (oppgave, repo_og_branch(&sted, branch, tekst)),
-        (None, None) => (vec![kutt(&sted, første)], branch.map(|b| vec![kutt(&format!("› {b}"), tekst)]).unwrap_or_default()),
+    let info = kort::Info {
+        merke,
+        oppgave: pane.oppgave().map(str::to_string),
+        sted: sted(pane, mappe, repo),
+        branch: repo.and_then(|r| r.branch.clone()),
+        tid,
+        starter: ny.is_some(),
     };
-    Kort { merke, tittel, tid, under }
-}
-
-/// På én linje når begge får plass, ellers branchen på linja under, så ingen
-/// av dem kuttes før de må.
-fn repo_og_branch(sted: &str, branch: Option<&str>, bredde: usize) -> Vec<String> {
-    let Some(branch) = branch else { return vec![kutt(sted, bredde)] };
-    let sammen = format!("{sted} › {branch}");
-    if sammen.chars().count() <= bredde {
-        return vec![sammen];
-    }
-    vec![kutt(sted, bredde), kutt(&format!("› {branch}"), bredde)]
+    kort::kort(app.utseende, &info, liste_bredde(app) - 1, er_valgt(app, pane), stripe(app))
 }
 
 /// Kortet med første linje på rad `topp`, som kan være over skjermen når
 /// lista ruller. Bare linjene på radene i `vis` tegnes.
-fn tegn_kort(buf: &mut Buffer, topp: i32, vis: &Range<u16>, bredde: u16, kort: &Kort, valgt: bool, bakgrunn: Option<Style>) {
-    let tekst = bredde.saturating_sub(TEKST_X + 1);
-    let merke = kort.merke;
-    let dempet = !valgt && merke.gruppe() == Gruppe::Ferdig;
-    let (peker, tittelstil) = match (valgt, dempet) {
-        (true, _) => ("▎", STERK),
-        (false, false) => (" ", VANLIG),
-        (false, true) => (" ", SVAK),
-    };
-    let linjer = kort.tittel.iter().map(|l| (l, tittelstil)).chain(kort.under.iter().map(|l| (l, SVAK)));
-    for (i, (linje, stil)) in linjer.enumerate() {
+fn tegn_kort(buf: &mut Buffer, topp: i32, vis: &Range<u16>, bredde: u16, kort: &[kort::Linje], bakgrunn: Option<Style>) {
+    for (i, linje) in kort.iter().enumerate() {
         let Some(y) = u16::try_from(topp + i as i32).ok().filter(|y| vis.contains(y)) else { continue };
         if let Some(bakgrunn) = bakgrunn {
             buf.set_style(Rect::new(0, y, bredde, 1), bakgrunn);
         }
-        buf.set_stringn(0, y, peker, 1, VANLIG);
-        buf.set_stringn(TEKST_X, y, linje, tekst as usize, stil);
-        if i == 0 {
-            buf.set_stringn(1, y, glyf(merke), 1, Style::new().fg(glyffarge(merke)));
-            if let Some(tid) = &kort.tid {
-                høyrestilt(buf, y, TEKST_X + tekst, tid, SVAK);
-            }
+        for bit in linje {
+            buf.set_stringn(bit.x, y, &bit.tekst, bredde.saturating_sub(bit.x) as usize, bit.stil);
         }
-    }
-}
-
-/// Tekst som slutter foran kolonne `slutt`. Gir kolonnen den starter i.
-fn høyrestilt(buf: &mut Buffer, y: u16, slutt: u16, tekst: &str, stil: Style) -> u16 {
-    let x = slutt.saturating_sub(tekst.chars().count() as u16);
-    buf.set_string(x, y, tekst, stil);
-    x
-}
-
-fn glyffarge(merke: Merke) -> Color {
-    match merke {
-        Merke::Spør | Merke::Ulest => ORANSJE,
-        Merke::Jobber | Merke::Starter => GRØNN,
-        Merke::Sett => Color::Reset,
     }
 }
 
@@ -331,19 +267,17 @@ struct Plassert<'a> {
     y: u16,
     høyde: u16,
     rad: Rad<'a>,
-    kort: Option<Kort>,
+    kort: Option<Vec<kort::Linje>>,
 }
 
-/// Radene i lista, etter hverandre fra toppen. Stripa har ingen streker
-/// mellom kortene.
+/// Radene i lista, etter hverandre fra toppen.
 fn plasser(app: &App) -> Vec<Plassert<'_>> {
     let mut y = 0;
-    app.rader()
+    kort::ordne(app.utseende, app.rader(), stripe(app))
         .into_iter()
-        .filter(|rad| !(stripe(app) && *rad == Rad::Strek))
         .map(|rad| {
             let kort = if let Rad::Pane(pane, merke) = rad { Some(kort(app, pane, merke)) } else { None };
-            let høyde = kort.as_ref().map_or(1, Kort::høyde);
+            let høyde = kort.as_ref().map_or(1, |k| k.len() as u16);
             let plassert = Plassert { y, høyde, rad, kort };
             y += høyde;
             plassert
@@ -662,6 +596,28 @@ fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -
     None
 }
 
+/// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
+fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
+    let høyde = AKSER.len() as u16 + 3;
+    let Some(ramme) = boks(buf, område, 42, høyde, "utseende", "↑↓ velg · ←→ endre · esc lukk") else { return };
+    let x = ramme.x + 2;
+    for (akse, navn) in AKSER.iter().enumerate() {
+        // Luft mellom panene og lista.
+        let y = ramme.y + 1 + akse as u16 + (akse > 0) as u16;
+        if akse == valgt {
+            buf.set_style(Rect::new(ramme.x + 1, y, ramme.width - 2, 1), markert());
+            buf.set_string(ramme.x + 1, y, "▎", VANLIG);
+        }
+        buf.set_string(x, y, *navn, if akse == valgt { STERK } else { SVAK });
+        let mut vx = x + 8;
+        for (i, verdi) in Utseende::verdier(akse).iter().enumerate() {
+            let på = u.gjelder(akse) && i == u.indeks(akse);
+            let stil = if på { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { SVAK };
+            vx = buf.set_stringn(vx, y, *verdi, ramme.right().saturating_sub(vx + 1) as usize, stil).0 + 2;
+        }
+    }
+}
+
 /// Valget i menyen på `x` og `y`, som indeks i `Meny::valg`.
 pub fn menyvalg_på(app: &App, x: u16, y: u16) -> Option<usize> {
     let meny = app.meny.as_ref().filter(|m| m.navn.is_none())?;
@@ -825,7 +781,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
             tegn_ramme(buf, ramme, stil);
         }
     }
-    if app.rammer == Rammer::Linjer && bokser.len() > 1 {
+    if app.utseende.paner == Rammer::Linjer && bokser.len() > 1 {
         tegn_linjer(buf, app, bokser, &lyse);
     }
     let merkelapp = match () {
@@ -979,17 +935,6 @@ mod tester {
         assert_eq!(bryt("en to tre", 5, 9, 2), ["en to", "tre"]);
         assert_eq!(bryt("en to tre", 2, 9, 2), ["en", "to tre"]);
         assert_eq!(bryt("en to tre fire fem", 2, 9, 2), ["en", "to tre…"]);
-    }
-
-    #[test]
-    fn repo_og_branch_på_én_linje_når_det_er_plass() {
-        assert_eq!(repo_og_branch("nerdr", Some("main"), 30), ["nerdr › main"]);
-        assert_eq!(repo_og_branch("nerdr", None, 30), ["nerdr"]);
-        assert_eq!(
-            repo_og_branch("api-bm-customer", Some("legg-til-audit-kode"), 30),
-            ["api-bm-customer", "› legg-til-audit-kode"]
-        );
-        assert_eq!(repo_og_branch("api-bm-customer", Some("legg-til-audit-kode"), 40), ["api-bm-customer › legg-til-audit-kode"]);
     }
 
     #[test]

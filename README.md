@@ -45,10 +45,10 @@ tilbake til bunnen. Det du drar over, kopieres når du slipper, med `pbcopy`,
 `wl-copy`, `xclip` eller `xsel`. I `less` og `man` blir hjulet til piltaster.
 
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
-hver sin boks eller med streker mellom, etter `NERDR_RAMMER`. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
+hver sin boks eller med streker mellom. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
-Øverst står vinduene i sesjonen som faner, på en strek som fortsetter den
-første overskriften i lista, og vinduet som vises, har bakgrunn. Et klikk på en fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
+Øverst står vinduene i sesjonen som faner, på en strek som fortsetter streken
+øverst i lista, og vinduet som vises, har bakgrunn. Et klikk på en fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
 
 Prefikset er det du setter i `NERDR_PREFIKS`, ellers det samme som i
 tmux-oppsettet ditt, ellers `C-b`. Tastene etter det er de samme som i tmux, og
@@ -74,7 +74,7 @@ virker både fra lista og fra panen:
 | `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
 | `PgUp` | Rull en side opp |
 | `(` `)` | Forrige og neste Claude i lista |
-| `B` | Bytt mellom linjer og bokser |
+| `b` | Velg utseende |
 | `w` `s` | Tilbake til lista |
 | `d` | Avslutt |
 | `?` | Hjelp |
@@ -91,7 +91,7 @@ worktree står med navnet til repoet den er laget fra. Lista er delt i tre:
 
 I hver gruppe står den som kom inn først, øverst, så en ny legges til nederst
 uten å flytte de andre. I venter og jobber står det hvor lenge den har ventet
-eller jobbet, og ferdig er dempet. Får ikke lista plass, ruller den med
+eller jobbet. Får ikke lista plass, ruller den med
 musehjulet og følger den du velger. Pilene øverst og nederst sier hvor mange
 som er over og under, og om noen over venter på deg. Et klikk på en pil ruller
 en side.
@@ -153,13 +153,28 @@ eller `klar`), eller `null` når nerdr ikke kjenner statusen. `merke` er det lis
 `sett` er da du sist var inne i Claude-en i nerdr, i millisekunder som
 `endret`, eller `null` når nerdr ikke har sett den.
 
+## Utseende
+
+Prefikset og `b` åpner utseende-menyen. Valget gjelder med en gang, og tmux
+husker det i `@nerdr-utseende`.
+
+| | |
+| --- | --- |
+| **paner** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
+| **lista** | `linjer` har tittelen til venstre og tiden og tegnet til høyre. `bokser` har hver Claude i en boks, med tegnet og tiden i kanten. `original` er lista fra før, med tegnet foran tittelen. |
+| **farge** | `lite` har farge bare på tegnet. `middels` gir også overskriftene farge. `mye` gir rammene og strekene en tone av fargen til gruppen. |
+| **plass** | `tett` har én linje for hver Claude uten bokser, og repoet i kanten med bokser. `romslig` har plass til mer av tittelen, og repoet og branchen på hver sin linje. |
+| **tid** | Om det står hvor lenge den har ventet eller jobbet. |
+
+Standard er linjer i lista, middels farge, vanlig plass og tiden synlig.
+
 ## Innstillinger
 
 | | |
 | --- | --- |
 | `NERDR_MAPPER` | Mappene mappevelgeren søker i, kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
 | `NERDR_PREFIKS` | Prefikset, skrevet som i tmux: `C-a`, `M-a` eller `C-Space`. Standard er prefikset i tmux-oppsettet ditt, ellers `C-b`. Det endrer ikke tmux, bare nerdr. |
-| `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `linjer`, og prefikset og `B` bytter mens nerdr kjører. |
+| `NERDR_RAMMER` | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. Standard er `linjer`. Når du har valgt paner i utseende-menyen, gjelder det i stedet. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |
 | `nerdr -L <socket>` | tmux-serveren, som `tmux -L`. |
 

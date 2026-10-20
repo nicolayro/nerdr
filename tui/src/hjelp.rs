@@ -39,7 +39,7 @@ pub const PREFIKSTASTER: [(&str, &str); 22] = [
     ("C-←↑↓→", "endre størrelse, med M- fem om gangen"),
     ("PgUp", "rull en side opp"),
     ("( )", "forrige og neste Claude i lista"),
-    ("B", "bytt mellom linjer og bokser"),
+    ("b", "velg utseende"),
     ("w s", "tilbake til lista"),
     ("d", "avslutt"),
     ("prefiks", "send prefikset til panen"),
