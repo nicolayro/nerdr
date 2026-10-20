@@ -27,7 +27,7 @@ use nerdr_kjerne::register::{self, Claude};
 use nerdr_kjerne::sgr::{self, Linje};
 use markering::{Markering, Punkt};
 use meny::{Meny, Valg};
-use utseende::Utseende;
+use utseende::{Orden, Utseende};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
     self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
@@ -1576,7 +1576,19 @@ impl App {
     }
 
     fn rader(&self) -> Vec<Rad<'_>> {
-        grupper::rader(&self.claude_paner, |p| self.plass(p))
+        let paner = &self.claude_paner;
+        match self.utseende.orden {
+            Orden::Nerdr => grupper::rader(paner, |p| self.plass(p)),
+            Orden::Mappe => grupper::etter_mappe(paner, |p| Some((self.plass(p)?.merke, self.sted(p)))),
+            Orden::Aktivitet => grupper::etter_aktivitet(paner, |p| self.plass(p)),
+        }
+    }
+
+    /// Repoet panen jobber i, eller mappa når den ikke er i et repo.
+    fn sted(&self, pane: &Pane) -> String {
+        let ny = self.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
+        let mappe = self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny);
+        tekst::sted(pane, mappe, self.repoer.get(&pane.id))
     }
 
     fn i_rekkefølge(&self) -> Vec<Pane> {

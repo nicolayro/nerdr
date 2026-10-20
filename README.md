@@ -80,8 +80,8 @@ virker både fra lista og fra panen:
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
 
-Hver Claude viser oppgaven, og under den repoet og branchen den jobber i. En
-worktree står med navnet til repoet den er laget fra. Lista er delt i tre:
+Hver Claude står i en boks, med tegnet, repoet og tiden i toppkanten, oppgaven
+inni og branchen under. En worktree står med navnet til repoet den er laget fra. Lista er delt i tre:
 
 | | |
 | --- | --- |
@@ -89,9 +89,8 @@ worktree står med navnet til repoet den er laget fra. Lista er delt i tre:
 | **jobber** | `◐` jobber, `◌` starter |
 | **ferdig** | `○` er ferdig, og du har vært inne i den siden |
 
-I hver gruppe står den som kom inn først, øverst, så en ny legges til nederst
-uten å flytte de andre. I venter og jobber står det hvor lenge den har ventet
-eller jobbet. Får ikke lista plass, ruller den med
+I hver gruppe står den som kom sist inn, øverst. Det står hvor lenge den har
+ventet, jobbet eller vært ferdig. Får ikke lista plass, ruller den med
 musehjulet og følger den du velger. Pilene øverst og nederst sier hvor mange
 som er over og under, og om noen over venter på deg. Et klikk på en pil ruller
 en side.
@@ -161,12 +160,17 @@ husker det i `@nerdr-utseende`.
 | | |
 | --- | --- |
 | **paner** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
-| **lista** | `linjer` har tittelen til venstre og tiden og tegnet til høyre. `bokser` har hver Claude i en boks, med tegnet og tiden i kanten. `original` er lista fra før, med tegnet foran tittelen. |
 | **farge** | `lite` har farge bare på tegnet. `middels` gir også overskriftene farge. `mye` gir rammene og strekene en tone av fargen til gruppen. |
-| **plass** | `tett` har én linje for hver Claude uten bokser, og repoet i kanten med bokser. `romslig` har plass til mer av tittelen, og repoet og branchen på hver sin linje. |
-| **tid** | Om det står hvor lenge den har ventet eller jobbet. |
+| **plass** | `tett` har én linje for hver Claude, uten boks, med tegnet, oppgaven og tiden. `romslig` har mer luft mellom gruppene. |
+| **tid** | Om det står hvor lenge den har ventet, jobbet eller vært ferdig. |
+| **orden** | `nerdr` deler lista i venter, jobber og ferdig. `mappe` har en gruppe for hvert repo, i alfabetisk rekkefølge, og Claude-ene i hver står der de er i tmux. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. |
+| **tittel** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. |
+| **uthev** | Hvordan repoet i toppkanten står ut: `ingen` er dempet, `fet` er fet, og `farge` har fargen til gruppen. |
+| **symbol** | Om tegnet står til `venstre` for repoet eller til `høyre` for tiden. |
 
-Standard er linjer i lista, middels farge, vanlig plass og tiden synlig.
+Standard er middels farge, vanlig plass, tiden synlig, ordnet som nerdr, én
+linje til oppgaven, fet repo og tegnet til venstre. `tittel`, `uthev` og
+`symbol` gjelder ikke tett. `nerdr liste` er alltid ordnet som nerdr.
 
 ## Innstillinger
 

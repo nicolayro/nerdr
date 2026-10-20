@@ -17,8 +17,8 @@ use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf};
 use crate::ny::Velger;
 use crate::meny::Meny;
-use crate::tekst::{med_tilde, sted, varighet};
-use crate::utseende::{AKSER, Utseende};
+use crate::tekst::{med_tilde, varighet};
+use crate::utseende::{AKSER, BOKSAKSER, Orden, Utseende};
 use crate::{App, Fokus, Knapp, Lukke, Mål, hjelp};
 
 mod kort;
@@ -131,14 +131,9 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     for Plassert { y, rad, kort, .. } in &rader {
         match rad {
             Rad::Tom => {}
-            Rad::Strek => {
-                if let Some(y) = på_skjermen(*y) {
-                    kort::strek(app.utseende, buf, y, bredde);
-                }
-            }
-            Rad::Overskrift(gruppe) => {
+            Rad::Overskrift(o) => {
                 if let Some(y) = på_skjermen(*y)
-                    && kort::overskrift(app.utseende, buf, y, bredde, *gruppe, &antall, stripe(app))
+                    && kort::overskrift(app.utseende, buf, y, bredde, o, &antall, stripe(app))
                 {
                     overskrifter.push(y);
                 }
@@ -225,25 +220,21 @@ fn er_valgt(app: &App, pane: &Pane) -> bool {
     app.valgt.as_ref().is_some_and(|v| v.id == pane.id)
 }
 
-/// En Claude i lista: oppgaven som tittel, med hvor lenge den har ventet eller
-/// jobbet, og repoet og branchen. Uten oppgave er repoet tittelen.
+/// En Claude i lista: oppgaven som tittel, med hvor lenge den har ventet,
+/// jobbet eller vært ferdig, og repoet og branchen. Uten oppgave er repoet
+/// tittelen.
 fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
-    let ny = app.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
-    let mappe = app.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny);
     let repo = app.repoer.get(&pane.id);
-    let tid = match merke {
-        Merke::Spør | Merke::Ulest | Merke::Jobber => {
-            app.claude.get(&pane.id).map(|c| varighet(crate::nå_ms().saturating_sub(c.endret)))
-        }
-        Merke::Sett | Merke::Starter => None,
-    };
+    // En som starter, er ikke i registeret ennå, og har ingen tid.
+    let tid = app.claude.get(&pane.id).map(|c| varighet(crate::nå_ms().saturating_sub(c.endret)));
     let info = kort::Info {
         merke,
         oppgave: pane.oppgave().map(str::to_string),
-        sted: sted(pane, mappe, repo),
+        sted: app.sted(pane),
         branch: repo.and_then(|r| r.branch.clone()),
         tid,
-        starter: ny.is_some(),
+        starter: app.nye.contains_key(&pane.id),
+        sted_over: app.utseende.orden == Orden::Mappe,
     };
     kort::kort(app.utseende, &info, liste_bredde(app) - 1, er_valgt(app, pane), stripe(app))
 }
@@ -598,18 +589,18 @@ fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -
 
 /// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
 fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
-    let høyde = AKSER.len() as u16 + 3;
+    let høyde = AKSER.len() as u16 + 4;
     let Some(ramme) = boks(buf, område, 42, høyde, "utseende", "↑↓ velg · ←→ endre · esc lukk") else { return };
     let x = ramme.x + 2;
     for (akse, navn) in AKSER.iter().enumerate() {
         // Luft mellom panene og lista.
-        let y = ramme.y + 1 + akse as u16 + (akse > 0) as u16;
+        let y = ramme.y + 1 + akse as u16 + (akse > 0) as u16 + (akse >= BOKSAKSER) as u16;
         if akse == valgt {
             buf.set_style(Rect::new(ramme.x + 1, y, ramme.width - 2, 1), markert());
             buf.set_string(ramme.x + 1, y, "▎", VANLIG);
         }
         buf.set_string(x, y, *navn, if akse == valgt { STERK } else { SVAK });
-        let mut vx = x + 8;
+        let mut vx = x + 9;
         for (i, verdi) in Utseende::verdier(akse).iter().enumerate() {
             let på = u.gjelder(akse) && i == u.indeks(akse);
             let stil = if på { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { SVAK };

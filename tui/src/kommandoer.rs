@@ -16,7 +16,7 @@ use nerdr_kjerne::register::{self, Claude, Tilstand};
 use nerdr_kjerne::{git, konfigkatalog, samtaler, start, tmux};
 use serde_json::json;
 
-use crate::grupper::{self, Plass, Rad, glyf, tittel};
+use crate::grupper::{self, Plass, Rad, glyf};
 use crate::ny;
 use crate::tekst::{mappenavn, sted, varighet};
 
@@ -70,8 +70,7 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
     for rad in &rader {
         match rad {
             Rad::Tom => ut.push('\n'),
-            Rad::Strek => {}
-            Rad::Overskrift(gruppe) => ut += &format!("{}\n", tittel(*gruppe)),
+            Rad::Overskrift(o) => ut += &format!("{}\n", o.tittel()),
             Rad::Pane(p, m) => {
                 let mappe = claude.get(&p.id).and_then(|c| c.mappe.as_deref());
                 let repo = mappe.and_then(git::les);
