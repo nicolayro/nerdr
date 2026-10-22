@@ -48,6 +48,8 @@ const SVAK: Style = Style::new().add_modifier(Modifier::DIM);
 /// musen står.
 const MARKERT_ANDEL: f32 = 0.12;
 const UNDER_MUSEN_ANDEL: f32 = 0.06;
+/// Der tastene ikke går.
+const UTENFOR_ANDEL: f32 = 0.03;
 
 /// Forgrunns- og bakgrunnsfargen til terminalen.
 static FARGER: OnceLock<Option<(Rgb, Rgb)>> = OnceLock::new();
@@ -100,6 +102,7 @@ pub fn alt(f: &mut Frame, app: &App) {
     tegn_faner(buf, app, mus.as_ref());
     tegn_pane(buf, app, &bokser, mus.as_ref());
     tegn_hint(buf, område, app);
+    tegn_bakgrunn(buf, område, app, &bokser);
 
     if app.hjelp {
         tegn_hjelp(buf, område, &app.prefiks.navn());
@@ -218,6 +221,27 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     };
     let plass = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
     buf.set_stringn(0, område.height.saturating_sub(1), format!("{hint} "), plass as usize, VANLIG);
+}
+
+/// Utenfor lista eller den aktive panen, der tastene går, får rutene uten egen
+/// bakgrunn en annen tone. Snudde ruter står som før, for der er bakgrunnen
+/// tekstfargen.
+fn tegn_bakgrunn(buf: &mut Buffer, område: Rect, app: &App, bokser: &[Boks]) {
+    let Some(tone) = tonet(None, UTENFOR_ANDEL) else { return };
+    let lista = Rect::new(0, 0, liste_bredde(app).saturating_sub(1), område.height);
+    let her = match app.fokus {
+        Fokus::Liste => Some(lista),
+        Fokus::Pane => aktiv_boks(app, bokser).map(|b| b.ramme.unwrap_or(b.innhold)),
+    };
+    let Some(her) = her else { return };
+    for del in [lista, app.visning.intersection(område)] {
+        for posisjon in del.positions().filter(|p| !her.contains(*p)) {
+            let celle = &mut buf[posisjon];
+            if celle.bg == Color::Reset && !celle.modifier.contains(Modifier::REVERSED) {
+                celle.bg = tone;
+            }
+        }
+    }
 }
 
 fn er_valgt(app: &App, pane: &Pane) -> bool {
