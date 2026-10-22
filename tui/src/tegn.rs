@@ -609,10 +609,10 @@ fn meny_boks(område: Rect, meny: &Meny) -> Option<Rect> {
     midt_på(område, MENY_BREDDE, høyde)
 }
 
-/// Gir der markøren skal stå når navnet på en worktree skrives inn.
+/// Gir der markøren skal stå når navnet på et worktree skrives inn.
 fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -> Option<(u16, u16)> {
     let (tittel, hint) = match meny.navn {
-        Some(_) => ("ny worktree", "⏎ start · esc tilbake"),
+        Some(_) => ("nytt worktree", "⏎ start · esc tilbake"),
         None => ("ny", "⏎ velg · esc avbryt"),
     };
     let plass = meny_boks(område, meny)?;
@@ -649,7 +649,7 @@ fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -
 /// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
 fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
     let høyde = AKSER.len() as u16 + 4;
-    let Some(ramme) = boks(buf, område, 42, høyde, "utseende", "↑↓ velg · ←→ endre · esc lukk") else { return };
+    let Some(ramme) = boks(buf, område, 42, høyde, "konfigurasjon", "↑↓ velg · ←→ endre · esc lukk") else { return };
     let x = ramme.x + 2;
     for (akse, navn) in AKSER.iter().enumerate() {
         // Luft mellom panene og lista.
@@ -684,10 +684,10 @@ pub fn i_menyen(app: &App, x: u16, y: u16) -> bool {
     ramme.is_some_and(|r| r.contains((x, y).into()))
 }
 
-/// Kommandopaletten midt på skjermen, med tasten til høyre. Gir der markøren
+/// Handlingene midt på skjermen, med tasten til høyre. Gir der markøren
 /// skal stå i søkefeltet.
 fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger) -> (u16, u16) {
-    let Some(boks) = boks(buf, område, 56, VELGER_LINJER + 4, "handlinger", "⏎ kjør · esc avbryt") else {
+    let Some(boks) = boks(buf, område, 56, VELGER_LINJER + 4, "handlinger", "⏎ kjør · esc lukk") else {
         return (0, 0);
     };
     let indre = (boks.width - 4) as usize;
@@ -721,8 +721,8 @@ fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger) -> 
 /// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
 fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
     let (tittel, hint) = match velger.fortsett {
-        false => ("ny claude", "⏎ start · C-r tidligere samtaler · esc avbryt"),
-        true => ("tidligere samtaler", "⏎ fortsett · C-r ny · esc avbryt"),
+        false => ("ny sesjon", "⏎ start · C-r hent samtale · esc avbryt"),
+        true => ("hent samtale", "⏎ hent · C-r ny sesjon · esc avbryt"),
     };
     let Some(boks) = boks(buf, område, 64, VELGER_LINJER + 4, tittel, hint) else {
         return (0, 0);

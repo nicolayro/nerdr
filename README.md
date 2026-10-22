@@ -30,11 +30,11 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 
 | Tast | Hva |
 | --- | --- |
-| `:` | Alt nerdr kan gjøre, søkbart |
+| `:` | Handlinger: alt nerdr kan gjøre, søkbart |
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
-| `n` `+` | Ny Claude, worktree eller terminal |
-| `C-r` | Fortsett en tidligere samtale |
+| `n` `+` | Ny sesjon, worktree eller terminal |
+| `C-r` | Hent en tidligere samtale |
 | `?` | Hjelp |
 | `q` | Avslutt, fra lista |
 
@@ -46,7 +46,7 @@ tmux og alt som kjører i det.
 `:` åpner handlingene, og fra panen er det prefikset og `:`. Du kan også
 klikke på «handlinger» til høyre på streken med fanene. Der står alt nerdr kan
 gjøre, med tasten ved siden av, og du søker fram det du vil og trykker `⏎`.
-Valgene i utseende-menyen står der også, som «mye farge» og «skjul tiden».
+Valgene i konfigurasjonen står der også, som «mye farge» og «skjul tiden».
 
 Et klikk på en Claude i lista velger den, og et dobbeltklikk går inn i den. Et
 klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Klikk og
@@ -67,33 +67,33 @@ virker både fra lista og fra panen:
 
 | Etter prefikset | Hva |
 | --- | --- |
-| `:` | Alt nerdr kan gjøre, søkbart |
-| `+` | Ny Claude, worktree eller terminal |
-| `c` | Nytt vindu i mappa til panen |
+| `:` | Handlinger: alt nerdr kan gjøre, søkbart |
+| `+` | Ny sesjon, worktree eller terminal |
+| `c` | Ny terminal, i mappa til panen |
 | `n` `p` | Neste og forrige vindu |
 | `0`–`9` | Vinduet med det nummeret |
-| `l` | Forrige vindu du var i |
-| `&` | Lukk vinduet, etter at du har svart `y` |
-| `%` | Del vinduet side om side |
-| `"` | Del vinduet over og under |
+| `l` | Siste vindu, det du var i før |
+| `&` | Lukk vindu, etter at du har svart `y` |
+| `%` | Del side om side |
+| `"` | Del over og under |
 | `o` / `←` `↑` `↓` `→` | Neste pane, eller panen i den retningen |
-| `;` | Forrige aktive pane |
-| `z` | Zoom inn og ut på panen |
-| `x` | Lukk panen, etter at du har svart `y` |
-| `{` `}` | Bytt plass med panen før eller etter |
+| `;` | Siste pane, den som var aktiv før |
+| `z` | Zoom pane, inn og ut |
+| `x` | Lukk pane, etter at du har svart `y` |
+| `{` `}` | Flytt pane bakover og framover |
 | `Space` | Neste oppsett |
-| `C-o` | Roter panene |
+| `C-o` | Roter paner |
 | `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
 | `PgUp` | Rull en side opp |
-| `(` `)` | Forrige og neste Claude i lista |
-| `b` | Velg utseende |
+| `(` `)` | Forrige og neste Claude |
+| `b` | Konfigurasjon |
 | `w` `s` | Tilbake til lista |
 | `d` | Avslutt |
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
 
 Hver Claude står i en boks, med tegnet, repoet og tiden i toppkanten, oppgaven
-inni og branchen under. En worktree står med navnet til repoet den er laget fra. Lista er delt i tre:
+inni og branchen under. Et worktree står med navnet til repoet det er laget fra. Lista er delt i tre:
 
 | | |
 | --- | --- |
@@ -124,11 +124,10 @@ mappe, legges i mappa og sesjonen til panen som vises:
 
 | | |
 | --- | --- |
-| `n` | Claude i en mappe du velger |
-| `c` | Claude i et nytt vindu |
-| `w` | Claude i en ny worktree, med `claude -w` og navnet du skriver. Bare i et git-repo. |
-| `r` | Fortsett en samtale, som `C-r` |
-| `t` | Terminal i et nytt vindu, som `+` etter fanene |
+| `n` | Ny sesjon: Claude i en mappe du velger |
+| `w` | Nytt worktree med Claude i, med `claude -w` og navnet du skriver. Bare i et git-repo. |
+| `r` | Hent samtale, som `C-r` |
+| `t` | Ny terminal i et nytt vindu, som `+` etter fanene |
 | `%` `"` | Del vinduet side om side eller over og under |
 
 `n` i menyen åpner en popup der du søker fram en mappe, og `⏎` starter `claude`
@@ -156,7 +155,7 @@ med et `versjon`-felt.
 | --- | --- |
 | `nerdr liste` | Claude-ene i tmux, gruppert som i TUI-et, med pane, mappe, repo, branch og oppgave |
 | `nerdr samtaler` | Tidligere samtaler, nyest først, med id, mappe og tittel |
-| `nerdr ny <mappe>` | Start en Claude i mappa, som «Claude i en mappe» i menyen |
+| `nerdr ny <mappe>` | Start en Claude i mappa, som «ny sesjon» i menyen |
 | `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som `C-r` |
 
 I JSON fra `liste` er `tilstand` det Claude melder selv (`venter`, `jobber`
@@ -165,9 +164,9 @@ eller `klar`), eller `null` når nerdr ikke kjenner statusen. `merke` er det lis
 `sett` er da du sist var inne i Claude-en i nerdr, i millisekunder som
 `endret`, eller `null` når nerdr ikke har sett den.
 
-## Utseende
+## Konfigurasjon
 
-Prefikset og `b` åpner utseende-menyen. Valget gjelder med en gang, og tmux
+Prefikset og `b` åpner konfigurasjonen. Valget gjelder med en gang, og tmux
 husker det i `@nerdr-utseende`.
 
 | | |

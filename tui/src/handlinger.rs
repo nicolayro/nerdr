@@ -1,4 +1,4 @@
-//! Kommandopaletten: alt nerdr kan gjøre, søkbart, med tasten ved siden av, så
+//! Handlingene: alt nerdr kan gjøre, søkbart, med tasten ved siden av, så
 //! du kommer i gang uten å kunne tmux og lærer tastene etter hvert.
 
 use ratatui::crossterm::event::KeyCode;
@@ -17,7 +17,7 @@ pub enum Handling {
     Utseende(usize, usize),
 }
 
-pub struct Kommando {
+pub struct Oppføring {
     pub navn: String,
     pub tast: String,
     pub handling: Handling,
@@ -26,27 +26,27 @@ pub struct Kommando {
 /// Rekkefølgen er den lista har uten søk, med det du oftest trenger først.
 const PREFIKSTASTER: [(KeyCode, bool, &str); 18] = [
     (KeyCode::Char('w'), false, "tilbake til lista"),
-    (KeyCode::Char(')'), false, "neste Claude i lista"),
-    (KeyCode::Char('('), false, "forrige Claude i lista"),
+    (KeyCode::Char(')'), false, "neste Claude"),
+    (KeyCode::Char('('), false, "forrige Claude"),
     (KeyCode::Char('n'), false, "neste vindu"),
     (KeyCode::Char('p'), false, "forrige vindu"),
-    (KeyCode::Char('l'), false, "vinduet du var i sist"),
+    (KeyCode::Char('l'), false, "siste vindu"),
     (KeyCode::Char('o'), false, "neste pane"),
-    (KeyCode::Char(';'), false, "forrige aktive pane"),
-    (KeyCode::Char('z'), false, "zoom inn og ut på panen"),
-    (KeyCode::Char('{'), false, "bytt plass med panen før"),
-    (KeyCode::Char('}'), false, "bytt plass med panen etter"),
-    (KeyCode::Char(' '), false, "neste oppsett for panene"),
-    (KeyCode::Char('o'), true, "roter panene"),
-    (KeyCode::Char('x'), false, "lukk panen"),
-    (KeyCode::Char('&'), false, "lukk vinduet"),
-    (KeyCode::Char('b'), false, "velg utseende"),
+    (KeyCode::Char(';'), false, "siste pane"),
+    (KeyCode::Char('z'), false, "zoom pane"),
+    (KeyCode::Char('{'), false, "flytt pane bakover"),
+    (KeyCode::Char('}'), false, "flytt pane framover"),
+    (KeyCode::Char(' '), false, "neste oppsett"),
+    (KeyCode::Char('o'), true, "roter paner"),
+    (KeyCode::Char('x'), false, "lukk pane"),
+    (KeyCode::Char('&'), false, "lukk vindu"),
+    (KeyCode::Char('b'), false, "konfigurasjon"),
     (KeyCode::Char('?'), false, "hjelp"),
-    (KeyCode::Char('d'), false, "avslutt nerdr"),
+    (KeyCode::Char('d'), false, "avslutt"),
 ];
 
 pub struct Handlinger {
-    kommandoer: Vec<Kommando>,
+    alle: Vec<Oppføring>,
     pub søk: String,
     pub valgt: usize,
 }
@@ -54,11 +54,11 @@ pub struct Handlinger {
 impl Handlinger {
     /// `ny` er valgene «Ny»-menyen har der du er.
     pub fn ny(prefiks: &str, ny: &[Valg], utseende: &Utseende) -> Handlinger {
-        let mut kommandoer: Vec<Kommando> = ny
+        let mut alle: Vec<Oppføring> = ny
             .iter()
-            .map(|&valg| Kommando { navn: navn(valg).into(), tast: format!("{prefiks} + {}", valg.tast()), handling: Handling::Ny(valg) })
+            .map(|&valg| Oppføring { navn: valg.tekst().into(), tast: format!("{prefiks} + {}", valg.tast()), handling: Handling::Ny(valg) })
             .collect();
-        kommandoer.extend(PREFIKSTASTER.iter().map(|&(kode, ctrl, navn)| Kommando {
+        alle.extend(PREFIKSTASTER.iter().map(|&(kode, ctrl, navn)| Oppføring {
             navn: navn.into(),
             tast: format!("{prefiks} {}", tast(kode, ctrl)),
             handling: Handling::Prefiks(kode, ctrl),
@@ -66,25 +66,25 @@ impl Handlinger {
         for (akse, navn) in NAVN.iter().enumerate() {
             for (i, navn) in navn.iter().enumerate() {
                 let valgt = utseende.gjelder(akse) && utseende.indeks(akse) == i;
-                kommandoer.push(Kommando {
+                alle.push(Oppføring {
                     navn: (*navn).into(),
-                    tast: if valgt { "valgt".into() } else { String::new() },
+                    tast: if valgt { "✓".into() } else { String::new() },
                     handling: Handling::Utseende(akse, i),
                 });
             }
         }
-        Handlinger { kommandoer, søk: String::new(), valgt: 0 }
+        Handlinger { alle, søk: String::new(), valgt: 0 }
     }
 
     pub fn antall(&self) -> usize {
-        self.kommandoer.len()
+        self.alle.len()
     }
 
-    /// Kommandoene søket treffer, best først, med tegnindeksene det traff.
+    /// Oppføringene søket treffer, best først, med tegnindeksene det traff.
     /// Like gode beholder rekkefølgen.
-    pub fn treff(&self) -> Vec<(&Kommando, Vec<usize>)> {
-        let mut treff: Vec<(i32, &Kommando, Vec<usize>)> = self
-            .kommandoer
+    pub fn treff(&self) -> Vec<(&Oppføring, Vec<usize>)> {
+        let mut treff: Vec<(i32, &Oppføring, Vec<usize>)> = self
+            .alle
             .iter()
             .filter_map(|k| {
                 let (poeng, tegn) = ny::poeng(&self.søk, &k.navn)?;
@@ -120,19 +120,6 @@ impl Handlinger {
     }
 }
 
-/// Teksten i «Ny»-menyen står under overskriften «ny», og trenger ordet her.
-fn navn(valg: Valg) -> &'static str {
-    match valg {
-        Valg::Mappe => "ny Claude i en mappe",
-        Valg::Claude => "ny Claude her",
-        Valg::Worktree => "ny Claude i en ny worktree",
-        Valg::Fortsett => "fortsett en samtale",
-        Valg::Terminal => "ny terminal her",
-        Valg::SideOmSide => "del side om side",
-        Valg::OverOgUnder => "del over og under",
-    }
-}
-
 fn tast(kode: KeyCode, ctrl: bool) -> String {
     let tegn = match kode {
         KeyCode::Char(' ') => "Space".to_string(),
@@ -148,22 +135,22 @@ mod tester {
     use crate::bokser::Rammer;
 
     #[test]
-    fn søket_finner_kommandoen_med_tasten() {
+    fn søket_finner_handlingen_med_tasten() {
         let mut h = Handlinger::ny("C-b", &[Valg::Mappe, Valg::Fortsett], &Utseende::ny(Rammer::Linjer));
         h.skriv("zoom");
         let (k, _) = &h.treff()[0];
-        assert_eq!((k.navn.as_str(), k.tast.as_str()), ("zoom inn og ut på panen", "C-b z"));
+        assert_eq!((k.navn.as_str(), k.tast.as_str()), ("zoom pane", "C-b z"));
         h.tøm();
-        h.skriv("mappe");
+        h.skriv("sesjon");
         assert_eq!(h.valgt(), Some(Handling::Ny(Valg::Mappe)));
     }
 
     #[test]
     fn utseendet_som_er_valgt_står_som_valgt() {
         let h = Handlinger::ny("C-b", &[], &Utseende::ny(Rammer::Linjer));
-        let linjer = h.kommandoer.iter().find(|k| k.navn == "paner med linjer").unwrap();
-        assert_eq!(linjer.tast, "valgt");
-        assert_eq!(h.kommandoer.iter().find(|k| k.navn == "paner i bokser").unwrap().tast, "");
+        let linjer = h.alle.iter().find(|k| k.navn == "paner med linjer").unwrap();
+        assert_eq!(linjer.tast, "✓");
+        assert_eq!(h.alle.iter().find(|k| k.navn == "paner i bokser").unwrap().tast, "");
     }
 
     #[test]

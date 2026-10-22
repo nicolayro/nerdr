@@ -1,5 +1,5 @@
 //! «Ny»-menyen: alt nerdr kan lage, bak én tast og én knapp, så du ikke må
-//! kunne tmux for å få en ny Claude, terminal eller worktree.
+//! kunne tmux for å få en ny Claude, terminal eller et worktree.
 
 use std::path::PathBuf;
 
@@ -7,7 +7,6 @@ use nerdr_kjerne::start;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Valg {
-    Claude,
     Worktree,
     Terminal,
     SideOmSide,
@@ -19,7 +18,6 @@ pub enum Valg {
 impl Valg {
     pub fn tast(self) -> char {
         match self {
-            Valg::Claude => 'c',
             Valg::Worktree => 'w',
             Valg::Terminal => 't',
             Valg::SideOmSide => '%',
@@ -31,13 +29,12 @@ impl Valg {
 
     pub fn tekst(self) -> &'static str {
         match self {
-            Valg::Claude => "Claude her",
-            Valg::Worktree => "Claude i en ny worktree",
-            Valg::Terminal => "terminal her",
+            Valg::Worktree => "nytt worktree",
+            Valg::Terminal => "ny terminal",
             Valg::SideOmSide => "del side om side",
             Valg::OverOgUnder => "del over og under",
-            Valg::Mappe => "Claude i en mappe",
-            Valg::Fortsett => "fortsett en samtale",
+            Valg::Mappe => "ny sesjon",
+            Valg::Fortsett => "hent samtale",
         }
     }
 }
@@ -53,7 +50,7 @@ pub struct Her {
 pub struct Meny {
     pub her: Option<Her>,
     pub valgt: usize,
-    /// Navnet på worktreen, når det skrives inn.
+    /// Navnet på worktreet, når det skrives inn.
     pub navn: Option<String>,
 }
 
@@ -63,17 +60,13 @@ impl Meny {
     }
 
     /// Claude-ene først, så en tom rad og terminalene. Uten en pane som vises,
-    /// er det ikke noe «her», og en worktree krever git.
+    /// er det ikke noe «her», og et worktree krever git.
     pub fn rader(&self) -> Vec<Option<Valg>> {
         let her = self.her.is_some();
         let git = self.her.as_ref().is_some_and(|h| h.git);
-        let mut rader: Vec<Option<Valg>> = [Valg::Mappe, Valg::Claude, Valg::Worktree, Valg::Fortsett]
+        let mut rader: Vec<Option<Valg>> = [Valg::Mappe, Valg::Worktree, Valg::Fortsett]
             .into_iter()
-            .filter(|v| match v {
-                Valg::Claude => her,
-                Valg::Worktree => git,
-                _ => true,
-            })
+            .filter(|v| *v != Valg::Worktree || git)
             .map(Some)
             .collect();
         if her {

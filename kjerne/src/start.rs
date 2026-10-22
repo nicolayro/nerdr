@@ -25,7 +25,7 @@ pub fn claude(samtale: Option<&str>) -> String {
     }
 }
 
-/// En ny Claude i en ny worktree, som Claude Code lager selv. Uten navn velger
+/// En ny Claude i et nytt worktree, som Claude Code lager selv. Uten navn velger
 /// Claude Code et. Navnet blir en branch, så det git ikke godtar i en branch,
 /// tas bort her og ikke mens du skriver, der `fiks.` er på vei til `fiks.test`.
 pub fn claude_i_worktree(navn: &str) -> String {
@@ -40,7 +40,7 @@ pub fn claude_i_worktree(navn: &str) -> String {
     }
 }
 
-/// Det som er skrevet, som navn på en worktree. Navnet skrives inn i skallet,
+/// Det som er skrevet, som navn på et worktree. Navnet skrives inn i skallet,
 /// så tegn skallet tolker, faller bort, og det kan ikke starte som et flagg
 /// eller som `..`. Mellomrom blir bindestrek.
 pub fn worktree_navn(skrevet: &str) -> String {

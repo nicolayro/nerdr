@@ -164,7 +164,7 @@ fn røtter(mapper: &str, hjem: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// En worktree i `.claude/worktrees` eller en mappe som `~/.config` er ikke
+/// Et worktree i `.claude/worktrees` eller en mappe som `~/.config` er ikke
 /// et sted du starter en ny Claude.
 fn skjult(mappe: &Path) -> bool {
     mappe.components().any(|d| d.as_os_str().to_string_lossy().starts_with('.'))

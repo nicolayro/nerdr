@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Repo {
-    /// Navnet på repoet. En worktree får navnet til repoet den er laget fra,
+    /// Navnet på repoet. Et worktree får navnet til repoet det er laget fra,
     /// ikke sin egen mappe, som `claude -w` legger under `.claude/worktrees`.
     pub navn: String,
     /// Branchen, eller de sju første tegnene av commiten når HEAD ikke peker
@@ -15,7 +15,7 @@ pub struct Repo {
 
 pub fn les(mappe: &Path) -> Option<Repo> {
     let punkt_git = mappe.ancestors().map(|m| m.join(".git")).find(|g| g.exists())?;
-    // I en worktree er `.git` en fil som peker til worktreens egen git-mappe,
+    // I et worktree er `.git` en fil som peker til worktreets egen git-mappe,
     // `<repo>/.git/worktrees/<navn>`.
     let (git, felles) = if punkt_git.is_file() {
         let peker = fs::read_to_string(&punkt_git).ok()?;

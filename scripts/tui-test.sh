@@ -114,7 +114,7 @@ printf '{"type":"user","cwd":"%s"}\n' "$KONFIG/eget" > "$KONFIG/projects/eget/to
 mkdir -p "$KONFIG/projects/annet"
 printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
 printf '{"type":"user","cwd":"%s"}\n{"type":"last-prompt"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/tom.jsonl"
-# Mappa til alfa og gamma, med samme navn og branch uansett hvilken worktree
+# Mappa til alfa og gamma, med samme navn og branch uansett hvilket worktree
 # og branch testen kjøres fra.
 mkdir -p "$KONFIG/nerdr/.git"
 echo 'ref: refs/heads/main' > "$KONFIG/nerdr/.git/HEAD"
@@ -240,16 +240,16 @@ sjekk "klikk på «hjelp» viser hjelpen" har 'trykk en tast for å lukke'
 tast x
 sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
 tast '?'
-sjekk "? viser hjelpen med n og +" har 'n  \+ +ny Claude, worktree eller terminal'
+sjekk "? viser hjelpen med n og +" har 'n  \+ +ny sesjon, worktree eller terminal'
 tast x
 sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
 tast :
-sjekk ": fra lista åpner handlingene" har '⏎ kjør · esc avbryt'
+sjekk ": fra lista åpner handlingene" har '⏎ kjør · esc lukk'
 tast Escape
 sjekk "Esc lukker dem" mangler '⏎ kjør'
 
 tast n
-sjekk "n åpner menyen med «Claude i en mappe» først" linje_har 5 '▎n  Claude i en mappe'
+sjekk "n åpner menyen med «ny sesjon» først" linje_har 5 '▎n  ny sesjon'
 tast n
 sjekk "n i menyen åpner popupen med 4 mapper og 1 prosjekt" linje_har 2 'mappe › .*5/5'
 sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 3 '▎~/git/annet'
@@ -280,13 +280,13 @@ sjekk "samme mappe igjen gir et nytt vindu i prosjekt-ny" linjer 2 maal list-win
 sjekk "nerdr er inne i det nye vinduet" i_panen
 
 tast C-b w C-r
-sjekk "C-r viser tidligere samtaler" linje_har 1 'tidligere samtaler'
+sjekk "C-r viser samtalene" linje_har 1 'hent samtale'
 sjekk "bare samtalen med meldinger, 1/1" linje_har 2 '1/1'
 sjekk "annet  Fiks testene er valgt" linje_har 3 '▎annet  Fiks testene +<1m'
 tast C-r
-sjekk "C-r bytter til mappene" linje_har 1 'ny claude'
+sjekk "C-r bytter til mappene" linje_har 1 'ny sesjon'
 tast C-r
-sjekk "C-r bytter tilbake" linje_har 1 'tidligere samtaler'
+sjekk "C-r bytter tilbake" linje_har 1 'hent samtale'
 tast Enter
 sjekk "Enter lager sesjonen annet og skriver inn claude --resume abc-123" i_pane annet 'claude --resume abc-123'
 sjekk "nerdr er inne i annet" i_panen
@@ -302,11 +302,11 @@ tast k k k k k k k k
 sjekk "k opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
 
 tast +
-sjekk "+ åpner menyen" har 'c  Claude her'
+sjekk "+ åpner menyen" har 't  ny terminal'
 sjekk "menyen sier hvor det nye havner" har 'i ~/nerdr'
-sjekk "i et git-repo kan du lage en worktree" har 'w  Claude i en ny worktree'
+sjekk "i et git-repo kan du lage et worktree" har 'w  nytt worktree'
 tast Escape
-sjekk "Esc lukker menyen" mangler 'Claude her'
+sjekk "Esc lukker menyen" mangler 't  ny terminal'
 sjekk "og du er i lista" i_lista
 
 tast + t
@@ -317,20 +317,15 @@ tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 
 tast C-b +
-sjekk "C-b + åpner menyen fra panen" har 'c  Claude her'
-tast c
-sjekk "c skriver inn claude i et nytt vindu i alfa" i_pane alfa:1 claude
-sjekk "nerdr er inne i den nye" i_panen
-sjekk "den nye står med ◌" har '^▎ ◌  nerdr'
-tast C-b '&' y
-sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
-
-tast C-b w + w
-sjekk "w spør etter navnet på worktreen" har 'navn › '
+sjekk "C-b + åpner menyen fra panen" har 't  ny terminal'
+tast w
+sjekk "w spør etter navnet på worktreet" har 'navn › '
 tast -l 'fiks testene;'
 sjekk "mellomrom blir bindestrek, og ; faller bort" har 'navn › fiks-testene '
 tast Enter
 sjekk "Enter skriver inn claude -w med navnet" i_pane alfa:1 'claude -w fiks-testene'
+sjekk "nerdr er inne i den nye" i_panen
+sjekk "den nye står med ◌" har '^▎ ◌  nerdr'
 tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 tast C-b w
@@ -344,9 +339,9 @@ sjekk "lukket igjen" linjer 1 maal list-panes -t alfa:0
 tast C-b w
 
 klikk 3 16
-sjekk "klikk på «+ ny» åpner menyen" har 'c  Claude her'
+sjekk "klikk på «+ ny» åpner menyen" har 't  ny terminal'
 klikk 100 15
-sjekk "klikk utenfor lukker den" mangler 'Claude her'
+sjekk "klikk utenfor lukker den" mangler 't  ny terminal'
 klikk "$(kolonne 1 ' + ')" 1
 sjekk "klikk på + etter fanene gir en terminal i et nytt vindu" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
@@ -354,9 +349,9 @@ tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 tast C-b w
 klikk 3 16
-sjekk "menyen har en tom rad før terminalene" linje_har 9 '│ +│'
-klikk 40 10
-sjekk "klikk på «terminal her» gir et nytt vindu" linjer 2 maal list-windows -t alfa
+sjekk "menyen har en tom rad før terminalene" linje_har 8 '│ +│'
+klikk 40 9
+sjekk "klikk på «ny terminal» gir et nytt vindu" linjer 2 maal list-windows -t alfa
 sjekk "slippene etter klikkene i menyen kommer ikke fram i alfa" ikke_i_pane alfa '^[[<0;'
 tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
@@ -404,14 +399,14 @@ sjekk "C-b z igjen zoomer ut" er 0 zoom
 sjekk "begge boksene er tilbake" er 2 tell '╭'
 
 tast C-b :
-sjekk "C-b : fra panen åpner handlingene" har '⏎ kjør · esc avbryt'
+sjekk "C-b : fra panen åpner handlingene" har '⏎ kjør · esc lukk'
 tast -l zoom
-sjekk "«zoom» viser kommandoen med tasten" har 'zoom inn og ut på panen +C-b z'
+sjekk "«zoom» viser kommandoen med tasten" har 'zoom pane +C-b z'
 tast Enter
 sjekk "Enter kjører den" er 1 zoom
 sjekk "handlingene står til høyre på fanestreken" linje_har 1 ' handlinger \[C-b :\] ─$'
 klikk 100 1
-sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · esc avbryt'
+sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · esc lukk'
 tast -l zoom
 tast Enter
 sjekk "og zoom igjen zoomer ut" er 0 zoom

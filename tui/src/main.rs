@@ -1229,7 +1229,7 @@ impl App {
         self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F {}", sitat(format)), svar);
     }
 
-    /// En worktree spør først om navnet, og startes når det er skrevet.
+    /// Et worktree spør først om navnet, og startes når det er skrevet.
     ///
     /// Det som starter en Claude, går via lista, så du går inn i den nye selv
     /// om du åpnet menyen fra en pane.
@@ -1245,12 +1245,9 @@ impl App {
                 self.bytt_fokus(Fokus::Liste);
                 self.åpne_velger(valg == Valg::Fortsett);
             }
-            (Valg::Claude | Valg::Worktree, Some(her)) => {
+            (Valg::Worktree, Some(her)) => {
                 self.bytt_fokus(Fokus::Liste);
-                let claude_kommando = match valg {
-                    Valg::Worktree => start::claude_i_worktree(&navn.unwrap_or_default()),
-                    _ => start::claude(None),
-                };
+                let claude_kommando = start::claude_i_worktree(&navn.unwrap_or_default());
                 let svar = Svar::NyPane { mappe: her.mappe.clone(), claude_kommando };
                 self.nytt_vindu(&her, "#{pane_id}", svar);
             }
