@@ -9,7 +9,8 @@ use crate::taster::{PREFIKS_VARIABEL, Prefiks};
 pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
 og du kan gå inn i den og skrive.";
 
-pub const TASTER: [(&str, &str); 7] = [
+pub const TASTER: [(&str, &str); 8] = [
+    (":", "alle handlingene, søkbare"),
     ("↑↓  k j", "velg Claude"),
     ("⏎", "gå inn i sesjonen"),
     ("klikk", "velg Claude, dobbeltklikk går inn"),
@@ -20,7 +21,8 @@ pub const TASTER: [(&str, &str); 7] = [
 ];
 
 /// Etter prefikset, fra lista og fra panen.
-pub const PREFIKSTASTER: [(&str, &str); 22] = [
+pub const PREFIKSTASTER: [(&str, &str); 23] = [
+    (":", "alle handlingene, søkbare"),
     ("+", "ny Claude, worktree eller terminal"),
     ("c", "nytt vindu i mappa til panen"),
     ("n p", "neste og forrige vindu"),

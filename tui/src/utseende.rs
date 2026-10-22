@@ -77,6 +77,17 @@ const VERDIER: [&[&str]; 8] = [
     &["ingen", "fet", "farge"],
     &["venstre", "høyre"],
 ];
+/// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
+pub const NAVN: [&[&str]; 8] = [
+    &["paner i bokser", "paner med linjer"],
+    &["lite farge", "middels farge", "mye farge"],
+    &["tett liste", "vanlig liste", "romslig liste"],
+    &["vis tiden", "skjul tiden"],
+    &["ordne som nerdr", "ordne etter mappe", "ordne etter aktivitet"],
+    &["oppgaven på 1 linje", "oppgaven på 2 linjer", "oppgaven på 3 linjer"],
+    &["repoet dempet", "repoet i fet", "repoet i farge"],
+    &["tegnet til venstre", "tegnet til høyre"],
+];
 const PANER: [Rammer; 2] = [Rammer::Bokser, Rammer::Linjer];
 const FARGER: [Farge; 3] = [Farge::Lite, Farge::Middels, Farge::Mye];
 const PLASSER: [Plass; 3] = [Plass::Tett, Plass::Vanlig, Plass::Romslig];
@@ -118,7 +129,7 @@ impl Utseende {
         i.unwrap_or(0)
     }
 
-    fn sett(&mut self, akse: usize, i: usize) {
+    pub fn sett(&mut self, akse: usize, i: usize) {
         match akse {
             0 => self.paner = PANER[i],
             1 => self.farge = FARGER[i],

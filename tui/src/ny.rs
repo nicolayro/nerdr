@@ -232,7 +232,7 @@ fn poeng_for(k: &Kandidat, søk: &str) -> Option<(i32, Vec<usize>)> {
 /// skille store og små. Bokstaver som står inntil hverandre og bokstaver først i
 /// et ord gir mer, så `ner` velger `nerdr` framfor `annet-er`. Hver
 /// startposisjon prøves, siden det første treffet ikke alltid er det beste.
-fn poeng(søk: &str, tekst: &str) -> Option<(i32, Vec<usize>)> {
+pub fn poeng(søk: &str, tekst: &str) -> Option<(i32, Vec<usize>)> {
     let søk: Vec<char> = søk.to_lowercase().chars().collect();
     let tekst: Vec<char> = tekst.to_lowercase().chars().collect();
     let Some(&første) = søk.first() else { return Some((0, Vec::new())) };

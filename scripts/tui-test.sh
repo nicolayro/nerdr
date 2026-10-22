@@ -243,6 +243,10 @@ tast '?'
 sjekk "? viser hjelpen med n og +" har 'n  \+ +ny Claude, worktree eller terminal'
 tast x
 sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
+tast :
+sjekk ": fra lista åpner handlingene" har '⏎ kjør · esc avbryt'
+tast Escape
+sjekk "Esc lukker dem" mangler '⏎ kjør'
 
 tast n
 sjekk "n åpner menyen med «Claude i en mappe» først" linje_har 5 '▎n  Claude i en mappe'
@@ -398,6 +402,19 @@ sjekk "med zoom vises bare én boks" er 1 tell '╭'
 tast C-b z
 sjekk "C-b z igjen zoomer ut" er 0 zoom
 sjekk "begge boksene er tilbake" er 2 tell '╭'
+
+tast C-b :
+sjekk "C-b : fra panen åpner handlingene" har '⏎ kjør · esc avbryt'
+tast -l zoom
+sjekk "«zoom» viser kommandoen med tasten" har 'zoom inn og ut på panen +C-b z'
+tast Enter
+sjekk "Enter kjører den" er 1 zoom
+sjekk "handlingene står til høyre på fanestreken" linje_har 1 ' handlinger \[C-b :\] ─$'
+klikk 100 1
+sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · esc avbryt'
+tast -l zoom
+tast Enter
+sjekk "og zoom igjen zoomer ut" er 0 zoom
 
 maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}x#{window_height} >> $KONFIG/storrelser'"
 tast C-b ')'

@@ -15,6 +15,7 @@ use crate::bokser::{Boks, Rammer};
 use crate::markering;
 use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf};
+use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::meny::Meny;
 use crate::tekst::{med_tilde, varighet};
@@ -104,6 +105,9 @@ pub fn alt(f: &mut Frame, app: &App) {
         tegn_hjelp(buf, område, &app.prefiks.navn());
     } else if let Some(akse) = app.utseende_meny {
         tegn_utseende(buf, område, &app.utseende, akse);
+    } else if let Some(handlinger) = &app.handlinger {
+        let markør = tegn_handlinger(buf, område, handlinger);
+        f.set_cursor_position(markør);
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
@@ -413,6 +417,31 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
         let stil = if mus == Some(&Mål::NyFane) { under_musen() } else { SVAK };
         buf.set_string(pluss.start, 0, " + ", stil);
     }
+    if let Some(x) = handlingsknapp(app) {
+        let stil = if mus == Some(&Mål::Handlinger) { under_musen() } else { Style::new() };
+        let tekst = handlingsknapp_tekst(app);
+        buf.set_string(x.start, 0, &tekst, VANLIG.patch(stil));
+        let tast = tekst.find('[').unwrap_or(0);
+        buf.set_string(x.start + tast as u16, 0, &tekst[tast..], SVAK.patch(stil));
+    }
+}
+
+fn handlingsknapp_tekst(app: &App) -> String {
+    format!(" handlinger [{} :] ", app.prefiks.navn())
+}
+
+/// Ytterst til høyre på fanestreken, så den er der både fra lista og fra
+/// panen, når fanene gir plass.
+fn handlingsknapp(app: &App) -> Option<Range<u16>> {
+    let v = app.visning;
+    let bredde = handlingsknapp_tekst(app).chars().count() as u16;
+    let fra = v.right().checked_sub(bredde + 1)?;
+    let opptatt = ny_fane(app).map(|r| r.end).or(faner(app).last().map(|f| f.til)).unwrap_or(v.x);
+    (fra > opptatt).then_some(fra..fra + bredde)
+}
+
+pub fn handlingsknapp_på(app: &App, x: u16) -> bool {
+    handlingsknapp(app).is_some_and(|r| r.contains(&x))
 }
 
 /// Vinduet til fanen i kolonne `x`.
@@ -629,6 +658,40 @@ pub fn menyvalg_på(app: &App, x: u16, y: u16) -> Option<usize> {
 pub fn i_menyen(app: &App, x: u16, y: u16) -> bool {
     let ramme = app.meny.as_ref().and_then(|m| meny_boks(skjerm(app), m));
     ramme.is_some_and(|r| r.contains((x, y).into()))
+}
+
+/// Kommandopaletten midt på skjermen, med tasten til høyre. Gir der markøren
+/// skal stå i søkefeltet.
+fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger) -> (u16, u16) {
+    let Some(boks) = boks(buf, område, 56, VELGER_LINJER + 4, "handlinger", "⏎ kjør · esc avbryt") else {
+        return (0, 0);
+    };
+    let indre = (boks.width - 4) as usize;
+    let treff = handlinger.treff();
+    let (x, y) = (boks.x + 2, boks.y + 1);
+    let etter = buf.set_stringn(x, y, "› ", indre, Style::new().fg(ORANSJE)).0;
+    let markør = buf.set_stringn(etter, y, kutt(&handlinger.søk, indre.saturating_sub(10)), indre, VANLIG).0;
+    let antall = format!("{}/{}", treff.len(), handlinger.antall());
+    buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
+
+    let linjer = (boks.height - 3) as usize;
+    let fra = handlinger.valgt.saturating_sub(linjer - 1);
+    for (i, (k, tegn)) in treff.iter().enumerate().skip(fra).take(linjer) {
+        let y = boks.y + 2 + (i - fra) as u16;
+        let valgt = i == handlinger.valgt;
+        if valgt {
+            buf.set_style(Rect::new(boks.x + 1, y, boks.width - 2, 1), markert());
+            buf.set_string(boks.x + 1, y, "▎", VANLIG);
+        }
+        let bredde = k.tast.chars().count();
+        buf.set_string(boks.right() - 2 - bredde as u16, y, &k.tast, SVAK);
+        let stil = if valgt { STERK } else { VANLIG };
+        for (n, c) in kutt(&k.navn, indre.saturating_sub(bredde + 2)).chars().enumerate() {
+            let stil = if tegn.contains(&n) { Style::new().fg(ORANSJE) } else { stil };
+            buf.set_string(x + n as u16, y, c.encode_utf8(&mut [0; 4]), stil);
+        }
+    }
+    (markør, y)
 }
 
 /// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.

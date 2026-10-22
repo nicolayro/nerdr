@@ -1,5 +1,6 @@
 mod bokser;
 mod grupper;
+mod handlinger;
 mod hjelp;
 mod kommandoer;
 mod markering;
@@ -19,6 +20,7 @@ use std::{env, io, thread};
 
 use bokser::Boks;
 use grupper::{Plass, Rad};
+use handlinger::{Handling, Handlinger};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{self, FELT, Pane};
 use nerdr_kjerne::{git, konfigkatalog, oppsett, start, tmux};
@@ -110,6 +112,8 @@ enum Mål {
     Knapp(Knapp),
     /// `+` etter fanene.
     NyFane,
+    /// «handlinger» til høyre på fanestreken.
+    Handlinger,
     /// Streken mellom lista og panen, som kan dras.
     Skille,
     /// Indeksen i `Meny::valg`.
@@ -225,6 +229,7 @@ struct App {
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
     meny: Option<Meny>,
+    handlinger: Option<Handlinger>,
     hjelp: bool,
     /// Pane-id → mappe og starttid for Claude-er nerdr har startet, til de
     /// står i registeret. Oppstarten tar flere sekunder, og så lenge vises de
@@ -393,6 +398,7 @@ impl App {
             kopiert: None,
             velger: None,
             meny: None,
+            handlinger: None,
             hjelp: false,
             nye: HashMap::new(),
             gå_inn_i: None,
@@ -515,16 +521,20 @@ impl App {
             }
             Hendelse::Term(Event::Key(k)) if k.kind == KeyEventKind::Press => self.tast(k),
             Hendelse::Term(Event::Mouse(m)) => self.mus(m),
-            Hendelse::Term(Event::Paste(tekst)) => match (&mut self.velger, &mut self.meny) {
-                (Some(velger), _) => {
+            Hendelse::Term(Event::Paste(tekst)) => match (&mut self.handlinger, &mut self.velger, &mut self.meny) {
+                (Some(handlinger), ..) => {
+                    handlinger.skriv(&tekst);
+                    true
+                }
+                (None, Some(velger), _) => {
                     velger.skriv(&tekst);
                     true
                 }
-                (None, Some(meny)) => {
+                (None, None, Some(meny)) => {
                     meny.skriv(&tekst);
                     true
                 }
-                (None, None) => {
+                (None, None, None) => {
                     self.lim_inn(&tekst);
                     false
                 }
@@ -740,6 +750,7 @@ impl App {
             }
             KeyCode::Char('?') => return self.hjelp = true,
             KeyCode::Char('+') => return self.åpne_meny(),
+            KeyCode::Char(':') => return self.åpne_handlinger(),
             _ => {}
         }
         let (Some(aktiv), Some(vindu)) = (self.aktiv().cloned(), self.vist.as_ref().map(|v| sitat(v))) else {
@@ -1050,9 +1061,30 @@ impl App {
                 _ => return false,
             };
             self.utseende.endre(akse, steg);
-            // Rammene endrer hvor mye plass tmux får.
-            self.utdatert = true;
-            self.send(&format!("set-option -g {} {}", utseende::OPTION, sitat(&self.utseende.tekst())), Svar::Ingenting);
+            self.lagre_utseende();
+            return true;
+        }
+        if let Some(handlinger) = &mut self.handlinger {
+            let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+            match k.code {
+                KeyCode::Esc => self.handlinger = None,
+                KeyCode::Char('c') if ctrl => self.handlinger = None,
+                KeyCode::Enter => {
+                    let valgt = handlinger.valgt();
+                    self.handlinger = None;
+                    if let Some(handling) = valgt {
+                        self.kjør(handling);
+                    }
+                }
+                KeyCode::Up => handlinger.flytt(-1),
+                KeyCode::Char('p' | 'k') if ctrl => handlinger.flytt(-1),
+                KeyCode::Down => handlinger.flytt(1),
+                KeyCode::Char('n' | 'j') if ctrl => handlinger.flytt(1),
+                KeyCode::Char('u') if ctrl => handlinger.tøm(),
+                KeyCode::Backspace => handlinger.slett(),
+                KeyCode::Char(c) if !ctrl => handlinger.skriv(c.encode_utf8(&mut [0; 4])),
+                _ => return false,
+            }
             return true;
         }
         if let Some(velger) = &mut self.velger {
@@ -1143,6 +1175,7 @@ impl App {
             KeyCode::Char('n' | '+') => self.åpne_meny(),
             KeyCode::Char('r') if k.modifiers.contains(KeyModifiers::CONTROL) => self.åpne_velger(true),
             KeyCode::Char('?') => self.hjelp = true,
+            KeyCode::Char(':') => self.åpne_handlinger(),
             _ => return false,
         }
         true
@@ -1160,6 +1193,34 @@ impl App {
 
     fn åpne_meny(&mut self) {
         self.meny = Some(Meny::ny(self.her()));
+    }
+
+    fn åpne_handlinger(&mut self) {
+        let ny = Meny::ny(self.her()).valg();
+        self.handlinger = Some(Handlinger::ny(&self.prefiks.navn(), &ny, &self.utseende));
+    }
+
+    fn kjør(&mut self, handling: Handling) {
+        match handling {
+            Handling::Ny(valg) => {
+                self.åpne_meny();
+                self.velg_ny(valg);
+            }
+            Handling::Prefiks(kode, ctrl) => {
+                let m = if ctrl { KeyModifiers::CONTROL } else { KeyModifiers::NONE };
+                self.prefikstast(KeyEvent::new(kode, m));
+            }
+            Handling::Utseende(akse, i) => {
+                self.utseende.sett(akse, i);
+                self.lagre_utseende();
+            }
+        }
+    }
+
+    fn lagre_utseende(&mut self) {
+        // Rammene endrer hvor mye plass tmux får.
+        self.utdatert = true;
+        self.send(&format!("set-option -g {} {}", utseende::OPTION, sitat(&self.utseende.tekst())), Svar::Ingenting);
     }
 
     /// Svaret er det `format` gir for det nye vinduet.
@@ -1249,7 +1310,7 @@ impl App {
     /// under en mus som står stille.
     fn under_musen(&self) -> Option<Mål> {
         let (x, y) = self.musen?;
-        if self.velger.is_some() || self.hjelp || self.utseende_meny.is_some() {
+        if self.velger.is_some() || self.handlinger.is_some() || self.hjelp || self.utseende_meny.is_some() {
             return None;
         }
         if self.meny.is_some() {
@@ -1267,7 +1328,8 @@ impl App {
         }
         if y < v.y {
             let ny = tegn::ny_fane_på(self, x).then_some(Mål::NyFane);
-            return tegn::fane_på(self, x).map(Mål::Fane).or(ny);
+            let handlinger = tegn::handlingsknapp_på(self, x).then_some(Mål::Handlinger);
+            return tegn::fane_på(self, x).map(Mål::Fane).or(ny).or(handlinger);
         }
         let inni = |r: Rect| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
         let boks = self.bokser().into_iter().find(|b| inni(b.ramme.unwrap_or(b.innhold)))?;
@@ -1295,7 +1357,7 @@ impl App {
         if m.kind == MouseEventKind::Down(MouseButton::Left) {
             self.svelg_slipp = true;
         }
-        if self.velger.is_some() || self.hjelp || self.utseende_meny.is_some() {
+        if self.velger.is_some() || self.handlinger.is_some() || self.hjelp || self.utseende_meny.is_some() {
             return false;
         }
         if self.meny.is_some() {
@@ -1333,6 +1395,8 @@ impl App {
             }
             if let Some(vindu) = tegn::fane_på(self, m.column) {
                 self.vis_vindu(vindu);
+            } else if tegn::handlingsknapp_på(self, m.column) {
+                self.åpne_handlinger();
             } else if tegn::ny_fane_på(self, m.column)
                 && let Some(her) = self.her()
             {

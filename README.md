@@ -30,6 +30,7 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 
 | Tast | Hva |
 | --- | --- |
+| `:` | Alt nerdr kan gjøre, søkbart |
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
 | `n` `+` | Ny Claude, worktree eller terminal |
@@ -41,6 +42,11 @@ Nederst i lista står «avslutt» med tasten som virker der du er: `q` fra lista
 og prefikset og `d` fra panen. Claude-ene kjører videre i tmux når nerdr
 avslutter, og er der neste gang du starter nerdr. `tmux kill-server` stopper
 tmux og alt som kjører i det.
+
+`:` åpner handlingene, og fra panen er det prefikset og `:`. Du kan også
+klikke på «handlinger» til høyre på streken med fanene. Der står alt nerdr kan
+gjøre, med tasten ved siden av, og du søker fram det du vil og trykker `⏎`.
+Valgene i utseende-menyen står der også, som «mye farge» og «skjul tiden».
 
 Et klikk på en Claude i lista velger den, og et dobbeltklikk går inn i den. Et
 klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Klikk og
@@ -61,6 +67,7 @@ virker både fra lista og fra panen:
 
 | Etter prefikset | Hva |
 | --- | --- |
+| `:` | Alt nerdr kan gjøre, søkbart |
 | `+` | Ny Claude, worktree eller terminal |
 | `c` | Nytt vindu i mappa til panen |
 | `n` `p` | Neste og forrige vindu |
