@@ -14,16 +14,17 @@ pub const TASTER: [(&str, &str); 8] = [
     ("↑↓  k j", "velg Claude"),
     ("⏎", "gå inn i sesjonen"),
     ("klikk", "velg Claude, dobbeltklikk går inn"),
-    ("n  +", "ny sesjon, worktree eller terminal"),
+    ("n  +", "ny sesjon eller terminal"),
     ("C-r", "hent samtale"),
     ("?", "denne hjelpen"),
     ("q", "avslutt"),
 ];
 
 /// Etter prefikset, fra lista og fra panen.
-pub const PREFIKSTASTER: [(&str, &str); 23] = [
+pub const PREFIKSTASTER: [(&str, &str); 24] = [
     (":", "handlinger: alt nerdr kan gjøre"),
-    ("+", "ny sesjon, worktree eller terminal"),
+    ("f", "ny sesjon"),
+    ("r", "hent samtale"),
     ("c", "ny terminal"),
     ("n p", "neste og forrige vindu"),
     ("0-9", "vinduet med det nummeret"),

@@ -56,7 +56,7 @@ impl Handlinger {
     pub fn ny(prefiks: &str, ny: &[Valg], utseende: &Utseende) -> Handlinger {
         let mut alle: Vec<Oppføring> = ny
             .iter()
-            .map(|&valg| Oppføring { navn: valg.tekst().into(), tast: format!("{prefiks} + {}", valg.tast()), handling: Handling::Ny(valg) })
+            .map(|&valg| Oppføring { navn: valg.tekst().into(), tast: format!("{prefiks} {}", valg.prefikstast()), handling: Handling::Ny(valg) })
             .collect();
         alle.extend(PREFIKSTASTER.iter().map(|&(kode, ctrl, navn)| Oppføring {
             navn: navn.into(),

@@ -33,7 +33,7 @@ tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 | `:` | Handlinger: alt nerdr kan gjøre, søkbart |
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
-| `n` `+` | Ny sesjon, worktree eller terminal |
+| `n` `+` | Ny sesjon eller terminal |
 | `C-r` | Hent en tidligere samtale |
 | `?` | Hjelp |
 | `q` | Avslutt, fra lista |
@@ -68,7 +68,8 @@ virker både fra lista og fra panen:
 | Etter prefikset | Hva |
 | --- | --- |
 | `:` | Handlinger: alt nerdr kan gjøre, søkbart |
-| `+` | Ny sesjon, worktree eller terminal |
+| `f` | Ny sesjon, som i tmux-sessionizer |
+| `r` | Hent en tidligere samtale |
 | `c` | Ny terminal, i mappa til panen |
 | `n` `p` | Neste og forrige vindu |
 | `0`–`9` | Vinduet med det nummeret |
@@ -118,17 +119,16 @@ er lukket, venter på deg neste gang.
 
 ### Starte og fortsette
 
-`n` eller `+` åpner en meny med alt nerdr kan lage. Fra panen er det
-prefikset og `+`, og med musen «+ ny» nederst i lista. Det som ikke har en egen
-mappe, legges i mappa og sesjonen til panen som vises:
+`n` eller `+` åpner en meny med alt nerdr kan lage, og med musen «+ ny»
+nederst i lista. Fra panen har hvert valg sin tast etter prefikset. Det som
+ikke har en egen mappe, legges i mappa og sesjonen til panen som vises:
 
-| | |
-| --- | --- |
-| `n` | Ny sesjon: Claude i en mappe du velger |
-| `w` | Nytt worktree med Claude i, med `claude -w` og navnet du skriver. Bare i et git-repo. |
-| `r` | Hent samtale, som `C-r` |
-| `t` | Ny terminal i et nytt vindu, som `+` etter fanene |
-| `%` `"` | Del vinduet side om side eller over og under |
+| | | Etter prefikset |
+| --- | --- | --- |
+| `n` | Ny sesjon: Claude i en mappe du velger | `f` |
+| `r` | Hent samtale, som `C-r` | `r` |
+| `t` | Ny terminal i et nytt vindu, som `+` etter fanene | `c` |
+| `%` `"` | Del vinduet side om side eller over og under | `%` `"` |
 
 `n` i menyen åpner en popup der du søker fram en mappe, og `⏎` starter `claude`
 der i en tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den et nytt

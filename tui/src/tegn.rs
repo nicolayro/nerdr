@@ -115,9 +115,7 @@ pub fn alt(f: &mut Frame, app: &App) {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
     } else if let Some(meny) = &app.meny {
-        if let Some(markør) = tegn_meny(buf, område, meny, mus.as_ref()) {
-            f.set_cursor_position(markør);
-        }
+        tegn_meny(buf, område, meny, mus.as_ref());
     } else if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app, &bokser)) {
         let i = boks.innhold;
         if x < i.width && y < i.height {
@@ -497,7 +495,7 @@ fn knapper(app: &App, y: u16) -> Vec<(Knapp, Range<u16>, String)> {
         Fokus::Liste => (" + ny [n] ".to_string(), " hjelp [?] ".to_string(), " avslutt [q] ".to_string()),
         Fokus::Pane => {
             let prefiks = app.prefiks.navn();
-            (format!(" + ny [{prefiks} +] "), format!(" hjelp [{prefiks} ?] "), format!(" avslutt [{prefiks} d] "))
+            (format!(" + ny [{prefiks} f] "), format!(" hjelp [{prefiks} ?] "), format!(" avslutt [{prefiks} d] "))
         }
     };
     let slutt = liste_bredde(app) - 1;
@@ -602,29 +600,13 @@ fn meny_topp(meny: &Meny) -> u16 {
 }
 
 fn meny_boks(område: Rect, meny: &Meny) -> Option<Rect> {
-    let høyde = match meny.navn {
-        Some(_) => 5,
-        None => meny_topp(meny) + meny.rader().len() as u16 + 2,
-    };
-    midt_på(område, MENY_BREDDE, høyde)
+    midt_på(område, MENY_BREDDE, meny_topp(meny) + meny.rader().len() as u16 + 2)
 }
 
-/// Gir der markøren skal stå når navnet på et worktree skrives inn.
-fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -> Option<(u16, u16)> {
-    let (tittel, hint) = match meny.navn {
-        Some(_) => ("nytt worktree", "⏎ start · esc tilbake"),
-        None => ("ny", "⏎ velg · esc avbryt"),
-    };
-    let plass = meny_boks(område, meny)?;
-    let ramme = boks(buf, område, plass.width, plass.height, tittel, hint)?;
+fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) {
+    let Some(plass) = meny_boks(område, meny) else { return };
+    let Some(ramme) = boks(buf, område, plass.width, plass.height, "ny", "⏎ velg · esc avbryt") else { return };
     let (x, indre) = (ramme.x + 2, (ramme.width - 4) as usize);
-    if let Some(navn) = &meny.navn {
-        let y = ramme.y + 1;
-        let etter = buf.set_stringn(x, y, "navn › ", indre, Style::new().fg(ORANSJE)).0;
-        let markør = buf.set_stringn(etter, y, navn, indre.saturating_sub(7), VANLIG).0;
-        buf.set_stringn(x, y + 2, "Uten navn velger Claude et.", indre, SVAK);
-        return Some((markør, y));
-    }
     if let Some(her) = &meny.her {
         let sti = kutt_foran(&med_tilde(&her.mappe), indre.saturating_sub(2));
         buf.set_stringn(x, ramme.y + 1, format!("i {sti}"), indre, SVAK);
@@ -643,7 +625,6 @@ fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) -
         buf.set_string(x, y, valg.tast().to_string(), Style::new().fg(ORANSJE));
         buf.set_stringn(x + 3, y, valg.tekst(), indre.saturating_sub(3), if valgt { STERK } else { VANLIG });
     }
-    None
 }
 
 /// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
@@ -670,7 +651,7 @@ fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
 
 /// Valget i menyen på `x` og `y`, som indeks i `Meny::valg`.
 pub fn menyvalg_på(app: &App, x: u16, y: u16) -> Option<usize> {
-    let meny = app.meny.as_ref().filter(|m| m.navn.is_none())?;
+    let meny = app.meny.as_ref()?;
     let ramme = meny_boks(skjerm(app), meny)?;
     let rad = y.checked_sub(ramme.y + 1 + meny_topp(meny))? as usize;
     let rader = meny.rader();

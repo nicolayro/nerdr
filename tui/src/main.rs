@@ -521,7 +521,7 @@ impl App {
             }
             Hendelse::Term(Event::Key(k)) if k.kind == KeyEventKind::Press => self.tast(k),
             Hendelse::Term(Event::Mouse(m)) => self.mus(m),
-            Hendelse::Term(Event::Paste(tekst)) => match (&mut self.handlinger, &mut self.velger, &mut self.meny) {
+            Hendelse::Term(Event::Paste(tekst)) => match (&mut self.handlinger, &mut self.velger, &self.meny) {
                 (Some(handlinger), ..) => {
                     handlinger.skriv(&tekst);
                     true
@@ -530,10 +530,7 @@ impl App {
                     velger.skriv(&tekst);
                     true
                 }
-                (None, None, Some(meny)) => {
-                    meny.skriv(&tekst);
-                    true
-                }
+                (None, None, Some(_)) => false,
                 (None, None, None) => {
                     self.lim_inn(&tekst);
                     false
@@ -749,7 +746,7 @@ impl App {
                 return;
             }
             KeyCode::Char('?') => return self.hjelp = true,
-            KeyCode::Char('+') => return self.åpne_meny(),
+            KeyCode::Char(c @ ('f' | 'r')) if !ctrl => return self.ny_sesjon(c == 'r'),
             KeyCode::Char(':') => return self.åpne_handlinger(),
             _ => {}
         }
@@ -1113,24 +1110,16 @@ impl App {
         }
         if let Some(meny) = &mut self.meny {
             let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-            match (k.code, &mut meny.navn) {
-                (KeyCode::Char('c'), _) if ctrl => self.meny = None,
-                (KeyCode::Esc, Some(_)) => meny.navn = None,
-                (KeyCode::Esc, None) => self.meny = None,
-                (KeyCode::Enter, Some(_)) => self.velg_ny(Valg::Worktree),
-                (KeyCode::Backspace, Some(navn)) => {
-                    navn.pop();
-                }
-                (KeyCode::Char('u'), Some(navn)) if ctrl => navn.clear(),
-                (KeyCode::Char(c), Some(_)) if !ctrl => meny.skriv(c.encode_utf8(&mut [0; 4])),
-                (_, Some(_)) => return false,
-                (KeyCode::Up | KeyCode::Char('k'), None) => meny.flytt(-1),
-                (KeyCode::Down | KeyCode::Char('j'), None) => meny.flytt(1),
-                (KeyCode::Enter, None) => {
+            match k.code {
+                KeyCode::Char('c') if ctrl => self.meny = None,
+                KeyCode::Esc => self.meny = None,
+                KeyCode::Up | KeyCode::Char('k') => meny.flytt(-1),
+                KeyCode::Down | KeyCode::Char('j') => meny.flytt(1),
+                KeyCode::Enter => {
                     let valg = meny.valg()[meny.valgt];
                     self.velg_ny(valg);
                 }
-                (KeyCode::Char(c), None) if !ctrl => {
+                KeyCode::Char(c) if !ctrl => {
                     let Some(valg) = meny.valg().into_iter().find(|v| v.tast() == c) else { return false };
                     self.velg_ny(valg);
                 }
@@ -1187,7 +1176,6 @@ impl App {
             sesjon_id: p.sesjon_id.clone(),
             pane_id: p.id.clone(),
             mappe: p.mappe.clone(),
-            git: git::les(&p.mappe).is_some(),
         })
     }
 
@@ -1229,28 +1217,10 @@ impl App {
         self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F {}", sitat(format)), svar);
     }
 
-    /// Et worktree spør først om navnet, og startes når det er skrevet.
-    ///
-    /// Det som starter en Claude, går via lista, så du går inn i den nye selv
-    /// om du åpnet menyen fra en pane.
     fn velg_ny(&mut self, valg: Valg) {
-        let Some(meny) = &mut self.meny else { return };
-        if valg == Valg::Worktree && meny.navn.is_none() {
-            meny.navn = Some(String::new());
-            return;
-        }
-        let Some(Meny { her, navn, .. }) = self.meny.take() else { return };
+        let Some(Meny { her, .. }) = self.meny.take() else { return };
         match (valg, her) {
-            (Valg::Mappe | Valg::Fortsett, _) => {
-                self.bytt_fokus(Fokus::Liste);
-                self.åpne_velger(valg == Valg::Fortsett);
-            }
-            (Valg::Worktree, Some(her)) => {
-                self.bytt_fokus(Fokus::Liste);
-                let claude_kommando = start::claude_i_worktree(&navn.unwrap_or_default());
-                let svar = Svar::NyPane { mappe: her.mappe.clone(), claude_kommando };
-                self.nytt_vindu(&her, "#{pane_id}", svar);
-            }
+            (Valg::Mappe | Valg::Fortsett, _) => self.ny_sesjon(valg == Valg::Fortsett),
             (Valg::Terminal, Some(her)) => self.nytt_vindu(&her, "#{window_id}", Svar::NyttVindu),
             (Valg::SideOmSide | Valg::OverOgUnder, Some(her)) => {
                 let (pane, mappe) = (sitat(&her.pane_id), sitat(&her.mappe.to_string_lossy()));
@@ -1260,6 +1230,13 @@ impl App {
             // Valgene som trenger en pane som vises, står bare i menyen når den finnes.
             (_, None) => {}
         }
+    }
+
+    /// Det som starter en Claude, går via lista, så du går inn i den nye selv
+    /// om du startet den fra en pane.
+    fn ny_sesjon(&mut self, fortsett: bool) {
+        self.bytt_fokus(Fokus::Liste);
+        self.åpne_velger(fortsett);
     }
 
     /// Prosjektene under mappene tar tid å lese i store repoer, så velgeren

@@ -74,7 +74,7 @@ sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+
 uten_klienter() { [ -z "$(tmux -L "${1:-$MAAL}" list-clients)" ]; }
 klienter() { maal list-clients | wc -l | tr -d ' '; }
 i_lista() { linje_har 16 '^ \+ ny \[n\] +hjelp \[\?\] +avslutt \[q\] │'; }
-i_panen() { linje_har 16 '^ \+ ny \[C-b \+\] +avslutt \[C-b d\] │'; }
+i_panen() { linje_har 16 '^ \+ ny \[C-b f\] +avslutt \[C-b d\] │'; }
 nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
 gruppert() { nerdr -L "$MAAL" liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
 fra_json() { nerdr -L "$MAAL" liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
@@ -240,7 +240,7 @@ sjekk "klikk på «hjelp» viser hjelpen" har 'trykk en tast for å lukke'
 tast x
 sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
 tast '?'
-sjekk "? viser hjelpen med n og +" har 'n  \+ +ny sesjon, worktree eller terminal'
+sjekk "? viser hjelpen med n og +" har 'n  \+ +ny sesjon eller terminal'
 tast x
 sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
 tast :
@@ -249,7 +249,7 @@ tast Escape
 sjekk "Esc lukker dem" mangler '⏎ kjør'
 
 tast n
-sjekk "n åpner menyen med «ny sesjon» først" linje_har 5 '▎n  ny sesjon'
+sjekk "n åpner menyen med «ny sesjon» først" linje_har 6 '▎n  ny sesjon'
 tast n
 sjekk "n i menyen åpner popupen med 4 mapper og 1 prosjekt" linje_har 2 'mappe › .*5/5'
 sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 3 '▎~/git/annet'
@@ -304,7 +304,6 @@ sjekk "k opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
 tast +
 sjekk "+ åpner menyen" har 't  ny terminal'
 sjekk "menyen sier hvor det nye havner" har 'i ~/nerdr'
-sjekk "i et git-repo kan du lage et worktree" har 'w  nytt worktree'
 tast Escape
 sjekk "Esc lukker menyen" mangler 't  ny terminal'
 sjekk "og du er i lista" i_lista
@@ -316,19 +315,13 @@ sjekk "og du er inne i den" i_panen
 tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 
-tast C-b +
-sjekk "C-b + åpner menyen fra panen" har 't  ny terminal'
-tast w
-sjekk "w spør etter navnet på worktreet" har 'navn › '
-tast -l 'fiks testene;'
-sjekk "mellomrom blir bindestrek, og ; faller bort" har 'navn › fiks-testene '
-tast Enter
-sjekk "Enter skriver inn claude -w med navnet" i_pane alfa:1 'claude -w fiks-testene'
-sjekk "nerdr er inne i den nye" i_panen
-sjekk "den nye står med ◌" har '^▎ ◌  nerdr'
-tast C-b '&' y
-sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
-tast C-b w
+tast C-b f
+sjekk "C-b f åpner mappevelgeren fra panen" har 'mappe ›'
+tast Escape
+sjekk "Esc går til lista" i_lista
+tast Enter C-b r
+sjekk "C-b r åpner samtalene fra panen" linje_har 1 'hent samtale'
+tast Escape
 
 tast + %
 sjekk "% fra menyen deler alfa" linjer 2 maal list-panes -t alfa:0
