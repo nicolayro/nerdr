@@ -1,4 +1,5 @@
-//! Tekst du markerer med musen i en pane som ikke har slått på mus selv.
+//! Tekst du markerer i panen, med musen når panen ikke har slått på mus
+//! selv, eller i kopimodus.
 
 use std::io::Write;
 use std::ops::Range;
@@ -21,15 +22,34 @@ pub struct Markering {
     til: Punkt,
     /// Knappen er fortsatt nede.
     pub drar: bool,
+    /// Hele linjer, som `V` i kopimodus.
+    pub hele_linjer: bool,
 }
 
 impl Markering {
     pub fn ny(pane: String, punkt: Punkt) -> Markering {
-        Markering { pane, fra: punkt, til: punkt, drar: true }
+        Markering { pane, fra: punkt, til: punkt, drar: true, hele_linjer: false }
+    }
+
+    /// Fra kopimodus, der det ikke er noen knapp å slippe.
+    pub fn fra_tastene(pane: String, punkt: Punkt, hele_linjer: bool) -> Markering {
+        Markering { pane, fra: punkt, til: punkt, drar: false, hele_linjer }
     }
 
     pub fn dra(&mut self, punkt: Punkt) {
         self.til = punkt;
+    }
+
+    /// Bytter ende, som `o` i vi, og gir den som nå flyttes.
+    pub fn snu(&mut self) -> Punkt {
+        std::mem::swap(&mut self.fra, &mut self.til);
+        self.til
+    }
+
+    /// Første og siste linje.
+    pub fn spenn(&self) -> (i64, i64) {
+        let (fra, til) = self.ordnet();
+        (fra.0, til.0)
     }
 
     /// Et klikk uten at musen flyttet seg.
@@ -47,8 +67,8 @@ impl Markering {
         if linje < første || linje > siste {
             return None;
         }
-        let fra = if linje == første { fra } else { 0 };
-        let til = if linje == siste { til + 1 } else { bredde };
+        let fra = if linje == første && !self.hele_linjer { fra } else { 0 };
+        let til = if linje == siste && !self.hele_linjer { til + 1 } else { bredde };
         let til = til.min(bredde);
         (fra < til).then_some(fra..til)
     }
@@ -61,8 +81,9 @@ impl Markering {
         let linjer: Vec<String> = (første..=siste)
             .filter_map(|linje| {
                 let rad = bilde.get(usize::try_from(linje - topp).ok()?)?;
-                let kolonner = self.kolonner(linje, bredde)?;
-                Some(celler(rad, bredde, kolonner).trim_end().to_string())
+                let ruter = ruter(rad, bredde);
+                let tekst: String = self.kolonner(linje, bredde)?.map(|x| ruter[x as usize].as_str()).collect();
+                Some(tekst.trim_end().to_string())
             })
             .collect();
         linjer.join("\n").trim_matches('\n').to_string()
@@ -76,9 +97,9 @@ pub fn innhold(rad: &Linje) -> u16 {
     Span::raw(tekst.trim_end()).width() as u16
 }
 
-/// Raden tegnes slik `tegn_bilde` gjør, så kolonnene er de samme som på
-/// skjermen, også med brede tegn.
-fn celler(rad: &Linje, bredde: u16, kolonner: Range<u16>) -> String {
+/// Tegnet i hver kolonne når raden tegnes slik `tegn_bilde` gjør, så
+/// kolonnene er de samme som på skjermen. Kolonnen etter et bredt tegn er tom.
+pub fn ruter(rad: &Linje, bredde: u16) -> Vec<String> {
     let mut buf = Buffer::empty(Rect::new(0, 0, bredde, 1));
     let mut x = 0;
     for bit in rad {
@@ -88,7 +109,7 @@ fn celler(rad: &Linje, bredde: u16, kolonner: Range<u16>) -> String {
         x = buf.set_stringn(x, 0, &bit.tekst, (bredde - x) as usize, Style::new()).0;
     }
     let bred = |x: u16| Span::raw(buf[(x, 0)].symbol()).width() > 1;
-    kolonner.filter(|&x| x == 0 || !bred(x - 1)).map(|x| buf[(x, 0)].symbol()).collect()
+    (0..bredde).map(|x| if x > 0 && bred(x - 1) { String::new() } else { buf[(x, 0)].symbol().to_string() }).collect()
 }
 
 /// Til utklippstavla med det første programmet som finnes. Gir `false` når
@@ -168,6 +189,24 @@ mod tester {
         m.dra((4, 9));
         let b = bilde(&["", "  innrykk", "", "neste", "     "]);
         assert_eq!(m.tekst(&b, 0, 10), "  innrykk\n\nneste");
+    }
+
+    #[test]
+    fn hele_linjer_fra_første_til_siste_kolonne() {
+        let mut m = Markering::fra_tastene("%1".into(), (1, 4), true);
+        m.dra((2, 1));
+        assert_eq!(m.kolonner(1, 10), Some(0..10));
+        assert_eq!(m.kolonner(2, 10), Some(0..10));
+        assert_eq!(m.tekst(&bilde(&["", "en linje", "to"]), 0, 10), "en linje\nto");
+    }
+
+    #[test]
+    fn snu_bytter_ende_uten_å_endre_markeringen() {
+        let mut m = Markering::fra_tastene("%1".into(), (1, 4), false);
+        m.dra((3, 2));
+        assert_eq!(m.snu(), (1, 4));
+        assert_eq!(m.kolonner(1, 10), Some(4..10));
+        assert_eq!(m.spenn(), (1, 3));
     }
 
     #[test]
