@@ -1153,18 +1153,16 @@ impl App {
             }
             return self.markering.take().is_some();
         }
+        // Bokstaver i lista gjør ingenting utenom j og k, som i choose-tree i
+        // tmux, så den som ikke er vant til moduser, ikke trykker på noe uten
+        // å vite det.
         match k.code {
-            KeyCode::Char('q') => self.ferdig = Some(String::new()),
             KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.ferdig = Some(String::new())
             }
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
             KeyCode::Enter => self.gå_inn(),
-            KeyCode::Char('n' | '+') => self.åpne_meny(),
-            KeyCode::Char('r') if k.modifiers.contains(KeyModifiers::CONTROL) => self.åpne_velger(true),
-            KeyCode::Char('?') => self.hjelp = true,
-            KeyCode::Char(':') => self.åpne_handlinger(),
             _ => return false,
         }
         true

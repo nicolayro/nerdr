@@ -214,7 +214,7 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     let hint = match () {
         _ if matches!(app.lukke, Some(Lukke::Pane(_))) => " lukke panen? y/n".to_string(),
         _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => " lukke vinduet? y/n".to_string(),
-        _ if app.etter_prefiks => format!(" {prefiks} … + ny · w lista · ? mer"),
+        _ if app.etter_prefiks => format!(" {prefiks} … f ny · w lista · ? mer"),
         _ => return,
     };
     let plass = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
@@ -491,18 +491,14 @@ fn knapper(app: &App, y: u16) -> Vec<(Knapp, Range<u16>, String)> {
     if stripe(app) {
         return vec![(Knapp::Ny, 0..3, " + ".to_string())];
     }
-    let (ny, hjelp, avslutt) = match app.fokus {
-        Fokus::Liste => (" + ny [n] ".to_string(), " hjelp [?] ".to_string(), " avslutt [q] ".to_string()),
-        Fokus::Pane => {
-            let prefiks = app.prefiks.navn();
-            (format!(" + ny [{prefiks} f] "), format!(" hjelp [{prefiks} ?] "), format!(" avslutt [{prefiks} d] "))
-        }
-    };
+    let prefiks = app.prefiks.navn();
+    let (ny, hjelp, avslutt) =
+        (format!(" + ny [{prefiks} f] "), format!(" hjelp [{prefiks} ?] "), format!(" avslutt [{prefiks} d] "));
     let slutt = liste_bredde(app) - 1;
     let ny_til = ny.chars().count() as u16;
     let mut knapper = vec![(Knapp::Ny, 0..ny_til, ny)];
-    // «avslutt» går foran «hjelp» når det ikke er plass til begge, for fra
-    // panen går q til Claude, og uten tmux vet du ikke om prefikset og d.
+    // «avslutt» går foran «hjelp» når det ikke er plass til begge, for uten
+    // tmux vet du ikke om prefikset og d.
     let mut fra = slutt;
     for (knapp, tekst) in [(Knapp::Avslutt, avslutt), (Knapp::Hjelp, hjelp)] {
         let til = fra;
@@ -810,21 +806,24 @@ fn bryt(tekst: &str, første: usize, bredde: usize, maks: usize) -> Vec<String> 
 
 /// Det som står i stedet for panen når lista er tom, skrevet for den som
 /// ikke kjenner tmux.
-fn tom_liste(utenfor_tmux: usize) -> Vec<String> {
+fn tom_liste(utenfor_tmux: usize, prefiks: &str) -> Vec<String> {
     let mut avsnitt = vec![
         "Her er det tomt foreløpig.".to_string(),
-        "nerdr viser Claude-ene dine som kjører i tmux, og lar deg bytte mellom dem. Trykk n for å \
-         starte en ny Claude i en av mappene dine, eller C-r for å fortsette en samtale du har hatt før."
-            .to_string(),
+        format!(
+            "nerdr viser Claude-ene dine som kjører i tmux, og lar deg bytte mellom dem. Klikk på «+ ny» \
+             nederst, eller trykk {prefiks} f, for å starte en ny Claude i en av mappene dine, og {prefiks} r \
+             for å fortsette en samtale du har hatt før."
+        ),
     ];
     avsnitt.push(match utenfor_tmux {
         0 => return avsnitt,
-        1 => "Du har én Claude åpen i en vanlig terminal, utenfor tmux, og den ser ikke nerdr. Vil du ha \
-              den her, avslutter du den der den kjører, og fortsetter samtalen med C-r."
-            .to_string(),
+        1 => format!(
+            "Du har én Claude åpen i en vanlig terminal, utenfor tmux, og den ser ikke nerdr. Vil du ha \
+             den her, avslutter du den der den kjører, og fortsetter samtalen med {prefiks} r."
+        ),
         n => format!(
             "Du har {n} Claude-er åpne i vanlige terminaler, utenfor tmux, og dem ser ikke nerdr. Vil du ha \
-             en av dem her, avslutter du den der den kjører, og fortsetter samtalen med C-r."
+             en av dem her, avslutter du den der den kjører, og fortsetter samtalen med {prefiks} r."
         ),
     });
     avsnitt
@@ -838,7 +837,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
     if app.valgt.is_none() {
         let bredde = v.width.saturating_sub(4).min(64) as usize;
         let mut y = v.y + 1..v.bottom();
-        for (i, avsnitt) in tom_liste(app.utenfor_tmux).iter().enumerate() {
+        for (i, avsnitt) in tom_liste(app.utenfor_tmux, &app.prefiks.navn()).iter().enumerate() {
             let stil = if i == 0 { VANLIG } else { SVAK };
             for linje in bryt(avsnitt, bredde, bredde, usize::MAX) {
                 let Some(y) = y.next() else { return };

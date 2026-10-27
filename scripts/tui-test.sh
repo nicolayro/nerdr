@@ -73,8 +73,9 @@ mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
 uten_klienter() { [ -z "$(tmux -L "${1:-$MAAL}" list-clients)" ]; }
 klienter() { maal list-clients | wc -l | tr -d ' '; }
-i_lista() { linje_har 16 '^ \+ ny \[n\] +hjelp \[\?\] +avslutt \[q\] │'; }
-i_panen() { linje_har 16 '^ \+ ny \[C-b f\] +avslutt \[C-b d\] │'; }
+# Tastene går til lista når nerdr ikke viser markøren til panen.
+i_lista() { er 0 vert display-message -p -t vert '#{cursor_flag}'; }
+i_panen() { er 1 vert display-message -p -t vert '#{cursor_flag}'; }
 nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
 gruppert() { nerdr -L "$MAAL" liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
 fra_json() { nerdr -L "$MAAL" liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
@@ -222,10 +223,11 @@ sjekk "gamma står under FERDIG med ○, rett under VENTER" linje_har 6 '^▎ �
 sjekk "FERDIG treffer skillestreken" linje_har 5 '^ FERDIG .*┤'
 sjekk "nerdr har skrevet når du var inne i gamma, i @nerdr-sett" sett_er_tall gamma
 
-tast k
-sjekk "k opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
-klikk 5 6
-sjekk "klikk på gamma velger den" linje_har 6 '^▎ ○  gamma:0'
+tast Up
+sjekk "↑ opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
+tast Down q n
+sjekk "q og n gjør ingenting i lista" linje_har 6 '^▎ ○  gamma:0'
+sjekk "og ingen meny åpner" mangler 't  ny terminal'
 sleep 0.6
 klikk 5 6
 sjekk "to klikk med pause mellom går ikke inn" i_lista
@@ -235,21 +237,17 @@ klikk 5 3
 sjekk "klikk på alfa fra panen velger alfa og går ut i lista" linje_har 3 '^▎ ●  Fiks testene'
 sjekk "tilbake i lista" i_lista
 
-klikk 15 16
-sjekk "klikk på «hjelp» viser hjelpen" har 'trykk en tast for å lukke'
+tast C-b '?'
+sjekk "C-b ? viser hjelpen med C-b f" har 'C-b f +ny sesjon'
 tast x
 sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
-tast '?'
-sjekk "? viser hjelpen med n og +" har 'n  \+ +ny sesjon eller terminal'
-tast x
-sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
-tast :
-sjekk ": fra lista åpner handlingene" har '⏎ kjør · esc lukk'
+tast C-b :
+sjekk "C-b : fra lista åpner handlingene" har '⏎ kjør · esc lukk'
 tast Escape
 sjekk "Esc lukker dem" mangler '⏎ kjør'
 
-tast n
-sjekk "n åpner menyen med «ny sesjon» først" linje_har 6 '▎n  ny sesjon'
+klikk 3 16
+sjekk "klikk på «+ ny» åpner menyen med «ny sesjon» først" linje_har 6 '▎n  ny sesjon'
 tast n
 sjekk "n i menyen åpner popupen med 4 mapper og 1 prosjekt" linje_har 2 'mappe › .*5/5'
 sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 3 '▎~/git/annet'
@@ -265,22 +263,22 @@ tast Enter
 sjekk "Enter lager sesjonen prosjekt-ny i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny
 sjekk "claude skrives inn i prosjekt-ny" i_pane prosjekt-ny claude
 sjekk "nerdr er inne i prosjekt.ny, med ◌" linje_har 6 '^▎ ◌  prosjekt\.ny'
-sjekk "hintet viser at du er inne" i_panen
+sjekk "og tastene går dit" i_panen
 
 registrer ny prosjekt-ny idle ",\"cwd\":\"$KONFIG/git/prosjekt.ny\""
 list_straks
 sjekk "i registeret får prosjekt.ny vanlig merke" linje_har 6 '^▎ ○  prosjekt\.ny'
 
-tast C-b w n n
-sjekk "popupen åpner igjen" har 'mappe ›'
+tast C-b f
+sjekk "C-b f åpner popupen fra panen" har 'mappe ›'
 tast -l pny
 sjekk "«pny» igjen" linje_har 2 '1/5'
 tast Enter
 sjekk "samme mappe igjen gir et nytt vindu i prosjekt-ny" linjer 2 maal list-windows -t prosjekt-ny
 sjekk "nerdr er inne i det nye vinduet" i_panen
 
-tast C-b w C-r
-sjekk "C-r viser samtalene" linje_har 1 'hent samtale'
+tast C-b r
+sjekk "C-b r viser samtalene" linje_har 1 'hent samtale'
 sjekk "bare samtalen med meldinger, 1/1" linje_har 2 '1/1'
 sjekk "annet  Fiks testene er valgt" linje_har 3 '▎annet  Fiks testene +<1m'
 tast C-r
@@ -291,39 +289,33 @@ tast Enter
 sjekk "Enter lager sesjonen annet og skriver inn claude --resume abc-123" i_pane annet 'claude --resume abc-123'
 sjekk "nerdr er inne i annet" i_panen
 
-tast C-b w n n
+tast C-b f
 sjekk "popupen åpner" har 'mappe ›'
 tast Escape
 sjekk "Esc lukker popupen" mangler 'mappe ›'
 sjekk "Esc går tilbake til lista" i_lista
 sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
 
-tast k k k k k k k k
-sjekk "k opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
+tast Up Up Up Up Up Up Up Up
+sjekk "↑ opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
 
-tast +
-sjekk "+ åpner menyen" har 't  ny terminal'
+klikk 3 16
+sjekk "«+ ny» åpner menyen" har 't  ny terminal'
 sjekk "menyen sier hvor det nye havner" har 'i ~/nerdr'
 tast Escape
 sjekk "Esc lukker menyen" mangler 't  ny terminal'
 sjekk "og du er i lista" i_lista
 
-tast + t
+klikk 3 16
+tast t
 sjekk "t gir en terminal i et nytt vindu i alfa" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
 sjekk "og du er inne i den" i_panen
 tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 
-tast C-b f
-sjekk "C-b f åpner mappevelgeren fra panen" har 'mappe ›'
-tast Escape
-sjekk "Esc går til lista" i_lista
-tast Enter C-b r
-sjekk "C-b r åpner samtalene fra panen" linje_har 1 'hent samtale'
-tast Escape
-
-tast + %
+klikk 3 16
+tast %
 sjekk "% fra menyen deler alfa" linjer 2 maal list-panes -t alfa:0
 sjekk "og du er inne i den nye panen" er 1 pane_indeks
 sjekk "fra panen" i_panen
@@ -350,7 +342,7 @@ tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 tast C-b w
 tast C-b
-sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … \+ ny · w lista · \? mer'
+sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … f ny · w lista · \? mer'
 
 tast %
 sjekk "% deler alfa" linjer 2 maal list-panes -t alfa:0
@@ -461,7 +453,7 @@ sjekk "y lukker vinduet" linjer 1 maal list-windows -t alfa
 sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ +][^ ]* ─'
 tast C-b w
 
-tast C-b w k k k k k k k k
+tast C-b w Up Up Up Up Up Up Up Up
 for i in 1 2 3 4 5 6; do
   maal new-session -d -s "ekstra$i" -x 80 -y 20 -c "$MAPPE"
   registrer "ekstra$i" "ekstra$i" idle ",\"cwd\":\"$MAPPE\""
@@ -472,7 +464,7 @@ sjekk "og lista starter med luft under streken" linje_har 3 '^ VENTER'
 sjekk "øverst er det ingen pil" linje_mangler 1 '↑'
 for i in 1 2 3 4; do hjul 65 5 5; done
 sjekk "hjulet ruller lista, og øverst står det at noe venter over" linje_har 1 '↑ [0-9]+ · 1 venter'
-tast j j j j j j j j j j
+tast Down Down Down Down Down Down Down Down Down Down
 sjekk "den valgte nederst i lista vises" har '^▎ ○'
 sjekk "nederst er det ingen pil" linje_mangler 15 '↓'
 klikk 3 1
@@ -484,7 +476,7 @@ done
 list_straks
 sjekk "nerdr kobler til igjen når sesjonen den viste, forsvinner" er 1 klienter
 sjekk "når alt får plass igjen, er pilene borte" mangler '[↑↓] [0-9]'
-tast k k k k k k k k
+tast Up Up Up Up Up Up Up Up
 
 dra 36 8 46 8
 sjekk "å dra i streken gjør lista bredere" linje_har 3 '^▎ ●  Fiks testene +<1m +│ '
@@ -501,7 +493,7 @@ sjekk "dobbeltklikk igjen gir bredden tilbake" er 58x13 dimensjon alfa
 dra 46 8 2 8
 sjekk "å dra streken helt inn gir stripa" linje_har 2 '^▎● │ '
 tast C-b
-sjekk "fra stripa står hintet over panen" linje_har 16 '^ C-b … \+ ny · w lista · \? mer'
+sjekk "fra stripa står hintet over panen" linje_har 16 '^ C-b … f ny · w lista · \? mer'
 tast w
 dra 4 8 36 8
 sjekk "og å dra den ut gir lista tilbake" er 68x13 dimensjon alfa
@@ -544,9 +536,9 @@ sjekk "uten tmux-server lager nerdr en sesjon" linjer 1 tmux -L "$TOM" list-sess
 sjekk "uten Claude forklarer nerdr hva lista er" vert_har tom 'Her er det tomt foreløpig'
 sjekk "og at én Claude kjører utenfor tmux" vert_har tom 'Du har én Claude åpen i en vanlig'
 vert send-keys -t tom C-a
-sjekk "NERDR_PREFIKS gir et annet prefiks, og hintet viser det" vert_har tom 'C-a … \+ ny · w lista'
-vert send-keys -t tom w q
-sjekk "q avslutter" uten_klienter "$TOM"
+sjekk "NERDR_PREFIKS gir et annet prefiks, og hintet viser det" vert_har tom 'C-a … f ny · w lista'
+vert send-keys -t tom w q C-a d
+sjekk "q gjør ingenting, og C-a d avslutter" uten_klienter "$TOM"
 sjekk "uten tmux sier nerdr fra" inneholder "$(PATH=/finnes-ikke "$NERDR" 2>&1)" 'fant ikke tmux'
 
 echo "$antall sjekker, alle grønne"

@@ -9,15 +9,11 @@ use crate::taster::{PREFIKS_VARIABEL, Prefiks};
 pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
 og du kan gå inn i den og skrive.";
 
-pub const TASTER: [(&str, &str); 8] = [
-    (":", "handlinger: alt nerdr kan gjøre"),
+/// I lista. Alt annet er etter prefikset, eller en knapp.
+pub const TASTER: [(&str, &str); 3] = [
     ("↑↓  k j", "velg Claude"),
     ("⏎", "gå inn i sesjonen"),
     ("klikk", "velg Claude, dobbeltklikk går inn"),
-    ("n  +", "ny sesjon eller terminal"),
-    ("C-r", "hent samtale"),
-    ("?", "denne hjelpen"),
-    ("q", "avslutt"),
 ];
 
 /// Etter prefikset, fra lista og fra panen.
@@ -74,7 +70,7 @@ pub fn tekst() -> String {
          --json         JSON i stedet for tekst, med et versjonsfelt\n  \
          -h, --help     denne hjelpen\n  \
          -v, --version  versjonen\n\n\
-         Taster i TUI-et:\n",
+         I lista:\n",
         env!("CARGO_PKG_VERSION")
     );
     for (tast, hva) in TASTER {

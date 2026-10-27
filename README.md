@@ -28,23 +28,22 @@ Du kan også be Claude om å installere og sette opp nerdr etter
 Kjør `nerdr` i en vanlig terminalfane, utenfor tmux. Bare Claude som kjører i
 tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
 
+Tastene går til Claude-en du er inne i. nerdr selv styrer du med knappene,
+eller med prefikset og en tast, som i tmux. I lista er det bare disse:
+
 | Tast | Hva |
 | --- | --- |
-| `:` | Handlinger: alt nerdr kan gjøre, søkbart |
 | `↑` `↓` / `k` `j` | Velg Claude |
 | `⏎` | Gå inn i sesjonen |
-| `n` `+` | Ny sesjon eller terminal |
-| `C-r` | Hent en tidligere samtale |
-| `?` | Hjelp |
-| `q` | Avslutt, fra lista |
 
-Nederst i lista står «avslutt» med tasten som virker der du er: `q` fra lista,
-og prefikset og `d` fra panen. Claude-ene kjører videre i tmux når nerdr
-avslutter, og er der neste gang du starter nerdr. `tmux kill-server` stopper
-tmux og alt som kjører i det.
+Andre bokstaver i lista gjør ingenting, så du kan ikke trykke på noe ved et uhell.
 
-`:` åpner handlingene, og fra panen er det prefikset og `:`. Du kan også
-klikke på «handlinger» til høyre på streken med fanene. Der står alt nerdr kan
+Nederst i lista står «avslutt», med prefikset og `d`. Claude-ene kjører videre
+i tmux når nerdr avslutter, og er der neste gang du starter nerdr. `tmux
+kill-server` stopper tmux og alt som kjører i det.
+
+Prefikset og `:` åpner handlingene, og det gjør også et klikk på «handlinger»
+til høyre på streken med fanene. Der står alt nerdr kan
 gjøre, med tasten ved siden av, og du søker fram det du vil og trykker `⏎`.
 Valgene i konfigurasjonen står der også, som «mye farge» og «skjul tiden».
 
@@ -119,14 +118,14 @@ er lukket, venter på deg neste gang.
 
 ### Starte og fortsette
 
-`n` eller `+` åpner en meny med alt nerdr kan lage, og med musen «+ ny»
-nederst i lista. Fra panen har hvert valg sin tast etter prefikset. Det som
-ikke har en egen mappe, legges i mappa og sesjonen til panen som vises:
+«+ ny» nederst i lista åpner en meny med alt nerdr kan lage, og hvert valg har
+sin egen tast etter prefikset. Det som ikke har en egen mappe, legges i mappa
+og sesjonen til panen som vises:
 
 | | | Etter prefikset |
 | --- | --- | --- |
 | `n` | Ny sesjon: Claude i en mappe du velger | `f` |
-| `r` | Hent samtale, som `C-r` | `r` |
+| `r` | Hent samtale | `r` |
 | `t` | Ny terminal i et nytt vindu, som `+` etter fanene | `c` |
 | `%` `"` | Del vinduet side om side eller over og under | `%` `"` |
 
@@ -140,7 +139,7 @@ under dem, inntil fire nivåer ned, som appene i et monorepo. Et prosjekt er en 
 og testmapper. Prosjektene kommer i lista når de er lest, og til da står det
 `…` etter antallet.
 
-`C-r` viser de siste samtalene dine med mappe, tittel og alder, og `⏎`
+Prefikset og `r` viser de siste samtalene dine med mappe, tittel og alder, og `⏎`
 fortsetter den du velger, i mappa den hørte til. Samtaler som kjører, står ikke
 der. `C-r` i popupen bytter mellom samtalene og mappene.
 
@@ -156,7 +155,7 @@ med et `versjon`-felt.
 | `nerdr liste` | Claude-ene i tmux, gruppert som i TUI-et, med pane, mappe, repo, branch og oppgave |
 | `nerdr samtaler` | Tidligere samtaler, nyest først, med id, mappe og tittel |
 | `nerdr ny <mappe>` | Start en Claude i mappa, som «ny sesjon» i menyen |
-| `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som `C-r` |
+| `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som «hent samtale» |
 
 I JSON fra `liste` er `tilstand` det Claude melder selv (`venter`, `jobber`
 eller `klar`), eller `null` når nerdr ikke kjenner statusen. `merke` er det lista viser (`spør`, `ulest`, `jobber` eller
