@@ -4,7 +4,6 @@ mod handlinger;
 mod hjelp;
 mod kommandoer;
 mod markering;
-mod meny;
 mod ny;
 mod palett;
 mod taster;
@@ -28,7 +27,6 @@ use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::register::{self, Claude};
 use nerdr_kjerne::sgr::{self, Linje};
 use markering::{Markering, Punkt};
-use meny::{Meny, Valg};
 use utseende::{Orden, Utseende};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
@@ -79,8 +77,6 @@ enum Svar {
     /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
     NySesjon { navn: String, mappe: PathBuf, claude_kommando: String },
     NyPane { mappe: PathBuf, claude_kommando: String },
-    /// Svaret er pane-id-en til den nye panen.
-    NyDeling,
     Prefiks,
     /// Bredden på lista fra `LISTE_OPTION`.
     Liste,
@@ -112,18 +108,15 @@ enum Mål {
     Knapp(Knapp),
     /// `+` etter fanene.
     NyFane,
-    /// «handlinger» til høyre på fanestreken.
-    Handlinger,
     /// Streken mellom lista og panen, som kan dras.
     Skille,
-    /// Indeksen i `Meny::valg`.
-    Menyvalg(usize),
 }
 
-/// Det i lista og på fanestreken som gjør noe når du klikker.
+/// Knappene nederst i lista.
 #[derive(Clone, Copy, PartialEq)]
 enum Knapp {
     Ny,
+    Handlinger,
     Hjelp,
     Avslutt,
 }
@@ -228,7 +221,6 @@ struct App {
     kopiert: Option<Instant>,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
-    meny: Option<Meny>,
     handlinger: Option<Handlinger>,
     hjelp: bool,
     /// Pane-id → mappe og starttid for Claude-er nerdr har startet, til de
@@ -397,7 +389,6 @@ impl App {
             markering: None,
             kopiert: None,
             velger: None,
-            meny: None,
             handlinger: None,
             hjelp: false,
             nye: HashMap::new(),
@@ -521,17 +512,16 @@ impl App {
             }
             Hendelse::Term(Event::Key(k)) if k.kind == KeyEventKind::Press => self.tast(k),
             Hendelse::Term(Event::Mouse(m)) => self.mus(m),
-            Hendelse::Term(Event::Paste(tekst)) => match (&mut self.handlinger, &mut self.velger, &self.meny) {
-                (Some(handlinger), ..) => {
+            Hendelse::Term(Event::Paste(tekst)) => match (&mut self.handlinger, &mut self.velger) {
+                (Some(handlinger), _) => {
                     handlinger.skriv(&tekst);
                     true
                 }
-                (None, Some(velger), _) => {
+                (None, Some(velger)) => {
                     velger.skriv(&tekst);
                     true
                 }
-                (None, None, Some(_)) => false,
-                (None, None, None) => {
+                (None, None) => {
                     self.lim_inn(&tekst);
                     false
                 }
@@ -697,13 +687,6 @@ impl App {
                     self.prefiks = prefiks;
                 }
                 false
-            }
-            Svar::NyDeling => {
-                let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
-                self.bytt_fokus(Fokus::Pane);
-                self.aktiver(&id);
-                self.list_paner();
-                true
             }
             Svar::NyttVindu => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
@@ -1108,25 +1091,6 @@ impl App {
             }
             return true;
         }
-        if let Some(meny) = &mut self.meny {
-            let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-            match k.code {
-                KeyCode::Char('c') if ctrl => self.meny = None,
-                KeyCode::Esc => self.meny = None,
-                KeyCode::Up | KeyCode::Char('k') => meny.flytt(-1),
-                KeyCode::Down | KeyCode::Char('j') => meny.flytt(1),
-                KeyCode::Enter => {
-                    let valg = meny.valg()[meny.valgt];
-                    self.velg_ny(valg);
-                }
-                KeyCode::Char(c) if !ctrl => {
-                    let Some(valg) = meny.valg().into_iter().find(|v| v.tast() == c) else { return false };
-                    self.velg_ny(valg);
-                }
-                _ => return false,
-            }
-            return true;
-        }
         if let Some(lukke) = self.lukke.take() {
             if k.code == KeyCode::Char('y') {
                 let kommando = match lukke {
@@ -1168,30 +1132,12 @@ impl App {
         true
     }
 
-    /// Panen som vises, også når den er en terminal ved siden av Claude-en.
-    fn her(&self) -> Option<meny::Her> {
-        self.aktiv().map(|p| meny::Her {
-            sesjon_id: p.sesjon_id.clone(),
-            pane_id: p.id.clone(),
-            mappe: p.mappe.clone(),
-        })
-    }
-
-    fn åpne_meny(&mut self) {
-        self.meny = Some(Meny::ny(self.her()));
-    }
-
     fn åpne_handlinger(&mut self) {
-        let ny = Meny::ny(self.her()).valg();
-        self.handlinger = Some(Handlinger::ny(&self.prefiks.navn(), &ny, &self.utseende));
+        self.handlinger = Some(Handlinger::ny(&self.prefiks.navn(), &self.utseende));
     }
 
     fn kjør(&mut self, handling: Handling) {
         match handling {
-            Handling::Ny(valg) => {
-                self.åpne_meny();
-                self.velg_ny(valg);
-            }
             Handling::Prefiks(kode, ctrl) => {
                 let m = if ctrl { KeyModifiers::CONTROL } else { KeyModifiers::NONE };
                 self.prefikstast(KeyEvent::new(kode, m));
@@ -1207,27 +1153,6 @@ impl App {
         // Rammene endrer hvor mye plass tmux får.
         self.utdatert = true;
         self.send(&format!("set-option -g {} {}", utseende::OPTION, sitat(&self.utseende.tekst())), Svar::Ingenting);
-    }
-
-    /// Svaret er det `format` gir for det nye vinduet.
-    fn nytt_vindu(&mut self, her: &meny::Her, format: &str, svar: Svar) {
-        let (sesjon, mappe) = (sitat(&format!("{}:", her.sesjon_id)), sitat(&her.mappe.to_string_lossy()));
-        self.send(&format!("new-window -t {sesjon} -c {mappe} -P -F {}", sitat(format)), svar);
-    }
-
-    fn velg_ny(&mut self, valg: Valg) {
-        let Some(Meny { her, .. }) = self.meny.take() else { return };
-        match (valg, her) {
-            (Valg::Mappe | Valg::Fortsett, _) => self.ny_sesjon(valg == Valg::Fortsett),
-            (Valg::Terminal, Some(her)) => self.nytt_vindu(&her, "#{window_id}", Svar::NyttVindu),
-            (Valg::SideOmSide | Valg::OverOgUnder, Some(her)) => {
-                let (pane, mappe) = (sitat(&her.pane_id), sitat(&her.mappe.to_string_lossy()));
-                let retning = if valg == Valg::SideOmSide { "-h" } else { "-v" };
-                self.send(&format!("split-window {retning} -t {pane} -c {mappe} -P -F '#{{pane_id}}'"), Svar::NyDeling);
-            }
-            // Valgene som trenger en pane som vises, står bare i menyen når den finnes.
-            (_, None) => {}
-        }
     }
 
     /// Det som starter en Claude, går via lista, så du går inn i den nye selv
@@ -1285,23 +1210,19 @@ impl App {
         if self.velger.is_some() || self.handlinger.is_some() || self.hjelp || self.utseende_meny.is_some() {
             return None;
         }
-        if self.meny.is_some() {
-            return tegn::menyvalg_på(self, x, y).map(Mål::Menyvalg);
-        }
         let v = self.visning;
         if x + 1 == v.x {
             return Some(Mål::Skille);
         }
-        if x < v.x && y + 1 == v.bottom() {
-            return tegn::knapp_på(self, x).map(Mål::Knapp);
+        if x < v.x && let Some(knapp) = tegn::knapp_på(self, x, y) {
+            return Some(Mål::Knapp(knapp));
         }
         if x < v.x {
             return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
         }
         if y < v.y {
             let ny = tegn::ny_fane_på(self, x).then_some(Mål::NyFane);
-            let handlinger = tegn::handlingsknapp_på(self, x).then_some(Mål::Handlinger);
-            return tegn::fane_på(self, x).map(Mål::Fane).or(ny).or(handlinger);
+            return tegn::fane_på(self, x).map(Mål::Fane).or(ny);
         }
         let inni = |r: Rect| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
         let boks = self.bokser().into_iter().find(|b| inni(b.ramme.unwrap_or(b.innhold)))?;
@@ -1322,7 +1243,7 @@ impl App {
             return true;
         }
         // Slippet går bare til panen når klikket gjorde det, så et klikk i
-        // lista eller menyen ikke gir et slipp i Claude-en.
+        // lista ikke gir et slipp i Claude-en.
         if m.kind == MouseEventKind::Up(MouseButton::Left) && std::mem::take(&mut self.svelg_slipp) {
             return false;
         }
@@ -1331,18 +1252,6 @@ impl App {
         }
         if self.velger.is_some() || self.handlinger.is_some() || self.hjelp || self.utseende_meny.is_some() {
             return false;
-        }
-        if self.meny.is_some() {
-            if m.kind != MouseEventKind::Down(MouseButton::Left) {
-                return false;
-            }
-            let valg = tegn::menyvalg_på(self, m.column, m.row).and_then(|i| Some(self.meny.as_ref()?.valg()[i]));
-            match valg {
-                Some(valg) => self.velg_ny(valg),
-                None if !tegn::i_menyen(self, m.column, m.row) => self.meny = None,
-                None => {}
-            }
-            return true;
         }
         if self.markering.as_ref().is_some_and(|m| m.drar)
             && matches!(m.kind, MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left))
@@ -1367,21 +1276,22 @@ impl App {
             }
             if let Some(vindu) = tegn::fane_på(self, m.column) {
                 self.vis_vindu(vindu);
-            } else if tegn::handlingsknapp_på(self, m.column) {
-                self.åpne_handlinger();
-            } else if tegn::ny_fane_på(self, m.column)
-                && let Some(her) = self.her()
-            {
-                self.nytt_vindu(&her, "#{window_id}", Svar::NyttVindu);
+            } else if tegn::ny_fane_på(self, m.column) {
+                self.prefikstast(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
             }
             return true;
         }
-        if m.column < v.x && m.row + 1 == v.bottom() {
-            match tegn::knapp_på(self, m.column).filter(|_| m.kind == MouseEventKind::Down(MouseButton::Left)) {
-                Some(Knapp::Ny) => self.åpne_meny(),
-                Some(Knapp::Hjelp) => self.hjelp = true,
-                Some(Knapp::Avslutt) => self.ferdig = Some(String::new()),
-                None => return false,
+        if m.column < v.x
+            && let Some(knapp) = tegn::knapp_på(self, m.column, m.row)
+        {
+            if m.kind != MouseEventKind::Down(MouseButton::Left) {
+                return false;
+            }
+            match knapp {
+                Knapp::Ny => self.ny_sesjon(false),
+                Knapp::Handlinger => self.åpne_handlinger(),
+                Knapp::Hjelp => self.hjelp = true,
+                Knapp::Avslutt => self.ferdig = Some(String::new()),
             }
             return true;
         }

@@ -17,8 +17,7 @@ use crate::palett::{Rgb, bland};
 use crate::grupper::{Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
-use crate::meny::Meny;
-use crate::tekst::{med_tilde, varighet};
+use crate::tekst::varighet;
 use crate::utseende::{AKSER, BOKSAKSER, Orden, Utseende};
 use crate::{App, Fokus, Knapp, Lukke, Mål, hjelp};
 
@@ -31,7 +30,6 @@ pub const LISTE_MIN: u16 = 24;
 /// Stripa er peker, glyf, mellomrom og skillelinja.
 pub const STRIPE: u16 = 4;
 const VELGER_LINJER: u16 = 12;
-const MENY_BREDDE: u16 = 44;
 
 const ORANSJE_RGB: Rgb = (217, 119, 87);
 const ORANSJE: Color = Color::Rgb(ORANSJE_RGB.0, ORANSJE_RGB.1, ORANSJE_RGB.2);
@@ -114,8 +112,6 @@ pub fn alt(f: &mut Frame, app: &App) {
     } else if let Some(velger) = &app.velger {
         let markør = tegn_velger(buf, område, velger);
         f.set_cursor_position(markør);
-    } else if let Some(meny) = &app.meny {
-        tegn_meny(buf, område, meny, mus.as_ref());
     } else if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app, &bokser)) {
         let i = boks.innhold;
         if x < i.width && y < i.height {
@@ -126,7 +122,6 @@ pub fn alt(f: &mut Frame, app: &App) {
 
 fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let bredde = liste_bredde(app) - 1;
-    let hint_y = område.height.saturating_sub(1);
 
     let mut overskrifter = Vec::new();
     let (rader, utsnitt) = liste(app);
@@ -158,21 +153,31 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
 
     // Nederst står knappene, og hintet i stedet når du har trykket prefikset
     // eller nerdr spør.
-    for (knapp, x, tekst) in knapper(app, hint_y) {
-        let pekt = mus == Some(&Mål::Knapp(knapp));
-        let stil = if pekt { under_musen() } else { Style::new() };
-        let (pluss, tekststil) = match (knapp, app.fokus) {
-            (Knapp::Ny, Fokus::Liste) => (Style::new().fg(ORANSJE), VANLIG),
-            _ => (SVAK, SVAK),
-        };
-        buf.set_string(x.start, hint_y, &tekst, tekststil.patch(stil));
-        if let Some(i) = tekst.find('+') {
-            buf.set_string(x.start + tekst[..i].chars().count() as u16, hint_y, "+", pluss.patch(stil));
+    if alle_knapper(app) {
+        let y = plass(app);
+        buf.set_string(0, y, "─".repeat(bredde as usize), SVAK);
+        overskrifter.push(y);
+    }
+    let prefiks = app.prefiks.navn();
+    let (pluss, tekststil) = match app.fokus {
+        Fokus::Liste => (Style::new().fg(ORANSJE), VANLIG),
+        Fokus::Pane => (SVAK, SVAK),
+    };
+    for (knapp, y) in knapper(app) {
+        let stil = if mus == Some(&Mål::Knapp(knapp)) { under_musen() } else { Style::new() };
+        if stripe(app) {
+            buf.set_string(0, y, " + ", pluss.patch(stil));
+            continue;
         }
-        // Tasten i klammene er dempet, så knappen leses som «+ ny».
-        if let Some(i) = tekst.find('[') {
-            buf.set_string(x.start + tekst[..i].chars().count() as u16, hint_y, &tekst[i..], SVAK.patch(stil));
+        let Some(&(_, navn, tast)) = KNAPPER.iter().find(|k| k.0 == knapp) else { continue };
+        buf.set_style(Rect::new(0, y, bredde, 1), stil);
+        let tast = format!("{prefiks} {tast}");
+        let tast_x = bredde.saturating_sub(tast.chars().count() as u16 + 1);
+        if knapp == Knapp::Ny {
+            buf.set_string(1, y, "+", pluss.patch(stil));
         }
+        buf.set_stringn(3, y, navn, tast_x.saturating_sub(4) as usize, tekststil.patch(stil));
+        buf.set_string(tast_x, y, tast, SVAK.patch(stil));
     }
 
     // Overskriftene treffer skillestreken, og øverst går streken videre til
@@ -217,8 +222,9 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
         _ if app.etter_prefiks => format!(" {prefiks} … f ny · w lista · ? mer"),
         _ => return,
     };
-    let plass = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
-    buf.set_stringn(0, område.height.saturating_sub(1), format!("{hint} "), plass as usize, VANLIG);
+    let bredde = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
+    let y = if alle_knapper(app) { plass(app) + 1 } else { område.height.saturating_sub(1) };
+    buf.set_stringn(0, y, format!("{hint} "), bredde as usize, VANLIG);
 }
 
 /// Utenfor lista eller den aktive panen, der tastene går, får rutene uten egen
@@ -303,7 +309,7 @@ fn plasser(app: &App) -> Vec<Plassert<'_>> {
 }
 
 fn plass(app: &App) -> u16 {
-    app.visning.bottom().saturating_sub(1)
+    app.visning.bottom().saturating_sub(knapperader(app))
 }
 
 fn liste(app: &App) -> (Vec<Plassert<'_>>, Utsnitt) {
@@ -439,31 +445,6 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
         let stil = if mus == Some(&Mål::NyFane) { under_musen() } else { SVAK };
         buf.set_string(pluss.start, 0, " + ", stil);
     }
-    if let Some(x) = handlingsknapp(app) {
-        let stil = if mus == Some(&Mål::Handlinger) { under_musen() } else { Style::new() };
-        let tekst = handlingsknapp_tekst(app);
-        buf.set_string(x.start, 0, &tekst, VANLIG.patch(stil));
-        let tast = tekst.find('[').unwrap_or(0);
-        buf.set_string(x.start + tast as u16, 0, &tekst[tast..], SVAK.patch(stil));
-    }
-}
-
-fn handlingsknapp_tekst(app: &App) -> String {
-    format!(" handlinger [{} :] ", app.prefiks.navn())
-}
-
-/// Ytterst til høyre på fanestreken, så den er der både fra lista og fra
-/// panen, når fanene gir plass.
-fn handlingsknapp(app: &App) -> Option<Range<u16>> {
-    let v = app.visning;
-    let bredde = handlingsknapp_tekst(app).chars().count() as u16;
-    let fra = v.right().checked_sub(bredde + 1)?;
-    let opptatt = ny_fane(app).map(|r| r.end).or(faner(app).last().map(|f| f.til)).unwrap_or(v.x);
-    (fra > opptatt).then_some(fra..fra + bredde)
-}
-
-pub fn handlingsknapp_på(app: &App, x: u16) -> bool {
-    handlingsknapp(app).is_some_and(|r| r.contains(&x))
 }
 
 /// Vinduet til fanen i kolonne `x`.
@@ -482,38 +463,41 @@ pub fn ny_fane_på(app: &App, x: u16) -> bool {
     ny_fane(app).is_some_and(|r| r.contains(&x))
 }
 
-/// «+ ny» til venstre og «hjelp» til høyre på nederste rad i lista, med
-/// tastene i klammer. Når hintet står der, er de borte.
-fn knapper(app: &App, y: u16) -> Vec<(Knapp, Range<u16>, String)> {
-    if app.lukke.is_some() || app.etter_prefiks || y == 0 {
-        return Vec::new();
-    }
-    if stripe(app) {
-        return vec![(Knapp::Ny, 0..3, " + ".to_string())];
-    }
-    let prefiks = app.prefiks.navn();
-    let (ny, hjelp, avslutt) =
-        (format!(" + ny [{prefiks} f] "), format!(" hjelp [{prefiks} ?] "), format!(" avslutt [{prefiks} d] "));
-    let slutt = liste_bredde(app) - 1;
-    let ny_til = ny.chars().count() as u16;
-    let mut knapper = vec![(Knapp::Ny, 0..ny_til, ny)];
-    // «avslutt» går foran «hjelp» når det ikke er plass til begge, for uten
-    // tmux vet du ikke om prefikset og d.
-    let mut fra = slutt;
-    for (knapp, tekst) in [(Knapp::Avslutt, avslutt), (Knapp::Hjelp, hjelp)] {
-        let til = fra;
-        fra = fra.saturating_sub(tekst.chars().count() as u16);
-        if fra <= ny_til {
-            break;
-        }
-        knapper.push((knapp, fra..til, tekst));
-    }
-    knapper
+/// Knappene nederst i lista, med tasten etter prefikset som gjør det samme.
+const KNAPPER: [(Knapp, &str, &str); 4] = [
+    (Knapp::Ny, "ny sesjon", "f"),
+    (Knapp::Handlinger, "handlinger", ":"),
+    (Knapp::Hjelp, "hjelp", "?"),
+    (Knapp::Avslutt, "avslutt", "d"),
+];
+/// Lavere enn dette står bare «+ ny sesjon» nederst, så kortene får plass.
+const HØYDE_TIL_KNAPPENE: u16 = 14;
+
+fn alle_knapper(app: &App) -> bool {
+    !stripe(app) && app.visning.bottom() >= HØYDE_TIL_KNAPPENE
 }
 
-pub fn knapp_på(app: &App, x: u16) -> Option<Knapp> {
-    let y = app.visning.bottom().saturating_sub(1);
-    knapper(app, y).into_iter().find(|(_, r, _)| r.contains(&x)).map(|(k, ..)| k)
+/// Streken og én rad per knapp, eller bare raden med `+`.
+fn knapperader(app: &App) -> u16 {
+    if alle_knapper(app) { KNAPPER.len() as u16 + 1 } else { 1 }
+}
+
+/// Knappene og raden de står på. Når hintet står der, er de borte.
+fn knapper(app: &App) -> Vec<(Knapp, u16)> {
+    if app.lukke.is_some() || app.etter_prefiks {
+        return Vec::new();
+    }
+    let bunn = app.visning.bottom();
+    if !alle_knapper(app) {
+        return vec![(Knapp::Ny, bunn.saturating_sub(1))];
+    }
+    let første = bunn - KNAPPER.len() as u16;
+    KNAPPER.iter().zip(første..).map(|(k, y)| (k.0, y)).collect()
+}
+
+pub fn knapp_på(app: &App, x: u16, y: u16) -> Option<Knapp> {
+    let bredde = if stripe(app) { 3 } else { liste_bredde(app) - 1 };
+    knapper(app).into_iter().find(|&(_, rad)| rad == y && x < bredde).map(|(k, _)| k)
 }
 
 /// Der en boks på `bredde` og `høyde` står midt på skjermen, eller `None` når
@@ -584,45 +568,6 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str) {
     linje(&hjelp::mapper(), SVAK);
 }
 
-/// Hele skjermen, regnet fra visningen, som slutter nederst til høyre.
-fn skjerm(app: &App) -> Rect {
-    let v = app.visning;
-    Rect::new(0, 0, v.right(), v.bottom())
-}
-
-/// Radene over valgene: hvor det nye legges, og en tom rad.
-fn meny_topp(meny: &Meny) -> u16 {
-    if meny.her.is_some() { 2 } else { 0 }
-}
-
-fn meny_boks(område: Rect, meny: &Meny) -> Option<Rect> {
-    midt_på(område, MENY_BREDDE, meny_topp(meny) + meny.rader().len() as u16 + 2)
-}
-
-fn tegn_meny(buf: &mut Buffer, område: Rect, meny: &Meny, mus: Option<&Mål>) {
-    let Some(plass) = meny_boks(område, meny) else { return };
-    let Some(ramme) = boks(buf, område, plass.width, plass.height, "ny", "⏎ velg · esc avbryt") else { return };
-    let (x, indre) = (ramme.x + 2, (ramme.width - 4) as usize);
-    if let Some(her) = &meny.her {
-        let sti = kutt_foran(&med_tilde(&her.mappe), indre.saturating_sub(2));
-        buf.set_stringn(x, ramme.y + 1, format!("i {sti}"), indre, SVAK);
-    }
-    let valg = meny.rader().into_iter().enumerate().filter_map(|(rad, valg)| Some((rad, valg?)));
-    for (i, (rad, valg)) in valg.enumerate() {
-        let y = ramme.y + 1 + meny_topp(meny) + rad as u16;
-        let rad = Rect::new(ramme.x + 1, y, ramme.width - 2, 1);
-        let valgt = i == meny.valgt;
-        if valgt {
-            buf.set_style(rad, markert());
-            buf.set_string(ramme.x + 1, y, "▎", VANLIG);
-        } else if mus == Some(&Mål::Menyvalg(i)) {
-            buf.set_style(rad, under_musen());
-        }
-        buf.set_string(x, y, valg.tast().to_string(), Style::new().fg(ORANSJE));
-        buf.set_stringn(x + 3, y, valg.tekst(), indre.saturating_sub(3), if valgt { STERK } else { VANLIG });
-    }
-}
-
 /// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
 fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
     let høyde = AKSER.len() as u16 + 4;
@@ -643,22 +588,6 @@ fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
             vx = buf.set_stringn(vx, y, *verdi, ramme.right().saturating_sub(vx + 1) as usize, stil).0 + 2;
         }
     }
-}
-
-/// Valget i menyen på `x` og `y`, som indeks i `Meny::valg`.
-pub fn menyvalg_på(app: &App, x: u16, y: u16) -> Option<usize> {
-    let meny = app.meny.as_ref()?;
-    let ramme = meny_boks(skjerm(app), meny)?;
-    let rad = y.checked_sub(ramme.y + 1 + meny_topp(meny))? as usize;
-    let rader = meny.rader();
-    rader.get(rad).copied().flatten()?;
-    let i = rader[..rad].iter().flatten().count();
-    (ramme.x + 1..ramme.right() - 1).contains(&x).then_some(i)
-}
-
-pub fn i_menyen(app: &App, x: u16, y: u16) -> bool {
-    let ramme = app.meny.as_ref().and_then(|m| meny_boks(skjerm(app), m));
-    ramme.is_some_and(|r| r.contains((x, y).into()))
 }
 
 /// Handlingene midt på skjermen, med tasten til høyre. Gir der markøren
@@ -810,7 +739,7 @@ fn tom_liste(utenfor_tmux: usize, prefiks: &str) -> Vec<String> {
     let mut avsnitt = vec![
         "Her er det tomt foreløpig.".to_string(),
         format!(
-            "nerdr viser Claude-ene dine som kjører i tmux, og lar deg bytte mellom dem. Klikk på «+ ny» \
+            "nerdr viser Claude-ene dine som kjører i tmux, og lar deg bytte mellom dem. Klikk på «+ ny sesjon» \
              nederst, eller trykk {prefiks} f, for å starte en ny Claude i en av mappene dine, og {prefiks} r \
              for å fortsette en samtale du har hatt før."
         ),

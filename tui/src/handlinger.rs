@@ -3,14 +3,11 @@
 
 use ratatui::crossterm::event::KeyCode;
 
-use crate::meny::Valg;
 use crate::ny;
 use crate::utseende::{NAVN, Utseende};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Handling {
-    /// Som valget i «Ny»-menyen.
-    Ny(Valg),
     /// Som tasten etter prefikset, med `true` for Ctrl.
     Prefiks(KeyCode, bool),
     /// Aksen og verdien i utseende-menyen.
@@ -24,7 +21,12 @@ pub struct Oppføring {
 }
 
 /// Rekkefølgen er den lista har uten søk, med det du oftest trenger først.
-const PREFIKSTASTER: [(KeyCode, bool, &str); 18] = [
+const PREFIKSTASTER: [(KeyCode, bool, &str); 23] = [
+    (KeyCode::Char('f'), false, "ny sesjon"),
+    (KeyCode::Char('r'), false, "hent samtale"),
+    (KeyCode::Char('c'), false, "ny terminal"),
+    (KeyCode::Char('%'), false, "del side om side"),
+    (KeyCode::Char('"'), false, "del over og under"),
     (KeyCode::Char('w'), false, "tilbake til lista"),
     (KeyCode::Char(')'), false, "neste Claude"),
     (KeyCode::Char('('), false, "forrige Claude"),
@@ -52,17 +54,15 @@ pub struct Handlinger {
 }
 
 impl Handlinger {
-    /// `ny` er valgene «Ny»-menyen har der du er.
-    pub fn ny(prefiks: &str, ny: &[Valg], utseende: &Utseende) -> Handlinger {
-        let mut alle: Vec<Oppføring> = ny
+    pub fn ny(prefiks: &str, utseende: &Utseende) -> Handlinger {
+        let mut alle: Vec<Oppføring> = PREFIKSTASTER
             .iter()
-            .map(|&valg| Oppføring { navn: valg.tekst().into(), tast: format!("{prefiks} {}", valg.prefikstast()), handling: Handling::Ny(valg) })
+            .map(|&(kode, ctrl, navn)| Oppføring {
+                navn: navn.into(),
+                tast: format!("{prefiks} {}", tast(kode, ctrl)),
+                handling: Handling::Prefiks(kode, ctrl),
+            })
             .collect();
-        alle.extend(PREFIKSTASTER.iter().map(|&(kode, ctrl, navn)| Oppføring {
-            navn: navn.into(),
-            tast: format!("{prefiks} {}", tast(kode, ctrl)),
-            handling: Handling::Prefiks(kode, ctrl),
-        }));
         for (akse, navn) in NAVN.iter().enumerate() {
             for (i, navn) in navn.iter().enumerate() {
                 let valgt = utseende.gjelder(akse) && utseende.indeks(akse) == i;
@@ -136,18 +136,18 @@ mod tester {
 
     #[test]
     fn søket_finner_handlingen_med_tasten() {
-        let mut h = Handlinger::ny("C-b", &[Valg::Mappe, Valg::Fortsett], &Utseende::ny(Rammer::Linjer));
+        let mut h = Handlinger::ny("C-b", &Utseende::ny(Rammer::Linjer));
         h.skriv("zoom");
         let (k, _) = &h.treff()[0];
         assert_eq!((k.navn.as_str(), k.tast.as_str()), ("zoom pane", "C-b z"));
         h.tøm();
         h.skriv("sesjon");
-        assert_eq!(h.valgt(), Some(Handling::Ny(Valg::Mappe)));
+        assert_eq!(h.valgt(), Some(Handling::Prefiks(KeyCode::Char('f'), false)));
     }
 
     #[test]
     fn utseendet_som_er_valgt_står_som_valgt() {
-        let h = Handlinger::ny("C-b", &[], &Utseende::ny(Rammer::Linjer));
+        let h = Handlinger::ny("C-b", &Utseende::ny(Rammer::Linjer));
         let linjer = h.alle.iter().find(|k| k.navn == "paner med linjer").unwrap();
         assert_eq!(linjer.tast, "✓");
         assert_eq!(h.alle.iter().find(|k| k.navn == "paner i bokser").unwrap().tast, "");

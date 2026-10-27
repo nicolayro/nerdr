@@ -144,7 +144,7 @@ registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
 maal set -g @nerdr-utseende paner=bokser
 
-vert -f /dev/null new-session -d -s vert -x 110 -y 16 \
+vert -f /dev/null new-session -d -s vert -x 110 -y 20 \
   "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
 sjekk "paner=bokser fra tmux gir bokser, under streken øverst" linje_har 1 '^─+┬─ [^ ]+ ─'
@@ -173,7 +173,7 @@ sjekk "tett har én linje: alfa under VENTER med ●, oppgaven og <1m til høyre
 sjekk "overskriftene treffer skillestreken med ┤" linje_har 5 '^ JOBBER 1 ─+┤'
 sjekk "gamma står under JOBBER med ◐, og uten oppgave er repoet tittelen" linje_har 6 '^  ◐  nerdr +<1m │'
 sjekk "beta har ingen Claude og vises ikke" mangler beta
-sjekk "alfa får størrelsen til boksen" er 68x13 dimensjon alfa
+sjekk "alfa får størrelsen til boksen" er 68x17 dimensjon alfa
 
 tast Enter
 tast -l 'hei æ'
@@ -203,7 +203,7 @@ sjekk "klikk på alfa velger den" linje_har 3 '^▎ ●  Fiks testene +<1m │'
 sjekk "og du blir i lista" i_lista
 klikk 5 3
 sjekk "et klikk til på samme kort går inn i alfa" i_panen
-klikk 5 12
+klikk 5 14
 sjekk "klikk i lista utenfor kortene går ut" i_lista
 klikk 60 8
 sjekk "klikk i panen går inn" i_panen
@@ -227,7 +227,6 @@ tast Up
 sjekk "↑ opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
 tast Down q n
 sjekk "q og n gjør ingenting i lista" linje_har 6 '^▎ ○  gamma:0'
-sjekk "og ingen meny åpner" mangler 't  ny terminal'
 klikk 5 6
 sleep 0.6
 klikk 5 6
@@ -238,27 +237,34 @@ klikk 5 3
 sjekk "klikk på alfa fra panen velger alfa og går ut i lista" linje_har 3 '^▎ ●  Fiks testene'
 sjekk "tilbake i lista" i_lista
 
+sjekk "under streken står knappene, med tasten etter prefikset" linje_har 16 '^─+┤'
+sjekk "«+ ny sesjon» først" linje_har 17 '^ \+ ny sesjon +C-b f │'
+sjekk "så «handlinger»" linje_har 18 '^   handlinger +C-b : │'
+sjekk "så «hjelp»" linje_har 19 '^   hjelp +C-b \? │'
+sjekk "og «avslutt» nederst" linje_har 20 '^   avslutt +C-b d │'
+klikk 3 19
+sjekk "klikk på «hjelp» viser hjelpen" har 'trykk en tast for å lukke'
+tast x
+sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
 tast C-b '?'
 sjekk "C-b ? viser hjelpen med C-b f" har 'C-b f +ny sesjon'
 tast x
-sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
+sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
 tast C-b :
 sjekk "C-b : fra lista åpner handlingene" har '⏎ kjør · esc lukk'
 tast Escape
 sjekk "Esc lukker dem" mangler '⏎ kjør'
 
-klikk 3 16
-sjekk "klikk på «+ ny» åpner menyen med «ny sesjon» først" linje_har 6 '▎n  ny sesjon'
-tast n
-sjekk "n i menyen åpner popupen med 4 mapper og 1 prosjekt" linje_har 2 'mappe › .*5/5'
-sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 3 '▎~/git/annet'
-sjekk "så ~/eget, som er brukt før" linje_har 4 '~/eget'
-sjekk "så ~/git/prosjekt.ny" linje_har 5 '~/git/prosjekt\.ny'
-sjekk "så mappa i kode" linje_har 6 '~/kode/tredje'
-sjekk "og prosjektet i annet, men ikke det i node_modules" linje_har 7 '~/git/annet/apps/web +│'
+klikk 3 17
+sjekk "klikk på «+ ny sesjon» åpner popupen med 4 mapper og 1 prosjekt" linje_har 3 'mappe › .*5/5'
+sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 4 '▎~/git/annet'
+sjekk "så ~/eget, som er brukt før" linje_har 5 '~/eget'
+sjekk "så ~/git/prosjekt.ny" linje_har 6 '~/git/prosjekt\.ny'
+sjekk "så mappa i kode" linje_har 7 '~/kode/tredje'
+sjekk "og prosjektet i annet, men ikke det i node_modules" linje_har 8 '~/git/annet/apps/web +│'
 tast -l pny
-sjekk "«pny» treffer bare prosjekt.ny" linje_har 2 'mappe › pny .*1/5'
-sjekk "prosjekt.ny er valgt" linje_har 3 '▎~/git/prosjekt\.ny'
+sjekk "«pny» treffer bare prosjekt.ny" linje_har 3 'mappe › pny .*1/5'
+sjekk "prosjekt.ny er valgt" linje_har 4 '▎~/git/prosjekt\.ny'
 
 tast Enter
 sjekk "Enter lager sesjonen prosjekt-ny i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny
@@ -273,19 +279,19 @@ sjekk "i registeret får prosjekt.ny vanlig merke" linje_har 6 '^▎ ○  prosje
 tast C-b f
 sjekk "C-b f åpner popupen fra panen" har 'mappe ›'
 tast -l pny
-sjekk "«pny» igjen" linje_har 2 '1/5'
+sjekk "«pny» igjen" linje_har 3 '1/5'
 tast Enter
 sjekk "samme mappe igjen gir et nytt vindu i prosjekt-ny" linjer 2 maal list-windows -t prosjekt-ny
 sjekk "nerdr er inne i det nye vinduet" i_panen
 
 tast C-b r
-sjekk "C-b r viser samtalene" linje_har 1 'hent samtale'
-sjekk "bare samtalen med meldinger, 1/1" linje_har 2 '1/1'
-sjekk "annet  Fiks testene er valgt" linje_har 3 '▎annet  Fiks testene +<1m'
+sjekk "C-b r viser samtalene" linje_har 2 'hent samtale'
+sjekk "bare samtalen med meldinger, 1/1" linje_har 3 '1/1'
+sjekk "annet  Fiks testene er valgt" linje_har 4 '▎annet  Fiks testene +<1m'
 tast C-r
-sjekk "C-r bytter til mappene" linje_har 1 'ny sesjon'
+sjekk "C-r bytter til mappene" linje_har 2 'ny sesjon'
 tast C-r
-sjekk "C-r bytter tilbake" linje_har 1 'hent samtale'
+sjekk "C-r bytter tilbake" linje_har 2 'hent samtale'
 tast Enter
 sjekk "Enter lager sesjonen annet og skriver inn claude --resume abc-123" i_pane annet 'claude --resume abc-123'
 sjekk "nerdr er inne i annet" i_panen
@@ -300,56 +306,33 @@ sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
 tast Up Up Up Up Up Up Up Up
 sjekk "↑ opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
 
-klikk 3 16
-sjekk "«+ ny» åpner menyen" har 't  ny terminal'
-sjekk "menyen sier hvor det nye havner" har 'i ~/nerdr'
-tast Escape
-sjekk "Esc lukker menyen" mangler 't  ny terminal'
-sjekk "og du er i lista" i_lista
-
-klikk 3 16
-tast t
-sjekk "t gir en terminal i et nytt vindu i alfa" linjer 2 maal list-windows -t alfa
+klikk 3 18
+sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · esc lukk'
+tast -l terminal
+tast Enter
+sjekk "«ny terminal» der gir en terminal i et nytt vindu i alfa" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
 sjekk "og du er inne i den" i_panen
 tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 
-klikk 3 16
-tast %
-sjekk "% fra menyen deler alfa" linjer 2 maal list-panes -t alfa:0
-sjekk "og du er inne i den nye panen" er 1 pane_indeks
-sjekk "fra panen" i_panen
-tast C-b x y
-sjekk "lukket igjen" linjer 1 maal list-panes -t alfa:0
 tast C-b w
-
-klikk 3 16
-sjekk "klikk på «+ ny» åpner menyen" har 't  ny terminal'
-klikk 100 15
-sjekk "klikk utenfor lukker den" mangler 't  ny terminal'
 klikk "$(kolonne 1 ' + ')" 1
 sjekk "klikk på + etter fanene gir en terminal i et nytt vindu" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
-tast C-b '&' y
-sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
-tast C-b w
-klikk 3 16
-sjekk "menyen har en tom rad før terminalene" linje_har 8 '│ +│'
-klikk 40 9
-sjekk "klikk på «ny terminal» gir et nytt vindu" linjer 2 maal list-windows -t alfa
-sjekk "slippene etter klikkene i menyen kommer ikke fram i alfa" ikke_i_pane alfa '^[[<0;'
+sjekk "slippet etter klikket kommer ikke fram i alfa" ikke_i_pane alfa '^[[<0;'
 tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 tast C-b w
 tast C-b
-sjekk "C-b viser prefikstastene i hintlinja" linje_har 16 'C-b … f ny · w lista · \? mer'
+sjekk "C-b viser prefikstastene i hintlinja under streken" linje_har 17 'C-b … f ny · w lista · \? mer'
+sjekk "og knappene er borte så lenge" mangler 'avslutt +C-b d'
 
 tast %
 sjekk "% deler alfa" linjer 2 maal list-panes -t alfa:0
 sjekk "to bokser med luft mellom" linje_har 2 '╮ ╭'
 sjekk "begge panene står i nerdr-mappa" er "$MAPPE" mapper alfa:0
-sjekk "tmux får plass til begge boksene" er 64x13 dimensjon alfa:0
+sjekk "tmux får plass til begge boksene" er 64x17 dimensjon alfa:0
 
 tast Enter
 tast -l 'til venstre'
@@ -390,9 +373,8 @@ tast -l zoom
 sjekk "«zoom» viser kommandoen med tasten" har 'zoom pane +C-b z'
 tast Enter
 sjekk "Enter kjører den" er 1 zoom
-sjekk "handlingene står til høyre på fanestreken" linje_har 1 ' handlinger \[C-b :\] ─$'
-klikk 100 1
-sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · esc lukk'
+klikk 3 18
+sjekk "klikk på «handlinger» fra panen åpner dem" har '⏎ kjør · esc lukk'
 tast -l zoom
 tast Enter
 sjekk "og zoom igjen zoomer ut" er 0 zoom
@@ -408,9 +390,9 @@ sjekk "ingen vindu endrer størrelse når du bytter Claude" [ ! -s "$KONFIG/stor
 maal set-hook -gu window-resized
 
 tast C-b o C-b x
-sjekk "C-b x spør" linje_har 16 'lukke panen\? y/n'
+sjekk "C-b x spør" linje_har 17 'lukke panen\? y/n'
 tast n
-sjekk "n lar panen stå" linje_mangler 16 'lukke'
+sjekk "n lar panen stå" linje_mangler 17 'lukke'
 sjekk "begge panene er der" linjer 2 maal list-panes -t alfa:0
 tast C-b x y
 sjekk "C-b x y lukker panen" linjer 1 maal list-panes -t alfa:0
@@ -419,14 +401,14 @@ tast C-b '"'
 sjekk "C-b \" deler over og under" er 2 tell '╭'
 tast C-b x y
 sjekk "C-b x y lukker den nye" linjer 1 maal list-panes -t alfa:0
-sjekk "uten split fyller Claude-en hele visningen igjen" er 68x13 dimensjon alfa:0
+sjekk "uten split fyller Claude-en hele visningen igjen" er 68x17 dimensjon alfa:0
 tast C-b w
 
 tast C-b b Up Right Escape
-sjekk "linjer rundt panene i menyen gjør alfa større" er 74x15 dimensjon alfa
+sjekk "linjer rundt panene i menyen gjør alfa større" er 74x19 dimensjon alfa
 sjekk "med linjer er det ingen bokser" mangler '╭'
 tast C-b b Up Left Escape
-sjekk "og bokser igjen" er 68x13 dimensjon alfa
+sjekk "og bokser igjen" er 68x17 dimensjon alfa
 sjekk "boksen er tilbake" har '╭'
 
 tast C-b c
@@ -448,7 +430,7 @@ tast C-b w Enter
 sjekk "C-b w og Enter går inn i Claude-en i vindu 0" er 0 vindu_indeks
 
 tast C-b 1 C-b '&'
-sjekk "C-b & spør" linje_har 16 'lukke vinduet\? y/n'
+sjekk "C-b & spør" linje_har 17 'lukke vinduet\? y/n'
 tast y
 sjekk "y lukker vinduet" linjer 1 maal list-windows -t alfa
 sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ +][^ ]* ─'
@@ -481,7 +463,7 @@ tast Up Up Up Up Up Up Up Up
 
 dra 36 8 46 8
 sjekk "å dra i streken gjør lista bredere" linje_har 3 '^▎ ●  Fiks testene +<1m +│ '
-sjekk "og alfa smalere" er 58x13 dimensjon alfa
+sjekk "og alfa smalere" er 58x17 dimensjon alfa
 sjekk "bredden står i tmux" er 46 maal show-options -gqv @nerdr-liste
 klikk 46 8
 klikk 46 8
@@ -490,16 +472,16 @@ sjekk "med bare tegnene" mangler 'Fiks testene'
 sjekk "også i tmux" er '46 stripe' maal show-options -gqv @nerdr-liste
 klikk 4 8
 klikk 4 8
-sjekk "dobbeltklikk igjen gir bredden tilbake" er 58x13 dimensjon alfa
+sjekk "dobbeltklikk igjen gir bredden tilbake" er 58x17 dimensjon alfa
 dra 46 8 2 8
 sjekk "å dra streken helt inn gir stripa" linje_har 2 '^▎● │ '
 tast C-b
-sjekk "fra stripa står hintet over panen" linje_har 16 '^ C-b … f ny · w lista · \? mer'
+sjekk "fra stripa står hintet over panen" linje_har 20 '^ C-b … f ny · w lista · \? mer'
 tast w
 dra 4 8 36 8
-sjekk "og å dra den ut gir lista tilbake" er 68x13 dimensjon alfa
+sjekk "og å dra den ut gir lista tilbake" er 68x17 dimensjon alfa
 
-klikk 28 16
+klikk 5 20
 sjekk "klikk på «avslutt» avslutter" uten_klienter
 
 sjekk "nerdr liste grupperer som TUI-et: alfa venter, og gamma og prosjekt.ny er sett, nyest først" \
