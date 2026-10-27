@@ -155,7 +155,7 @@ sjekk "paner=bokser fra tmux gir bokser, under streken øverst" linje_har 1 '^�
 sjekk "overskriften har antallet" linje_har 2 '^ VENTER 1 +│'
 sjekk "alfa har ●, repoet og <1m i toppkanten" linje_har 3 '^╭─ ●  nerdr ─+ <1m ─╮'
 beveg 10 4
-sjekk "med musen over kortet står × i toppkanten i stedet for tiden" linje_har 3 '^╭─ ●  nerdr ─+ × ─╮'
+sjekk "med musen over kortet står × i toppkanten i stedet for tiden" linje_har 3 '^╭─ ●  nerdr ─+  ×  ─╮'
 beveg 60 8
 sjekk "og tiden er tilbake når musen går" linje_har 3 '<1m ─╮'
 sjekk "så oppgaven" linje_har 4 '^│ Fiks testene +│'

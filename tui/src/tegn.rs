@@ -398,32 +398,33 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     })
 }
 
-/// Kolonnen der `×` står på kortet under musen, der tiden står.
+/// Kolonnen der `×` står på kortet under musen: midt der tiden står, som
+/// oftest er tre tegn, som `<1m`.
 fn lukk_x(app: &App) -> Option<u16> {
     let bredde = liste_bredde(app) - 1;
     match app.utseende.plass {
         _ if stripe(app) => None,
         Plass::Tett => bredde.checked_sub(3),
-        _ => bredde.checked_sub(5),
+        _ => bredde.checked_sub(6),
     }
 }
 
-/// `×` med luft rundt, i stedet for tiden og det som står ved den.
+/// `×` i stedet for tiden og det som står ved den, på den samme plassen, så
+/// ingenting rundt flytter seg når musen kommer.
 fn tegn_lukk(buf: &mut Buffer, app: &App, x: u16, y: u16, pekt: bool) {
     let stil = if pekt { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { STERK };
-    if app.utseende.plass == Plass::Tett {
-        buf.set_string(x.saturating_sub(4), y, "      ", Style::new());
-        buf.set_string(x, y, "×", stil);
-        return;
-    }
-    // Streken går fram til ×, i fargen kanten har ved hjørnet.
-    let ramme = buf[(x + 2, y)].style();
-    let mut fra = x + 1;
-    while fra > 2 && buf[(fra, y)].symbol() != "─" {
+    // I tett går tiden fram til mellomrommet foran, og i boksen fram til
+    // streken, med luften rundt.
+    let (slutt, foran) = match app.utseende.plass {
+        Plass::Tett => (x + 1, " "),
+        _ => (x + 2, "─"),
+    };
+    let mut fra = slutt;
+    while fra > 2 && buf[(fra, y)].symbol() != foran {
         fra -= 1;
     }
-    buf.set_string(fra, y, "─".repeat((x + 1 - fra) as usize), ramme);
-    buf.set_string(x - 1, y, "   ", ramme);
+    buf.set_string(fra + 1, y, " ".repeat((slutt - fra) as usize), Style::new());
+    buf.set_string(x - 1, y, "   ", Style::new());
     buf.set_string(x, y, "×", stil);
 }
 
