@@ -18,8 +18,8 @@ use crate::grupper::{Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::tekst::varighet;
-use crate::utseende::{AKSER, BOKSAKSER, Orden, Utseende};
-use crate::{App, Fokus, Knapp, Lukke, Mål, hjelp};
+use crate::utseende::{AKSER, BOKSAKSER, Orden, Plass, Utseende};
+use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
 
@@ -104,6 +104,8 @@ pub fn alt(f: &mut Frame, app: &App) {
 
     if app.hjelp {
         tegn_hjelp(buf, område, &app.prefiks.navn());
+    } else if let Some(lukke) = &app.lukke {
+        tegn_lukke(buf, område, app, lukke, mus.as_ref());
     } else if let Some(akse) = app.utseende_meny {
         tegn_utseende(buf, område, &app.utseende, akse);
     } else if let Some(handlinger) = &app.handlinger {
@@ -147,6 +149,11 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                     _ => None,
                 };
                 tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, bakgrunn);
+                if let (Some(x), Some(y)) = (lukk_x(app), på_skjermen(*y))
+                    && matches!(mus, Some(Mål::Kort(id) | Mål::Lukk(id)) if *id == pane.id)
+                {
+                    tegn_lukk(buf, app, x, y, matches!(mus, Some(Mål::Lukk(_))));
+                }
             }
         }
     }
@@ -212,16 +219,14 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     }
 }
 
-/// Når du har trykket prefikset eller nerdr spør. Fra stripa går hintet inn
-/// over panen, så du ser hva nerdr spør om, og derfor tegnes det etter den.
+/// Når du har trykket prefikset. Fra stripa går hintet inn over panen, og
+/// derfor tegnes det etter den.
 fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     let prefiks = app.prefiks.navn();
-    let hint = match () {
-        _ if matches!(app.lukke, Some(Lukke::Pane(_))) => " lukke panen? y/n".to_string(),
-        _ if matches!(app.lukke, Some(Lukke::Vindu(_))) => " lukke vinduet? y/n".to_string(),
-        _ if app.etter_prefiks => format!(" {prefiks} … f ny · w lista · ? mer"),
-        _ => return,
-    };
+    if !app.etter_prefiks {
+        return;
+    }
+    let hint = format!(" {prefiks} … f ny · w lista · ? mer");
     let bredde = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
     let y = if alle_knapper(app) { plass(app) + 1 } else { område.height.saturating_sub(1) };
     buf.set_stringn(0, y, format!("{hint} "), bredde as usize, VANLIG);
@@ -393,6 +398,49 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     })
 }
 
+/// Kolonnen der `×` står på kortet under musen, der tiden står.
+fn lukk_x(app: &App) -> Option<u16> {
+    let bredde = liste_bredde(app) - 1;
+    match app.utseende.plass {
+        _ if stripe(app) => None,
+        Plass::Tett => bredde.checked_sub(3),
+        _ => bredde.checked_sub(5),
+    }
+}
+
+/// `×` med luft rundt, i stedet for tiden og det som står ved den.
+fn tegn_lukk(buf: &mut Buffer, app: &App, x: u16, y: u16, pekt: bool) {
+    let stil = if pekt { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { STERK };
+    if app.utseende.plass == Plass::Tett {
+        buf.set_string(x.saturating_sub(4), y, "      ", Style::new());
+        buf.set_string(x, y, "×", stil);
+        return;
+    }
+    // Streken går fram til ×, i fargen kanten har ved hjørnet.
+    let ramme = buf[(x + 2, y)].style();
+    let mut fra = x + 1;
+    while fra > 2 && buf[(fra, y)].symbol() != "─" {
+        fra -= 1;
+    }
+    buf.set_string(fra, y, "─".repeat((x + 1 - fra) as usize), ramme);
+    buf.set_string(x - 1, y, "   ", ramme);
+    buf.set_string(x, y, "×", stil);
+}
+
+/// Panen til kortet der `×` står på `x` og `y`. Ruta på hver side treffer
+/// også, så den er lettere å treffe.
+pub fn lukk_på(app: &App, x: u16, y: u16) -> Option<Pane> {
+    if lukk_x(app).is_none_or(|l| l.abs_diff(x) > 1) {
+        return None;
+    }
+    let (rader, utsnitt) = liste(app);
+    let y = utsnitt.i_lista(y)?;
+    rader.into_iter().find_map(|p| match p.rad {
+        Rad::Pane(pane, _) if p.y == y => Some(pane.clone()),
+        _ => None,
+    })
+}
+
 /// Opp eller ned når rad `y` er en av pilene som viser at lista ruller.
 pub fn pil_på(app: &App, y: u16) -> Option<bool> {
     let (_, utsnitt) = liste(app);
@@ -484,7 +532,7 @@ fn knapperader(app: &App) -> u16 {
 
 /// Knappene og raden de står på. Når hintet står der, er de borte.
 fn knapper(app: &App) -> Vec<(Knapp, u16)> {
-    if app.lukke.is_some() || app.etter_prefiks {
+    if app.etter_prefiks {
         return Vec::new();
     }
     let bunn = app.visning.bottom();
@@ -498,6 +546,63 @@ fn knapper(app: &App) -> Vec<(Knapp, u16)> {
 pub fn knapp_på(app: &App, x: u16, y: u16) -> Option<Knapp> {
     let bredde = if stripe(app) { 3 } else { liste_bredde(app) - 1 };
     knapper(app).into_iter().find(|&(_, rad)| rad == y && x < bredde).map(|(k, _)| k)
+}
+
+const LUKKE_BREDDE: u16 = 46;
+
+fn skjerm(app: &App) -> Rect {
+    let v = app.visning;
+    Rect::new(0, 0, v.right(), v.bottom())
+}
+
+/// Linjene i popupen som spør, over knappene.
+fn lukke_tekst(lukke: &crate::Lukke) -> Vec<String> {
+    let indre = (LUKKE_BREDDE - 4) as usize;
+    bryt(&lukke.hva, indre, indre, 3)
+}
+
+fn lukke_boks(app: &App, område: Rect) -> Option<Rect> {
+    let lukke = app.lukke.as_ref()?;
+    midt_på(område, LUKKE_BREDDE, lukke_tekst(lukke).len() as u16 + 4)
+}
+
+/// Knappene på nederste rad inni popupen, med `true` for «lukk», og tasten
+/// som gjør det samme.
+const SVAR: [(bool, &str, &str); 2] = [(true, " lukk", "y "), (false, " avbryt", "n ")];
+
+fn svar(app: &App) -> Vec<(bool, Range<u16>, u16)> {
+    let Some(boks) = lukke_boks(app, skjerm(app)) else { return Vec::new() };
+    let (mut x, y) = (boks.x + 2, boks.bottom() - 2);
+    let mut ut = Vec::new();
+    for (lukk, navn, tast) in SVAR {
+        let bredde = (navn.chars().count() + 2 + tast.len()) as u16;
+        ut.push((lukk, x..x + bredde, y));
+        x += bredde + 2;
+    }
+    ut
+}
+
+pub fn svar_på(app: &App, x: u16, y: u16) -> Option<bool> {
+    svar(app).into_iter().find(|(_, r, rad)| *rad == y && r.contains(&x)).map(|(lukk, ..)| lukk)
+}
+
+pub fn i_popupen(app: &App, x: u16, y: u16) -> bool {
+    lukke_boks(app, skjerm(app)).is_some_and(|r| r.contains((x, y).into()))
+}
+
+fn tegn_lukke(buf: &mut Buffer, område: Rect, app: &App, lukke: &crate::Lukke, mus: Option<&Mål>) {
+    let Some(plass) = lukke_boks(app, område) else { return };
+    let Some(ramme) = boks(buf, område, plass.width, plass.height, lukke.spørsmål, "") else { return };
+    let indre = (ramme.width - 4) as usize;
+    for (i, linje) in lukke_tekst(lukke).into_iter().enumerate() {
+        buf.set_stringn(ramme.x + 2, ramme.y + 1 + i as u16, linje, indre, VANLIG);
+    }
+    for ((lukk, x, y), (_, navn, tast)) in svar(app).into_iter().zip(SVAR) {
+        let bakgrunn = if mus == Some(&Mål::Svar(lukk)) { under_musen() } else { markert() };
+        let stil = if lukk { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { VANLIG };
+        let etter = buf.set_stringn(x.start, y, format!("{navn}  "), x.len(), stil.patch(bakgrunn)).0;
+        buf.set_string(etter, y, tast, SVAK.patch(bakgrunn));
+    }
 }
 
 /// Der en boks på `bredde` og `høyde` står midt på skjermen, eller `None` når
@@ -529,7 +634,9 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
     buf.set_style(boks.inner(Margin::new(1, 1)), Style::reset());
     let tekst = (bredde - 4) as usize;
     buf.set_stringn(boks.x + 2, boks.y, format!(" {tittel} "), tekst, STERK.fg(Color::Reset));
-    buf.set_stringn(boks.x + 2, boks.bottom() - 1, format!(" {hint} "), tekst, SVAK.fg(Color::Reset));
+    if !hint.is_empty() {
+        buf.set_stringn(boks.x + 2, boks.bottom() - 1, format!(" {hint} "), tekst, SVAK.fg(Color::Reset));
+    }
     Some(boks)
 }
 

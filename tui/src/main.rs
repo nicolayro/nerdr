@@ -84,9 +84,12 @@ enum Svar {
     Ingenting,
 }
 
-enum Lukke {
-    Pane(String),
-    Vindu(String),
+/// Det nerdr spør om i en popup, og kommandoen som lukker det hvis du svarer
+/// `y`.
+struct Lukke {
+    spørsmål: &'static str,
+    hva: String,
+    kommando: String,
 }
 
 /// Om tastene går til lista eller til den aktive panen i vinduet som vises.
@@ -101,6 +104,10 @@ enum Fokus {
 enum Mål {
     /// Pane-id-en til Claude-en i lista.
     Kort(String),
+    /// `×` på kortet, med pane-id-en.
+    Lukk(String),
+    /// «lukk» eller «avbryt» i popupen som spør.
+    Svar(bool),
     /// Id-en til vinduet.
     Fane(String),
     /// En pane i vinduet som tastene ikke går til.
@@ -771,8 +778,20 @@ impl App {
                 self.send(&format!("new-window -t {sesjon} -c '#{{pane_current_path}}' -P -F '#{{window_id}}'"), Svar::NyttVindu);
                 return;
             }
-            (KeyCode::Char('x'), _) => return self.lukke = Some(Lukke::Pane(aktiv.id)),
-            (KeyCode::Char('&'), _) => return self.lukke = Some(Lukke::Vindu(aktiv.vindu_id)),
+            (KeyCode::Char('x'), _) => {
+                return self.lukke = Some(Lukke {
+                    spørsmål: "lukke panen?",
+                    hva: "Panen som er aktiv.".into(),
+                    kommando: format!("kill-pane -t {id}"),
+                });
+            }
+            (KeyCode::Char('&'), _) => {
+                return self.lukke = Some(Lukke {
+                    spørsmål: "lukke vinduet?",
+                    hva: "Vinduet, med alle panene i det.".into(),
+                    kommando: format!("kill-window -t {}", sitat(&aktiv.vindu_id)),
+                });
+            }
             (KeyCode::PageUp, _) => {
                 let side = self.bokser().iter().find(|b| b.pane == aktiv.id).map_or(1, |b| b.innhold.height.max(1));
                 return self.rull_til(self.rull.saturating_add(side as u32));
@@ -1093,11 +1112,7 @@ impl App {
         }
         if let Some(lukke) = self.lukke.take() {
             if k.code == KeyCode::Char('y') {
-                let kommando = match lukke {
-                    Lukke::Pane(id) => format!("kill-pane -t {}", sitat(&id)),
-                    Lukke::Vindu(id) => format!("kill-window -t {}", sitat(&id)),
-                };
-                self.send(&kommando, Svar::Ingenting);
+                self.send(&lukke.kommando, Svar::Ingenting);
             }
             return true;
         }
@@ -1155,6 +1170,20 @@ impl App {
         self.send(&format!("set-option -g {} {}", utseende::OPTION, sitat(&self.utseende.tekst())), Svar::Ingenting);
     }
 
+    /// «ny sesjon» lager et vindu til Claude-en, og det er vinduet som lukkes,
+    /// med det du har åpnet ved siden av. Et skall som står igjen etter
+    /// Claude-en, viser ikke nerdr. Deler flere Claude-er vinduet, lukkes bare
+    /// panen.
+    fn lukk_sesjon(&mut self, pane: &Pane) {
+        let flere = self.alle.iter().any(|p| p.vindu_id == pane.vindu_id && p.id != pane.id && self.claude.contains_key(&p.id));
+        let tittel = pane.oppgave().map_or_else(|| self.sted(pane), str::to_string);
+        let (hva, kommando) = match flere {
+            true => (format!("«{tittel}». De andre Claude-ene i vinduet står igjen."), format!("kill-pane -t {}", sitat(&pane.id))),
+            false => (format!("«{tittel}» og vinduet den står i."), format!("kill-window -t {}", sitat(&pane.vindu_id))),
+        };
+        self.lukke = Some(Lukke { spørsmål: "lukke sesjonen?", hva, kommando });
+    }
+
     /// Det som starter en Claude, går via lista, så du går inn i den nye selv
     /// om du startet den fra en pane.
     fn ny_sesjon(&mut self, fortsett: bool) {
@@ -1210,6 +1239,9 @@ impl App {
         if self.velger.is_some() || self.handlinger.is_some() || self.hjelp || self.utseende_meny.is_some() {
             return None;
         }
+        if self.lukke.is_some() {
+            return tegn::svar_på(self, x, y).map(Mål::Svar);
+        }
         let v = self.visning;
         if x + 1 == v.x {
             return Some(Mål::Skille);
@@ -1218,6 +1250,9 @@ impl App {
             return Some(Mål::Knapp(knapp));
         }
         if x < v.x {
+            if let Some(p) = tegn::lukk_på(self, x, y) {
+                return Some(Mål::Lukk(p.id));
+            }
             return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
         }
         if y < v.y {
@@ -1252,6 +1287,22 @@ impl App {
         }
         if self.velger.is_some() || self.handlinger.is_some() || self.hjelp || self.utseende_meny.is_some() {
             return false;
+        }
+        if self.lukke.is_some() {
+            if m.kind != MouseEventKind::Down(MouseButton::Left) {
+                return false;
+            }
+            // Et klikk utenfor popupen avbryter, som en tast som ikke er y.
+            match tegn::svar_på(self, m.column, m.row) {
+                Some(true) => {
+                    if let Some(lukke) = self.lukke.take() {
+                        self.send(&lukke.kommando, Svar::Ingenting);
+                    }
+                }
+                None if tegn::i_popupen(self, m.column, m.row) => {}
+                _ => self.lukke = None,
+            }
+            return true;
         }
         if self.markering.as_ref().is_some_and(|m| m.drar)
             && matches!(m.kind, MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left))
@@ -1314,6 +1365,10 @@ impl App {
             }
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
+            }
+            if let Some(pane) = tegn::lukk_på(self, m.column, m.row) {
+                self.lukk_sesjon(&pane);
+                return true;
             }
             let ute = self.fokus == Fokus::Pane;
             // Kortet slås opp før låsen tas bort, ellers kan kortene ha flyttet

@@ -48,7 +48,10 @@ nerdr. `tmux kill-server` stopper tmux og alt som kjører i det.
 Valgene i konfigurasjonen står der også, som «mye farge» og «skjul tiden».
 
 Et klikk på en Claude i lista velger den, og et dobbeltklikk går inn i den. Et
-klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Klikk og
+klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Står musen
+over et kort, kommer `×` der tiden står. Den lukker vinduet til Claude-en, med
+det du har åpnet ved siden av, etter at du har svart. Deler flere Claude-er
+vinduet, lukkes bare panen. Klikk og
 musehjul i sesjonen går videre når programmet der har slått på mus, som Claude
 Code i fullskjerm. Ellers ruller hjulet i historikken, og en tast tar deg
 tilbake til bunnen. Det du drar over, kopieres når du slipper, med `pbcopy`,
@@ -73,13 +76,13 @@ virker både fra lista og fra panen:
 | `n` `p` | Neste og forrige vindu |
 | `0`–`9` | Vinduet med det nummeret |
 | `l` | Siste vindu, det du var i før |
-| `&` | Lukk vindu, etter at du har svart `y` |
+| `&` | Lukk vindu, etter at du har svart |
 | `%` | Del side om side |
 | `"` | Del over og under |
 | `o` / `←` `↑` `↓` `→` | Neste pane, eller panen i den retningen |
 | `;` | Siste pane, den som var aktiv før |
 | `z` | Zoom pane, inn og ut |
-| `x` | Lukk pane, etter at du har svart `y` |
+| `x` | Lukk pane, etter at du har svart |
 | `{` `}` | Flytt pane bakover og framover |
 | `Space` | Neste oppsett |
 | `C-o` | Roter paner |

@@ -21,6 +21,7 @@ vert() { tmux -L "$VERT" "$@"; }
 tast() { tmux -L "$VERT" send-keys -t vert "$@"; }
 klikk() { tast -l "$(printf '\033[<0;%s;%sM\033[<0;%s;%sm' "$1" "$2" "$1" "$2")"; }
 hjul() { tast -l "$(printf '\033[<%s;%s;%sM' "$1" "$2" "$3")"; }
+beveg() { tast -l "$(printf '\033[<35;%s;%sM' "$1" "$2")"; }
 # dra <fra x> <fra y> <til x> <til y>, med venstre knapp.
 dra() { tast -l "$(printf '\033[<0;%s;%sM\033[<32;%s;%sM\033[<0;%s;%sm' "$1" "$2" "$3" "$4" "$3" "$4")"; }
 skjerm() { vert capture-pane -p -t vert; }
@@ -73,6 +74,9 @@ mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
 uten_klienter() { [ -z "$(tmux -L "${1:-$MAAL}" list-clients)" ]; }
 klienter() { maal list-clients | wc -l | tr -d ' '; }
+uten_sesjon() { ! maal has-session -t "=$1" 2>/dev/null; }
+# Linja, fra 1, der teksten står først på skjermen.
+linja_med() { skjerm | grep -n -- "$1" | head -1 | cut -d: -f1; }
 # Tastene går til lista når nerdr ikke viser markøren til panen.
 i_lista() { er 0 vert display-message -p -t vert '#{cursor_flag}'; }
 i_panen() { er 1 vert display-message -p -t vert '#{cursor_flag}'; }
@@ -150,6 +154,10 @@ vert -f /dev/null new-session -d -s vert -x 110 -y 20 \
 sjekk "paner=bokser fra tmux gir bokser, under streken øverst" linje_har 1 '^─+┬─ [^ ]+ ─'
 sjekk "overskriften har antallet" linje_har 2 '^ VENTER 1 +│'
 sjekk "alfa har ●, repoet og <1m i toppkanten" linje_har 3 '^╭─ ●  nerdr ─+ <1m ─╮'
+beveg 10 4
+sjekk "med musen over kortet står × i toppkanten i stedet for tiden" linje_har 3 '^╭─ ●  nerdr ─+ × ─╮'
+beveg 60 8
+sjekk "og tiden er tilbake når musen går" linje_har 3 '<1m ─╮'
 sjekk "så oppgaven" linje_har 4 '^│ Fiks testene +│'
 sjekk "og branchen" linje_har 5 '^│ main +│'
 sjekk "gamma står under JOBBER, og uten oppgave er repoet tittelen" linje_har 10 '^│ nerdr +│'
@@ -199,7 +207,7 @@ sjekk "C-b w og j velger gamma" linje_har 6 '^▎ ◐  nerdr '
 sjekk "alfa venter igjen" linje_har 3 '^  ●  Fiks testene'
 
 klikk 5 3
-sjekk "klikk på alfa velger den" linje_har 3 '^▎ ●  Fiks testene +<1m │'
+sjekk "klikk på alfa velger den, og musen over den viser ×" linje_har 3 '^▎ ●  Fiks testene +×  │'
 sjekk "og du blir i lista" i_lista
 klikk 5 3
 sjekk "et klikk til på samme kort går inn i alfa" i_panen
@@ -390,9 +398,10 @@ sjekk "ingen vindu endrer størrelse når du bytter Claude" [ ! -s "$KONFIG/stor
 maal set-hook -gu window-resized
 
 tast C-b o C-b x
-sjekk "C-b x spør" linje_har 17 'lukke panen\? y/n'
+sjekk "C-b x spør i en popup" har 'lukke panen\? '
+sjekk "med «lukk» og «avbryt»" har ' lukk  y +avbryt  n '
 tast n
-sjekk "n lar panen stå" linje_mangler 17 'lukke'
+sjekk "n lar panen stå" mangler 'lukke panen'
 sjekk "begge panene er der" linjer 2 maal list-panes -t alfa:0
 tast C-b x y
 sjekk "C-b x y lukker panen" linjer 1 maal list-panes -t alfa:0
@@ -430,7 +439,7 @@ tast C-b w Enter
 sjekk "C-b w og Enter går inn i Claude-en i vindu 0" er 0 vindu_indeks
 
 tast C-b 1 C-b '&'
-sjekk "C-b & spør" linje_har 17 'lukke vinduet\? y/n'
+sjekk "C-b & spør" har 'lukke vinduet\? '
 tast y
 sjekk "y lukker vinduet" linjer 1 maal list-windows -t alfa
 sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ +][^ ]* ─'
@@ -460,6 +469,31 @@ list_straks
 sjekk "nerdr kobler til igjen når sesjonen den viste, forsvinner" er 1 klienter
 sjekk "når alt får plass igjen, er pilene borte" mangler '[↑↓] [0-9]'
 tast Up Up Up Up Up Up Up Up
+
+maal new-session -d -s lukk -x 80 -y 20 -c "$MAPPE"
+maal select-pane -t lukk -T '✳ Lukk meg'
+registrer lukk lukk idle ",\"cwd\":\"$MAPPE\""
+list_straks
+sjekk "en Claude til å lukke" har 'Lukk meg'
+rad=$(linja_med 'Lukk meg')
+sjekk "uten musen over kortet er det ingen ×" linje_mangler "$rad" '×'
+beveg 10 "$rad"
+sjekk "med musen over kortet står × der tiden var" linje_har "$rad" 'Lukk meg +×  │'
+klikk 34 "$rad"
+sjekk "klikk ved siden av × spør" har 'lukke sesjonen\? '
+sjekk "om Claude-en og vinduet" har '«Lukk meg» og vinduet den står i\.'
+tast n
+sjekk "n lar den stå" mangler 'lukke sesjonen'
+klikk 33 "$rad"
+svar=$(linja_med ' avbryt ')
+klikk "$(kolonne "$svar" ' avbryt ')" "$svar"
+sjekk "klikk på «avbryt» lar den stå" mangler 'lukke sesjonen'
+sjekk "og sesjonen er der" maal has-session -t =lukk
+klikk 33 "$rad"
+klikk "$(kolonne "$svar" ' lukk ')" "$svar"
+sjekk "klikk på «lukk» lukker vinduet, og sesjonen med det" uten_sesjon lukk
+sjekk "og kortet er borte" mangler 'Lukk meg'
+rm "$KONFIG/sessions/lukk.json"
 
 dra 36 8 46 8
 sjekk "å dra i streken gjør lista bredere" linje_har 3 '^▎ ●  Fiks testene +<1m +│ '
