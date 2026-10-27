@@ -145,7 +145,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                 let valgt = er_valgt(app, pane);
                 let bakgrunn = match () {
                     _ if valgt && app.fokus == Fokus::Liste => Some(markert()),
-                    _ if matches!(mus, Some(Mål::Kort(id)) if *id == pane.id) => Some(under_musen()),
+                    _ if matches!(mus, Some(Mål::Kort(id) | Mål::Lukk(id)) if *id == pane.id) => Some(under_musen()),
                     _ => None,
                 };
                 tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, bakgrunn);
@@ -409,22 +409,13 @@ fn lukk_x(app: &App) -> Option<u16> {
     }
 }
 
-/// `×` i stedet for tiden og det som står ved den, på den samme plassen, så
-/// ingenting rundt flytter seg når musen kommer.
+/// `×` i stedet for tiden, på den samme plassen, så ingenting rundt flytter
+/// seg når musen kommer. I boksen tas luften rundt tiden med.
 fn tegn_lukk(buf: &mut Buffer, app: &App, x: u16, y: u16, pekt: bool) {
     let stil = if pekt { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { STERK };
-    // I tett går tiden fram til mellomrommet foran, og i boksen fram til
-    // streken, med luften rundt.
-    let (slutt, foran) = match app.utseende.plass {
-        Plass::Tett => (x + 1, " "),
-        _ => (x + 2, "─"),
-    };
-    let mut fra = slutt;
-    while fra > 2 && buf[(fra, y)].symbol() != foran {
-        fra -= 1;
-    }
-    buf.set_string(fra + 1, y, " ".repeat((slutt - fra) as usize), Style::new());
-    buf.set_string(x - 1, y, "   ", Style::new());
+    let luft = if app.utseende.plass == Plass::Tett { "   " } else { "     " };
+    let bredde = luft.len() as u16;
+    buf.set_string(x.saturating_sub(bredde / 2), y, luft, Style::new());
     buf.set_string(x, y, "×", stil);
 }
 
@@ -513,12 +504,17 @@ pub fn ny_fane_på(app: &App, x: u16) -> bool {
 }
 
 /// Knappene nederst i lista, med tasten etter prefikset som gjør det samme.
-const KNAPPER: [(Knapp, &str, &str); 4] = [
-    (Knapp::Ny, "ny sesjon", "f"),
-    (Knapp::Handlinger, "handlinger", ":"),
-    (Knapp::Hjelp, "hjelp", "?"),
-    (Knapp::Avslutt, "avslutt", "d"),
+const KNAPPER: [(Knapp, &str, char); 4] = [
+    (Knapp::Ny, "ny sesjon", 'f'),
+    (Knapp::Handlinger, "handlinger", ':'),
+    (Knapp::Hjelp, "hjelp", '?'),
+    (Knapp::Avslutt, "avslutt", 'd'),
 ];
+
+/// Et klikk på knappen er det samme som prefikset og denne tasten.
+pub fn tasten_til(knapp: Knapp) -> char {
+    KNAPPER.iter().find(|k| k.0 == knapp).map_or('?', |k| k.2)
+}
 /// Lavere enn dette står bare «+ ny sesjon» nederst, så kortene får plass.
 const HØYDE_TIL_KNAPPENE: u16 = 14;
 

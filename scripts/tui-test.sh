@@ -245,7 +245,7 @@ klikk 5 3
 sjekk "klikk på alfa fra panen velger alfa og går ut i lista" linje_har 3 '^▎ ●  Fiks testene'
 sjekk "tilbake i lista" i_lista
 
-sjekk "under streken står knappene, med tasten etter prefikset" linje_har 16 '^─+┤'
+sjekk "nederst i lista er det en strek" linje_har 16 '^─+┤'
 sjekk "«+ ny sesjon» først" linje_har 17 '^ \+ ny sesjon +C-b f │'
 sjekk "så «handlinger»" linje_har 18 '^   handlinger +C-b : │'
 sjekk "så «hjelp»" linje_har 19 '^   hjelp +C-b \? │'
@@ -473,27 +473,38 @@ tast Up Up Up Up Up Up Up Up
 maal new-session -d -s lukk -x 80 -y 20 -c "$MAPPE"
 maal select-pane -t lukk -T '✳ Lukk meg'
 registrer lukk lukk idle ",\"cwd\":\"$MAPPE\""
+maal split-window -d -t lukk:0 -c "$MAPPE"
+maal select-pane -t lukk:0.1 -T '✳ Lukk nummer to'
+registrer lukk2 lukk:0.1 idle ",\"cwd\":\"$MAPPE\""
 list_straks
-sjekk "en Claude til å lukke" har 'Lukk meg'
+sjekk "to Claude-er i samme vindu" har 'Lukk nummer to'
 rad=$(linja_med 'Lukk meg')
 sjekk "uten musen over kortet er det ingen ×" linje_mangler "$rad" '×'
 beveg 10 "$rad"
 sjekk "med musen over kortet står × der tiden var" linje_har "$rad" 'Lukk meg +×  │'
 klikk 34 "$rad"
 sjekk "klikk ved siden av × spør" har 'lukke sesjonen\? '
-sjekk "om Claude-en og vinduet" har '«Lukk meg» og vinduet den står i\.'
+sjekk "om bare Claude-en, når en til står i vinduet" har '«Lukk meg»\. De andre Claude-ene i vinduet'
 tast n
-sjekk "n lar den stå" mangler 'lukke sesjonen'
+sjekk "n lukker popupen" mangler 'lukke sesjonen'
+sjekk "og lar Claude-en stå" har 'Lukk meg'
 klikk 33 "$rad"
 svar=$(linja_med ' avbryt ')
 klikk "$(kolonne "$svar" ' avbryt ')" "$svar"
-sjekk "klikk på «avbryt» lar den stå" mangler 'lukke sesjonen'
-sjekk "og sesjonen er der" maal has-session -t =lukk
+sjekk "klikk på «avbryt» lukker popupen" mangler 'lukke sesjonen'
+sjekk "og lar panen stå" linjer 2 maal list-panes -t =lukk:0
 klikk 33 "$rad"
 klikk "$(kolonne "$svar" ' lukk ')" "$svar"
-sjekk "klikk på «lukk» lukker vinduet, og sesjonen med det" uten_sesjon lukk
+sjekk "klikk på «lukk» lukker bare panen" linjer 1 maal list-panes -t =lukk:0
 sjekk "og kortet er borte" mangler 'Lukk meg'
 rm "$KONFIG/sessions/lukk.json"
+rad=$(linja_med 'Lukk nummer to')
+beveg 10 "$rad"
+klikk 33 "$rad"
+sjekk "alene i vinduet spør den om vinduet" har '«Lukk nummer to» og vinduet den står i\.'
+tast y
+sjekk "y lukker vinduet, og sesjonen med det" uten_sesjon lukk
+rm "$KONFIG/sessions/lukk2.json"
 
 dra 36 8 46 8
 sjekk "å dra i streken gjør lista bredere" linje_har 3 '^▎ ●  Fiks testene +<1m +│ '

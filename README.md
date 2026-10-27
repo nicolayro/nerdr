@@ -40,7 +40,8 @@ eller med prefikset og en tast, som i tmux. I lista er det bare disse:
 Andre bokstaver i lista gjør ingenting.
 
 Nederst i lista står knappene «+ ny sesjon», «handlinger», «hjelp» og
-«avslutt», hver med tasten etter prefikset som gjør det samme. Claude-ene
+«avslutt», hver med tasten etter prefikset som gjør det samme. I et lavt vindu og
+på stripa står bare «+ ny sesjon» der. Claude-ene
 kjører videre i tmux når nerdr avslutter, og er der neste gang du starter
 nerdr. `tmux kill-server` stopper tmux og alt som kjører i det.
 

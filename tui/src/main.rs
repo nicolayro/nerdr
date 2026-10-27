@@ -528,6 +528,7 @@ impl App {
                     velger.skriv(&tekst);
                     true
                 }
+                (None, None) if self.lukke.is_some() => false,
                 (None, None) => {
                     self.lim_inn(&tekst);
                     false
@@ -1175,7 +1176,8 @@ impl App {
     /// Claude-en, viser ikke nerdr. Deler flere Claude-er vinduet, lukkes bare
     /// panen.
     fn lukk_sesjon(&mut self, pane: &Pane) {
-        let flere = self.alle.iter().any(|p| p.vindu_id == pane.vindu_id && p.id != pane.id && self.claude.contains_key(&p.id));
+        let claude = |id: &String| self.claude.contains_key(id) || self.nye.contains_key(id);
+        let flere = self.alle.iter().any(|p| p.vindu_id == pane.vindu_id && p.id != pane.id && claude(&p.id));
         let tittel = pane.oppgave().map_or_else(|| self.sted(pane), str::to_string);
         let (hva, kommando) = match flere {
             true => (format!("«{tittel}». De andre Claude-ene i vinduet står igjen."), format!("kill-pane -t {}", sitat(&pane.id))),
@@ -1338,12 +1340,7 @@ impl App {
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
-            match knapp {
-                Knapp::Ny => self.ny_sesjon(false),
-                Knapp::Handlinger => self.åpne_handlinger(),
-                Knapp::Hjelp => self.hjelp = true,
-                Knapp::Avslutt => self.ferdig = Some(String::new()),
-            }
+            self.prefikstast(KeyEvent::new(KeyCode::Char(tegn::tasten_til(knapp)), KeyModifiers::NONE));
             return true;
         }
         if m.column < v.x {
