@@ -8,44 +8,33 @@ pub const OPTION: &str = "@nerdr-utseende";
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Farge {
-    Lite,
-    Middels,
-    Mye,
+    Av,
+    /// Tegnene, tiden og rammene i fargen til gruppen.
+    På,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Plass {
-    /// Én linje for hver Claude, uten boks.
-    Tett,
     Vanlig,
-    Romslig,
+    /// Én linje for hver Claude, uten boks.
+    Minimal,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Orden {
-    /// Det som venter på deg, øverst.
+    /// De aktive øverst.
     Nerdr,
     Mappe,
     /// Den som sist endret tilstand, øverst.
     Aktivitet,
 }
 
-/// Hvordan prosjektet i toppkanten skiller seg ut.
+/// Hvor de ledige begynner, når lista er ordnet som nerdr.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Uthev {
-    Ingen,
-    Fet,
-    /// I fargen til køen.
-    Farge,
-}
-
-/// Hvor glyfen står i toppkanten.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Symbol {
-    /// Foran prosjektet.
-    Venstre,
-    /// Etter tiden.
-    Høyre,
+pub enum Ledig {
+    Under,
+    /// Midt i lista, så de ledige ikke flytter seg når en blir aktiv.
+    Midten,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,61 +42,45 @@ pub struct Utseende {
     pub paner: Rammer,
     pub farge: Farge,
     pub plass: Plass,
-    pub tid: bool,
     pub orden: Orden,
+    pub ledig: Ledig,
     /// Linjer til tittelen i boksene.
     pub tittel: usize,
-    pub uthev: Uthev,
-    pub symbol: Symbol,
 }
 
-/// Står i `OPTION` foran verdien, som `farge=middels`, så en akse kan komme
-/// til eller forsvinne uten at de andre leses feil.
-pub const AKSER: [&str; 8] = ["paner", "farge", "plass", "tid", "orden", "tittel", "uthev", "symbol"];
+/// Står i `OPTION` foran verdien, som `farge=på`, så en akse kan komme til
+/// eller forsvinne uten at de andre leses feil.
+pub const AKSER: [&str; 6] = ["paner", "farge", "plass", "orden", "ledig", "tittel"];
+const LEDIG: usize = 4;
 /// Aksene fra denne gjelder bare boksene.
 pub const BOKSAKSER: usize = 5;
 /// Står i `OPTION`, og endres ikke.
-const VERDIER: [&[&str]; 8] = [
+const VERDIER: [&[&str]; 6] = [
     &["bokser", "linjer"],
-    &["lite", "middels", "mye"],
-    &["tett", "vanlig", "romslig"],
-    &["vis", "skjul"],
+    &["av", "på"],
+    &["vanlig", "minimal"],
     &["nerdr", "mappe", "aktivitet"],
+    &["under", "midten"],
     &["1", "2", "3"],
-    &["ingen", "fet", "farge"],
-    &["venstre", "høyre"],
 ];
 /// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
-pub const NAVN: [&[&str]; 8] = [
+pub const NAVN: [&[&str]; 6] = [
     &["paner i bokser", "paner med linjer"],
-    &["lite farge", "middels farge", "mye farge"],
-    &["tett liste", "vanlig liste", "romslig liste"],
-    &["vis tiden", "skjul tiden"],
+    &["uten farge", "med farge"],
+    &["vanlig liste", "minimal liste"],
     &["ordne som nerdr", "ordne etter mappe", "ordne etter aktivitet"],
+    &["ledige under de aktive", "ledige fra midten"],
     &["oppgaven på 1 linje", "oppgaven på 2 linjer", "oppgaven på 3 linjer"],
-    &["repoet dempet", "repoet i fet", "repoet i farge"],
-    &["tegnet til venstre", "tegnet til høyre"],
 ];
 const PANER: [Rammer; 2] = [Rammer::Bokser, Rammer::Linjer];
-const FARGER: [Farge; 3] = [Farge::Lite, Farge::Middels, Farge::Mye];
-const PLASSER: [Plass; 3] = [Plass::Tett, Plass::Vanlig, Plass::Romslig];
-const TIDER: [bool; 2] = [true, false];
+const FARGER: [Farge; 2] = [Farge::Av, Farge::På];
+const PLASSER: [Plass; 2] = [Plass::Vanlig, Plass::Minimal];
 const ORDNER: [Orden; 3] = [Orden::Nerdr, Orden::Mappe, Orden::Aktivitet];
-const UTHEVINGER: [Uthev; 3] = [Uthev::Ingen, Uthev::Fet, Uthev::Farge];
-const SYMBOLER: [Symbol; 2] = [Symbol::Venstre, Symbol::Høyre];
+const LEDIGE: [Ledig; 2] = [Ledig::Under, Ledig::Midten];
 
 impl Utseende {
     pub fn ny(paner: Rammer) -> Utseende {
-        Utseende {
-            paner,
-            farge: Farge::Middels,
-            plass: Plass::Vanlig,
-            tid: true,
-            orden: Orden::Nerdr,
-            tittel: 1,
-            uthev: Uthev::Fet,
-            symbol: Symbol::Venstre,
-        }
+        Utseende { paner, farge: Farge::På, plass: Plass::Vanlig, orden: Orden::Nerdr, ledig: Ledig::Under, tittel: 1 }
     }
 
     pub fn verdier(akse: usize) -> &'static [&'static str] {
@@ -120,11 +93,9 @@ impl Utseende {
             0 => PANER.iter().position(|p| *p == self.paner),
             1 => FARGER.iter().position(|f| *f == self.farge),
             2 => PLASSER.iter().position(|p| *p == self.plass),
-            3 => TIDER.iter().position(|t| *t == self.tid),
-            4 => ORDNER.iter().position(|o| *o == self.orden),
-            5 => Some(self.tittel - 1),
-            6 => UTHEVINGER.iter().position(|u| *u == self.uthev),
-            _ => SYMBOLER.iter().position(|s| *s == self.symbol),
+            3 => ORDNER.iter().position(|o| *o == self.orden),
+            4 => LEDIGE.iter().position(|l| *l == self.ledig),
+            _ => Some(self.tittel - 1),
         };
         i.unwrap_or(0)
     }
@@ -134,11 +105,9 @@ impl Utseende {
             0 => self.paner = PANER[i],
             1 => self.farge = FARGER[i],
             2 => self.plass = PLASSER[i],
-            3 => self.tid = TIDER[i],
-            4 => self.orden = ORDNER[i],
-            5 => self.tittel = i + 1,
-            6 => self.uthev = UTHEVINGER[i],
-            _ => self.symbol = SYMBOLER[i],
+            3 => self.orden = ORDNER[i],
+            4 => self.ledig = LEDIGE[i],
+            _ => self.tittel = i + 1,
         }
     }
 
@@ -148,9 +117,12 @@ impl Utseende {
         self.sett(akse, (self.indeks(akse) as i32 + steg).rem_euclid(antall) as usize);
     }
 
-    /// Tett har ingen bokser å velge for.
+    /// Minimal har ingen bokser å velge for, og bare nerdr har ledige.
     pub fn gjelder(&self, akse: usize) -> bool {
-        akse < BOKSAKSER || self.plass != Plass::Tett
+        match akse {
+            LEDIG => self.orden == Orden::Nerdr,
+            _ => akse < BOKSAKSER || self.plass != Plass::Minimal,
+        }
     }
 
     pub fn tekst(&self) -> String {
@@ -177,12 +149,9 @@ mod tester {
     fn teksten_leses_tilbake_til_det_samme() {
         let mut u = Utseende::ny(Rammer::Bokser);
         u.endre(1, 1);
-        u.endre(3, 1);
-        u.endre(4, -1);
-        assert_eq!(
-            u.tekst(),
-            "paner=bokser farge=mye plass=vanlig tid=skjul orden=aktivitet tittel=1 uthev=fet symbol=venstre"
-        );
+        u.endre(2, 1);
+        u.endre(3, -1);
+        assert_eq!(u.tekst(), "paner=bokser farge=av plass=minimal orden=aktivitet ledig=under tittel=1");
         let mut lest = Utseende::ny(Rammer::Linjer);
         lest.les(&u.tekst());
         assert_eq!(lest, u);
@@ -191,8 +160,8 @@ mod tester {
     #[test]
     fn ukjente_akser_og_verdier_endrer_ingenting() {
         let mut u = Utseende::ny(Rammer::Linjer);
-        u.les("lista=original paner=sirkler bokser farge=lite");
-        assert_eq!((u.paner, u.farge), (Rammer::Linjer, Farge::Lite));
+        u.les("lista=original paner=sirkler bokser farge=av");
+        assert_eq!((u.paner, u.farge), (Rammer::Linjer, Farge::Av));
     }
 
     #[test]
@@ -200,7 +169,7 @@ mod tester {
         let mut u = Utseende::ny(Rammer::Linjer);
         u.endre(0, 1);
         assert_eq!(u.paner, Rammer::Bokser);
-        u.endre(2, 2);
-        assert_eq!(u.plass, Plass::Tett);
+        u.endre(3, 4);
+        assert_eq!(u.orden, Orden::Mappe);
     }
 }

@@ -47,9 +47,9 @@ pub const PREFIKSTASTER: [(&str, &str); 24] = [
 
 pub const MERKER: [(Merke, &str); 5] = [
     (Merke::Spør, "spør om noe"),
-    (Merke::Ulest, "ferdig med noe du ikke har sett"),
+    (Merke::Ulest, "ferdig, og venter på deg"),
     (Merke::Jobber, "jobber"),
-    (Merke::Sett, "ferdig, og du har sett den"),
+    (Merke::Sett, "ledig, du har gått ut av den"),
     (Merke::Starter, "starter"),
 ];
 

@@ -97,19 +97,19 @@ virker både fra lista og fra panen:
 | prefikset | Send prefikset til panen |
 
 Hver Claude står i en boks, med tegnet, repoet og tiden i toppkanten, oppgaven
-inni og branchen under. Et worktree står med navnet til repoet det er laget fra. Lista er delt i tre:
+inni og branchen under. Et worktree står med navnet til repoet det er laget fra. Lista er delt i to:
 
 | | |
 | --- | --- |
-| **venter** | `●` spør om noe, `◆` er ferdig med noe du ikke har sett |
-| **jobber** | `◐` jobber, `◌` starter |
-| **ferdig** | `○` er ferdig, og du har vært inne i den siden |
+| **aktive** | `●` spør om noe, `◆` er ferdig og venter på deg, `◐` jobber, `◌` starter |
+| **ledige** | `○` er ferdig, og du har gått ut av den uten å sette den i gang igjen |
 
-I hver gruppe står den som kom sist inn, øverst. Det står hvor lenge den har
-ventet, jobbet eller vært ferdig. Får ikke lista plass, ruller den med
-musehjulet og følger den du velger. Pilene øverst og nederst sier hvor mange
-som er over og under, og om noen over venter på deg. Et klikk på en pil ruller
-en side.
+Den du er inne i, er aldri ledig, og kortet har bakgrunn så du ser hvor du er.
+Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den du
+sist gikk ut av. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
+Får ikke lista plass, ruller den med musehjulet og følger den du velger. Pilene
+øverst og nederst sier at det er flere over og under, og pila øverst er
+oransje når noen over venter på deg. Et klikk på en pil ruller en side.
 
 Dra i streken mellom lista og panen for å gjøre lista bredere eller smalere.
 Drar du den helt inn, blir lista en stripe med bare tegnene, og et dobbeltklikk
@@ -153,7 +153,8 @@ med et `versjon`-felt.
 
 I JSON fra `liste` er `tilstand` det Claude melder selv (`venter`, `jobber`
 eller `klar`), eller `null` når nerdr ikke kjenner statusen. `merke` er det lista viser (`spør`, `ulest`, `jobber` eller
-`sett`), og `gruppe` er der den står (`venter`, `jobber` eller `ferdig`).
+`sett`), og `gruppe` er `venter` for `spør` og `ulest`, `jobber` for `jobber`
+og `ferdig` for `sett`.
 `sett` er da du sist var inne i Claude-en i nerdr, i millisekunder som
 `endret`, eller `null` når nerdr ikke har sett den.
 
@@ -165,17 +166,15 @@ husker det i `@nerdr-utseende`.
 | | |
 | --- | --- |
 | **paner** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
-| **farge** | `lite` har farge bare på tegnet. `middels` gir også overskriftene farge. `mye` gir rammene og strekene en tone av fargen til gruppen. |
-| **plass** | `tett` har én linje for hver Claude, uten boks, med tegnet, oppgaven og tiden. `romslig` har mer luft mellom gruppene. |
-| **tid** | Om det står hvor lenge den har ventet, jobbet eller vært ferdig. |
-| **orden** | `nerdr` deler lista i venter, jobber og ferdig. `mappe` har en gruppe for hvert repo, i alfabetisk rekkefølge, og Claude-ene i hver står der de er i tmux. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. |
+| **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
+| **plass** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
+| **orden** | `nerdr` deler lista i aktive og ledige. `mappe` har en gruppe for hvert repo, i alfabetisk rekkefølge, og Claude-ene i hver står der de er i tmux. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. |
+| **ledig** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. |
 | **tittel** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. |
-| **uthev** | Hvordan repoet i toppkanten står ut: `ingen` er dempet, `fet` er fet, og `farge` har fargen til gruppen. |
-| **symbol** | Om tegnet står til `venstre` for repoet eller til `høyre` for tiden. |
 
-Standard er middels farge, vanlig plass, tiden synlig, ordnet som nerdr, én
-linje til oppgaven, fet repo og tegnet til venstre. `tittel`, `uthev` og
-`symbol` gjelder ikke tett. `nerdr liste` er alltid ordnet som nerdr.
+Standard er farge på, vanlig plass, ordnet som nerdr med de ledige under, og
+én linje til oppgaven. `ledig` gjelder bare nerdr, og `tittel` gjelder ikke
+minimal. `nerdr liste` er alltid ordnet som nerdr.
 
 ## Innstillinger
 

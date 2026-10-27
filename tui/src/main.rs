@@ -18,7 +18,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
 use bokser::Boks;
-use grupper::{Plass, Rad};
+use grupper::{Del, Plass, Rad};
 use handlinger::{Handling, Handlinger};
 use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{self, FELT, Pane};
@@ -159,7 +159,7 @@ struct App {
     /// i «venter på deg» første gang nerdr starter.
     sett: HashMap<String, u64>,
     /// Panen du er inne i, og plassen den hadde da du gikk inn. Den blir stående
-    /// der til du går ut, så kortet ikke flytter seg for hver melding.
+    /// der i delen til du går ut, så kortet ikke flytter seg for hver melding.
     låst: Option<(String, Plass)>,
 
     /// Claude-en som er valgt i lista.
@@ -1519,13 +1519,15 @@ impl App {
         if fokus == self.fokus {
             return;
         }
-        // Plassen må tas før panen merkes som sett, ellers havner en ferdig
-        // Claude du går inn i, rett i FERDIG.
         self.låst = match fokus {
             Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.plass(p)?))),
             Fokus::Liste => None,
         };
-        if let Some(id) = self.valgt.as_ref().map(|p| p.id.clone()) {
+        // Det du har sett, er ledig, så det merkes først når du går ut. Ellers
+        // ville den du går inn i, blitt ledig med en gang.
+        if fokus == Fokus::Liste
+            && let Some(id) = self.valgt.as_ref().map(|p| p.id.clone())
+        {
             self.merk_sett(&id, nå_ms());
         }
         // Fra lista går du inn i panen du valgte, også når en annen er aktiv
@@ -1543,16 +1545,24 @@ impl App {
         let Some(claude) = self.claude.get(&pane.id) else {
             return self.nye.contains_key(&pane.id).then_some(Merke::Starter);
         };
-        let inne = self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| v.id == pane.id);
-        let sett = if inne { u64::MAX } else { self.sett.get(&pane.id).copied().unwrap_or(0) };
-        Some(Merke::fra(claude, sett))
+        Some(Merke::fra(claude, self.sett.get(&pane.id).copied().unwrap_or(0)))
     }
 
     fn plass(&self, pane: &Pane) -> Option<Plass> {
         let merke = self.merke(pane)?;
+        let del = Del::fra(merke);
+        let endret = self.claude.get(&pane.id).map(|c| c.endret);
+        // Den du sist gikk ut av, øverst blant de ledige.
+        let siden = if del == Del::Ledige { endret.max(self.sett.get(&pane.id).copied()) } else { endret };
         Some(match &self.låst {
-            Some((id, låst)) if *id == pane.id => Plass { merke, ..*låst },
-            _ => Plass::fra(merke, self.claude.get(&pane.id).map(|c| c.endret)),
+            // Den du er inne i, blir ikke ledig før du går ut. En ny Claude
+            // regnes som sett fra den dukker opp i registeret. Settes en
+            // ledig i gang, havner den øverst blant de aktive.
+            Some((id, låst)) if *id == pane.id => {
+                let del = del.min(låst.del);
+                Plass { del, merke, siden: if del == låst.del { låst.siden } else { None } }
+            }
+            _ => Plass { del, merke, siden },
         })
     }
 

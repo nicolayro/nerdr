@@ -14,11 +14,11 @@ use ratatui::style::{Color, Modifier, Style};
 use crate::bokser::{Boks, Rammer};
 use crate::markering;
 use crate::palett::{Rgb, bland};
-use crate::grupper::{Rad, glyf};
+use crate::grupper::{Del, Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::tekst::varighet;
-use crate::utseende::{AKSER, BOKSAKSER, Orden, Plass, Utseende};
+use crate::utseende::{self, AKSER, BOKSAKSER, Ledig, Orden, Plass, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
@@ -127,7 +127,6 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
 
     let mut overskrifter = Vec::new();
     let (rader, utsnitt) = liste(app);
-    let antall = kort::antall(rader.iter().map(|p| &p.rad));
     let vis = utsnitt.rader();
     let på_skjermen = |y: u16| u16::try_from(utsnitt.skjerm(y)).ok().filter(|y| vis.contains(y));
     for Plassert { y, rad, kort, .. } in &rader {
@@ -135,7 +134,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
             Rad::Tom => {}
             Rad::Overskrift(o) => {
                 if let Some(y) = på_skjermen(*y)
-                    && kort::overskrift(app.utseende, buf, y, bredde, o, &antall, stripe(app))
+                    && kort::overskrift(app.utseende, buf, y, bredde, o, stripe(app))
                 {
                     overskrifter.push(y);
                 }
@@ -144,7 +143,8 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                 let Some(kort) = kort else { continue };
                 let valgt = er_valgt(app, pane);
                 let bakgrunn = match () {
-                    _ if valgt && app.fokus == Fokus::Liste => Some(markert()),
+                    // Også når du er inne i den, så du ser hvor du er.
+                    _ if valgt => Some(markert()),
                     _ if matches!(mus, Some(Mål::Kort(id) | Mål::Lukk(id)) if *id == pane.id) => Some(under_musen()),
                     _ => None,
                 };
@@ -194,17 +194,19 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     }
     if utsnitt.ruller {
         let kort = |p: &&Plassert| matches!(p.rad, Rad::Pane(..));
-        let over: Vec<&Plassert> = rader.iter().filter(kort).filter(|p| p.y + p.høyde <= utsnitt.rull).collect();
-        let under = rader.iter().filter(kort).filter(|p| p.y >= utsnitt.rull + utsnitt.rom).count();
-        let venter = over.iter().filter(|p| matches!(p.rad, Rad::Pane(_, m) if m.gruppe() == Gruppe::Venter)).count();
-        if !over.is_empty() {
-            let x = buf.set_stringn(1, 0, format!(" ↑ {} ", over.len()), bredde as usize, SVAK).0;
-            if venter > 0 {
-                buf.set_stringn(x, 0, format!("· {venter} venter "), bredde as usize, Style::new().fg(ORANSJE));
-            }
+        let mut over = rader.iter().filter(kort).filter(|p| p.y + p.høyde <= utsnitt.rull).peekable();
+        let under = rader.iter().filter(kort).any(|p| p.y >= utsnitt.rull + utsnitt.rom);
+        if over.peek().is_some() {
+            let venter = over.any(|p| matches!(p.rad, Rad::Pane(_, m) if m.gruppe() == Gruppe::Venter));
+            let stil = match (venter, app.utseende.farge) {
+                (false, _) => SVAK,
+                (true, utseende::Farge::På) => Style::new().fg(ORANSJE),
+                (true, utseende::Farge::Av) => STERK,
+            };
+            buf.set_stringn(1, 0, " ↑ ", bredde as usize, stil);
         }
-        if under > 0 {
-            buf.set_stringn(1, vis.end, format!(" ↓ {under} "), bredde as usize, SVAK);
+        if under {
+            buf.set_stringn(1, vis.end, " ↓ ", bredde as usize, SVAK);
         }
     }
     // Skillelinja lyser når musen er over den, så du ser at den kan dras.
@@ -301,9 +303,13 @@ struct Plassert<'a> {
 /// Radene i lista, etter hverandre fra toppen.
 fn plasser(app: &App) -> Vec<Plassert<'_>> {
     let mut y = 0;
-    kort::ordne(app.utseende, app.rader(), stripe(app))
+    let midten = app.utseende.ledig == Ledig::Midten && app.utseende.orden == Orden::Nerdr;
+    kort::ordne(app.rader(), stripe(app))
         .into_iter()
         .map(|rad| {
+            if midten && rad == Rad::Overskrift(Overskrift::Del(Del::Ledige)) {
+                y = y.max(plass(app) / 2);
+            }
             let kort = if let Rad::Pane(pane, merke) = rad { Some(kort(app, pane, merke)) } else { None };
             let høyde = kort.as_ref().map_or(1, |k| k.len() as u16);
             let plassert = Plassert { y, høyde, rad, kort };
@@ -404,7 +410,7 @@ fn lukk_x(app: &App) -> Option<u16> {
     let bredde = liste_bredde(app) - 1;
     match app.utseende.plass {
         _ if stripe(app) => None,
-        Plass::Tett => bredde.checked_sub(3),
+        Plass::Minimal => bredde.checked_sub(3),
         _ => bredde.checked_sub(6),
     }
 }
@@ -413,7 +419,7 @@ fn lukk_x(app: &App) -> Option<u16> {
 /// seg når musen kommer. I boksen tas luften rundt tiden med.
 fn tegn_lukk(buf: &mut Buffer, app: &App, x: u16, y: u16, pekt: bool) {
     let stil = if pekt { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { STERK };
-    let luft = if app.utseende.plass == Plass::Tett { "   " } else { "     " };
+    let luft = if app.utseende.plass == Plass::Minimal { "   " } else { "     " };
     let bredde = luft.len() as u16;
     buf.set_string(x.saturating_sub(bredde / 2), y, luft, Style::new());
     buf.set_string(x, y, "×", stil);

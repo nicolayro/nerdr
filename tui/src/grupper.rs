@@ -1,10 +1,8 @@
-//! Rekkefølgen i lista. Måten til nerdr har de som venter på deg først, så de
-//! som jobber, så de som er ferdige og sett. Lista kan også grupperes etter
-//! mappe, eller stå etter når Claude-ene sist gjorde noe.
+//! Rekkefølgen i lista. Måten til nerdr har de aktive først og de ledige
+//! under. Lista kan også grupperes etter mappe, eller stå etter når
+//! Claude-ene sist gjorde noe.
 
-use std::collections::HashMap;
-
-use nerdr_kjerne::merke::{Gruppe, Merke};
+use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::paner::Pane;
 
 #[derive(Debug, PartialEq)]
@@ -16,17 +14,16 @@ pub enum Rad<'a> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Overskrift {
-    Gruppe(Gruppe),
-    /// Repoet, eller mappa når den ikke er i et repo, med gruppen til den i
-    /// mappa som haster mest.
-    Mappe(String, Gruppe),
+    Del(Del),
+    /// Repoet, eller mappa når den ikke er i et repo.
+    Mappe(String),
 }
 
 impl Overskrift {
     pub fn tittel(&self) -> &str {
         match self {
-            Overskrift::Gruppe(g) => tittel(*g),
-            Overskrift::Mappe(navn, _) => navn,
+            Overskrift::Del(d) => tittel(*d),
+            Overskrift::Mappe(navn) => navn,
         }
     }
 }
@@ -41,26 +38,39 @@ pub fn glyf(merke: Merke) -> &'static str {
     }
 }
 
-pub fn tittel(gruppe: Gruppe) -> &'static str {
-    match gruppe {
-        Gruppe::Venter => "VENTER",
-        Gruppe::Jobber => "JOBBER",
-        Gruppe::Ferdig => "FERDIG",
+/// Lista til nerdr er delt i to. En Claude blir ledig når du har gått ut av den
+/// uten å sette den i gang igjen, så den du er inne i, er aldri ledig.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Del {
+    Aktive,
+    Ledige,
+}
+
+impl Del {
+    pub fn fra(merke: Merke) -> Del {
+        if merke == Merke::Sett { Del::Ledige } else { Del::Aktive }
+    }
+}
+
+pub fn tittel(del: Del) -> &'static str {
+    match del {
+        Del::Aktive => "AKTIVE",
+        Del::Ledige => "LEDIGE",
     }
 }
 
 /// Hvor en pane står i lista.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Plass {
-    pub gruppe: Gruppe,
+    pub del: Del,
     pub merke: Merke,
-    /// Da panen kom inn i gruppen, i millisekunder siden 1970.
+    /// Da panen kom inn i delen, i millisekunder siden 1970.
     pub siden: Option<u64>,
 }
 
 impl Plass {
     pub fn fra(merke: Merke, siden: Option<u64>) -> Plass {
-        Plass { gruppe: merke.gruppe(), merke, siden }
+        Plass { del: Del::fra(merke), merke, siden }
     }
 }
 
@@ -72,9 +82,9 @@ pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> V
     let mut plassert: Vec<(&Pane, Plass)> = paner.iter().filter_map(|p| Some((p, plass(p)?))).collect();
     // Stabil, så like tider beholder rekkefølgen fra tmux.
     plassert.sort_by(|(_, a), (_, b)| {
-        a.gruppe.cmp(&b.gruppe).then_with(|| b.siden.unwrap_or(u64::MAX).cmp(&a.siden.unwrap_or(u64::MAX)))
+        a.del.cmp(&b.del).then_with(|| b.siden.unwrap_or(u64::MAX).cmp(&a.siden.unwrap_or(u64::MAX)))
     });
-    med_overskrifter(plassert.into_iter().map(|(p, pl)| (p, pl.merke, Some(Overskrift::Gruppe(pl.gruppe)))))
+    med_overskrifter(plassert.into_iter().map(|(p, pl)| (p, pl.merke, Some(Overskrift::Del(pl.del)))))
 }
 
 /// En gruppe for hver mappe, i alfabetisk rekkefølge, og panene i hver i
@@ -82,15 +92,7 @@ pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> V
 pub fn etter_mappe<'a>(paner: &'a [Pane], mappe: impl Fn(&Pane) -> Option<(Merke, String)>) -> Vec<Rad<'a>> {
     let mut plassert: Vec<(&Pane, Merke, String)> = paner.iter().filter_map(|p| mappe(p).map(|(m, navn)| (p, m, navn))).collect();
     plassert.sort_by_cached_key(|(_, _, navn)| navn.to_lowercase());
-    let mut haster: HashMap<String, Gruppe> = HashMap::new();
-    for (_, m, navn) in &plassert {
-        let g = haster.entry(navn.clone()).or_insert(m.gruppe());
-        *g = (*g).min(m.gruppe());
-    }
-    med_overskrifter(plassert.into_iter().map(|(p, m, navn)| {
-        let g = haster[&navn];
-        (p, m, Some(Overskrift::Mappe(navn, g)))
-    }))
+    med_overskrifter(plassert.into_iter().map(|(p, m, navn)| (p, m, Some(Overskrift::Mappe(navn)))))
 }
 
 /// Uten grupper, med den som sist endret tilstand, øverst. En som ikke har
@@ -129,7 +131,7 @@ mod tester {
     }
 
     fn plass(merke: Merke, siden: u64) -> Option<Plass> {
-        Some(Plass { gruppe: merke.gruppe(), merke, siden: Some(siden) })
+        Some(Plass::fra(merke, Some(siden)))
     }
 
     fn rekkefølge<'a>(rader: &'a [Rad]) -> Vec<&'a str> {
@@ -153,11 +155,11 @@ mod tester {
         assert_eq!(
             rader,
             [
-                Rad::Overskrift(Overskrift::Gruppe(Gruppe::Venter)),
+                Rad::Overskrift(Overskrift::Del(Del::Aktive)),
                 Rad::Pane(&paner[1], Merke::Ulest),
                 Rad::Pane(&paner[2], Merke::Spør),
                 Rad::Tom,
-                Rad::Overskrift(Overskrift::Gruppe(Gruppe::Ferdig)),
+                Rad::Overskrift(Overskrift::Del(Del::Ledige)),
                 Rad::Pane(&paner[0], Merke::Sett),
             ]
         );
@@ -176,10 +178,10 @@ mod tester {
     }
 
     #[test]
-    fn gruppen_kan_avvike_fra_merket() {
+    fn delen_kan_avvike_fra_merket() {
         let paner = [pane("%1")];
-        let rader = rader(&paner, |_| Some(Plass { gruppe: Gruppe::Jobber, merke: Merke::Sett, siden: None }));
-        assert_eq!(rader, [Rad::Overskrift(Overskrift::Gruppe(Gruppe::Jobber)), Rad::Pane(&paner[0], Merke::Sett)]);
+        let rader = rader(&paner, |_| Some(Plass { del: Del::Aktive, merke: Merke::Sett, siden: None }));
+        assert_eq!(rader, [Rad::Overskrift(Overskrift::Del(Del::Aktive)), Rad::Pane(&paner[0], Merke::Sett)]);
     }
 
     #[test]
@@ -192,10 +194,10 @@ mod tester {
         assert_eq!(
             rader,
             [
-                Rad::Overskrift(Overskrift::Mappe("awl".into(), Gruppe::Venter)),
+                Rad::Overskrift(Overskrift::Mappe("awl".into())),
                 Rad::Pane(&paner[1], Merke::Spør),
                 Rad::Tom,
-                Rad::Overskrift(Overskrift::Mappe("Nerdr".into(), Gruppe::Ferdig)),
+                Rad::Overskrift(Overskrift::Mappe("Nerdr".into())),
                 Rad::Pane(&paner[0], Merke::Sett),
                 Rad::Pane(&paner[2], Merke::Sett),
             ]

@@ -22,8 +22,9 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
 - **Claude** er en Claude Code som kjører i en pane (`register::Claude`), og
   **samtale** er den Claude Code kaller `sessionId`.
 - **Tilstand** er det Claude melder selv: spør, jobber eller klar.
-- **Merke** og **gruppe** er det lista viser. VENTER er det som venter på deg:
-  en Claude som spør, eller som er ferdig med noe du ikke har sett.
+- **Merke** er det kortet viser, og **gruppe** gir fargen og står i JSON.
+  Det som venter på deg, er en Claude som spør, eller som er ferdig med noe
+  du ikke har sett. Lista er delt i **aktive** og **ledige** (`grupper::Del`).
 
 ## Før commit
 

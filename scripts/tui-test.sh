@@ -48,6 +48,10 @@ sjekk() {
 
 linje_har() { skjerm | sed -n "$1p" | grep -Eq -- "$2"; }
 linje_mangler() { ! linje_har "$@"; }
+linje_med_farger_har() { vert capture-pane -p -e -t vert | sed -n "$1p" | grep -Fq -- "$2"; }
+# Panen ved siden av har sitt eget oransje ●, men aldri et grønt ◐.
+gronn_glyf() { linje_med_farger_har "$1" '38;5;108m◐'; }
+uten_gronn_glyf() { ! gronn_glyf "$1"; }
 har() { skjerm | grep -Eq -- "$1"; }
 mangler() { ! har "$1"; }
 i_pane() { maal capture-pane -p -t "$1" | grep -qF -- "$2"; }
@@ -88,7 +92,7 @@ sett_i_json() { nerdr -L "$MAAL" liste --json | grep -o '"sett":[0-9]' | wc -l |
 # registrer <fil> <sesjon> <status> [flere JSON-felt]
 #
 # Tiden er i millisekunder, som fra Claude Code. Med hele sekunder kan en
-# Claude bli ferdig før du sist var inne i den, og havne i FERDIG.
+# Claude bli ferdig før du sist var inne i den, og bli ledig.
 registrer() {
   pane=$(maal display-message -p -t "$2" '#{pane_id}')
   printf '{"tmux":"%s:@0.%s","status":"%s","updatedAt":%s%s}' \
@@ -144,15 +148,16 @@ maal new-session -d -s gamma -x 80 -y 20 /bin/cat
 maal set -g default-command /bin/cat
 
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
-registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
+# alfa registreres sist, så den står øverst.
 registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
+registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 maal set -g @nerdr-utseende paner=bokser
 
 vert -f /dev/null new-session -d -s vert -x 110 -y 20 \
   "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
 sjekk "paner=bokser fra tmux gir bokser, under streken øverst" linje_har 1 '^─+┬─ [^ ]+ ─'
-sjekk "overskriften har antallet" linje_har 2 '^ VENTER 1 +│'
+sjekk "overskriften har strek mot skillelinja, uten antallet" linje_har 2 '^ AKTIVE ─+┤'
 sjekk "alfa har ●, repoet og <1m i toppkanten" linje_har 3 '^╭─ ●  nerdr ─+ <1m ─╮'
 beveg 10 4
 sjekk "med musen over kortet står × i toppkanten i stedet for tiden" linje_har 3 '^╭─ ●  nerdr ─+  ×  ─╮'
@@ -160,26 +165,24 @@ beveg 60 8
 sjekk "og tiden er tilbake når musen går" linje_har 3 '<1m ─╮'
 sjekk "så oppgaven" linje_har 4 '^│ Fiks testene +│'
 sjekk "og branchen" linje_har 5 '^│ main +│'
-sjekk "gamma står under JOBBER, og uten oppgave er repoet tittelen" linje_har 10 '^│ nerdr +│'
+sjekk "gamma står under alfa, og uten oppgave er repoet tittelen" linje_har 8 '^│ nerdr +│'
+sjekk "◐ til gamma er grønn" gronn_glyf 7
 tast C-b b
-sjekk "C-b b åpner utseende-menyen" har 'farge +lite +middels +mye'
-tast Down Down Right
-sjekk "uten tid står bare ● og repoet i toppkanten" linje_har 3 '^╭─ ●  nerdr ─+╮'
-tast Down Down Down Down Right
-sjekk "symbol høyre gir ● til høyre" linje_har 3 '^╭─ nerdr ─+ ● ─╮'
-sjekk "valget står i tmux" er 'paner=bokser farge=middels plass=vanlig tid=skjul orden=nerdr tittel=1 uthev=fet symbol=høyre' maal show-options -gqv @nerdr-utseende
-tast Up Up Up Right
-sjekk "orden mappe gir repoet som overskrift" linje_har 2 '^ nerdr 2 '
+sjekk "C-b b åpner utseende-menyen" har 'farge +av +på'
+tast Left
+sjekk "farge av tar fargen bort" uten_gronn_glyf 7
+tast Right Down Down Right
+sjekk "orden mappe gir repoet som overskrift" linje_har 2 '^ nerdr {3,}'
 sjekk "og bare branchen under oppgaven" linje_har 5 '^│ main +│'
 tast Right
-sjekk "orden aktivitet har ingen overskrifter" mangler 'VENTER|JOBBER|FERDIG'
-tast Right Up Left Up Left Escape
-sjekk "Esc lukker menyen" mangler 'farge +lite'
-sjekk "resten av testen bruker tett" er 'paner=bokser farge=middels plass=tett tid=vis orden=nerdr tittel=1 uthev=fet symbol=høyre' maal show-options -gqv @nerdr-utseende
+sjekk "orden aktivitet har ingen overskrifter" mangler 'AKTIVE|LEDIGE'
+tast Right Up Right Escape
+sjekk "Esc lukker menyen" mangler 'farge +av'
+sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1' maal show-options -gqv @nerdr-utseende
 
-sjekk "tett har én linje: alfa under VENTER med ●, oppgaven og <1m til høyre" linje_har 3 '^▎ ●  Fiks testene +<1m │'
-sjekk "overskriftene treffer skillestreken med ┤" linje_har 5 '^ JOBBER 1 ─+┤'
-sjekk "gamma står under JOBBER med ◐, og uten oppgave er repoet tittelen" linje_har 6 '^  ◐  nerdr +<1m │'
+sjekk "minimal har én linje: alfa under AKTIVE med ●, oppgaven og <1m til høyre" linje_har 3 '^▎ ●  Fiks testene +<1m │'
+sjekk "overskriftene treffer skillestreken med ┤" linje_har 2 '^ AKTIVE ─+┤'
+sjekk "gamma står under alfa med ◐, og uten oppgave er repoet tittelen" linje_har 4 '^  ◐  nerdr +<1m │'
 sjekk "beta har ingen Claude og vises ikke" mangler beta
 sjekk "alfa får størrelsen til boksen" er 68x17 dimensjon alfa
 
@@ -198,12 +201,12 @@ sjekk "musehjulet kommer fram i alfa, regnet fra boksen" i_pane alfa '^[[<64;2;1
 
 # Denne venter på intervallet, ikke på list_straks.
 registrer alfa alfa idle ",\"cwd\":\"$MAPPE\""
-sjekk "alfa blir ferdig mens du er inne, og står fortsatt under VENTER, med ○" linje_har 3 '^▎ ○  Fiks testene'
+sjekk "alfa blir ferdig mens du er inne, og er fortsatt aktiv, med ◆" linje_har 3 '^▎ ◆  Fiks testene'
 registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 list_straks
 
 tast C-b w j
-sjekk "C-b w og j velger gamma" linje_har 6 '^▎ ◐  nerdr '
+sjekk "C-b w og j velger gamma" linje_har 4 '^▎ ◐  nerdr '
 sjekk "alfa venter igjen" linje_har 3 '^  ●  Fiks testene'
 
 klikk 5 3
@@ -221,14 +224,14 @@ sjekk "C-b w går tilbake til lista" i_lista
 
 registrer gamma gamma idle
 list_straks
-sjekk "gamma blir ferdig og havner øverst under VENTER med ◆, og uten cwd står gamma:0" linje_har 3 '^  ◆  gamma:0 +<1m │'
+sjekk "gamma blir ferdig og havner øverst under AKTIVE med ◆, og uten cwd står gamma:0" linje_har 3 '^  ◆  gamma:0 +<1m │'
 sjekk "alfa står rett under" linje_har 4 '^▎ ●  Fiks testene'
 
 tast k Enter
 sjekk "k og Enter går inn i gamma" i_panen
 tast C-b w
-sjekk "gamma står under FERDIG med ○, rett under VENTER" linje_har 6 '^▎ ○  gamma:0'
-sjekk "FERDIG treffer skillestreken" linje_har 5 '^ FERDIG .*┤'
+sjekk "når du går ut, står gamma under LEDIGE med ○" linje_har 6 '^▎ ○  gamma:0'
+sjekk "LEDIGE treffer skillestreken" linje_har 5 '^ LEDIGE .*┤'
 sjekk "nerdr har skrevet når du var inne i gamma, i @nerdr-sett" sett_er_tall gamma
 
 tast Up
@@ -277,12 +280,12 @@ sjekk "prosjekt.ny er valgt" linje_har 4 '▎~/git/prosjekt\.ny'
 tast Enter
 sjekk "Enter lager sesjonen prosjekt-ny i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny
 sjekk "claude skrives inn i prosjekt-ny" i_pane prosjekt-ny claude
-sjekk "nerdr er inne i prosjekt.ny, med ◌" linje_har 6 '^▎ ◌  prosjekt\.ny'
+sjekk "nerdr er inne i prosjekt.ny, øverst med ◌" linje_har 3 '^▎ ◌  prosjekt\.ny'
 sjekk "og tastene går dit" i_panen
 
 registrer ny prosjekt-ny idle ",\"cwd\":\"$KONFIG/git/prosjekt.ny\""
 list_straks
-sjekk "i registeret får prosjekt.ny vanlig merke" linje_har 6 '^▎ ○  prosjekt\.ny'
+sjekk "i registeret får prosjekt.ny vanlig merke, og er fortsatt aktiv" linje_har 3 '^▎ ○  prosjekt\.ny'
 
 tast C-b f
 sjekk "C-b f åpner popupen fra panen" har 'mappe ›'
@@ -311,8 +314,9 @@ sjekk "Esc lukker popupen" mangler 'mappe ›'
 sjekk "Esc går tilbake til lista" i_lista
 sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
 
-tast Up Up Up Up Up Up Up Up
-sjekk "↑ opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
+# De to som starter, står øverst blant de aktive, over alfa.
+tast Up Up Up Up Up Up Up Up Down Down
+sjekk "↑ til toppen og ↓ ned til alfa" linje_har 5 '^▎ ●  Fiks testene +<1m │'
 
 klikk 3 18
 sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · esc lukk'
@@ -391,7 +395,7 @@ maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}
 tast C-b ')'
 sjekk "C-b ) går til neste Claude" linje_mangler 2 '^▎'
 tast C-b '('
-sjekk "C-b ( går tilbake til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
+sjekk "C-b ( går tilbake til alfa" linje_har 5 '^▎ ●  Fiks testene +<1m │'
 # Et vindu som endrer størrelse, gjør det like etter byttet.
 sleep 0.5
 sjekk "ingen vindu endrer størrelse når du bytter Claude" [ ! -s "$KONFIG/storrelser" ]
@@ -446,29 +450,30 @@ sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ +][^ ]* �
 tast C-b w
 
 tast C-b w Up Up Up Up Up Up Up Up
-for i in 1 2 3 4 5 6; do
+for i in 1 2 3 4 5 6 7 8 9; do
   maal new-session -d -s "ekstra$i" -x 80 -y 20 -c "$MAPPE"
   registrer "ekstra$i" "ekstra$i" idle ",\"cwd\":\"$MAPPE\""
 done
 list_straks
-sjekk "får ikke lista plass, sier nederste rad hvor mange som er under" linje_har 15 '^  ↓ [0-9]+ +│'
-sjekk "og lista starter med luft under streken" linje_har 3 '^ VENTER'
+sjekk "får ikke lista plass, har nederste rad en pil" linje_har 15 '^  ↓ +│'
+sjekk "og lista starter med luft under streken" linje_har 3 '^ AKTIVE'
 sjekk "øverst er det ingen pil" linje_mangler 1 '↑'
 for i in 1 2 3 4; do hjul 65 5 5; done
-sjekk "hjulet ruller lista, og øverst står det at noe venter over" linje_har 1 '↑ [0-9]+ · 1 venter'
-tast Down Down Down Down Down Down Down Down Down Down
+sjekk "hjulet ruller lista, og øverst er det en pil" linje_har 1 '^─ ↑ ─'
+sjekk "som er oransje fordi alfa over spør" linje_med_farger_har 1 '38;2;217;119;87m ↑'
+tast Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 sjekk "den valgte nederst i lista vises" har '^▎ ○'
 sjekk "nederst er det ingen pil" linje_mangler 15 '↓'
 klikk 3 1
-sjekk "klikk på pilen ruller en side opp" linje_har 15 '↓ [0-9]+'
-for i in 1 2 3 4 5 6; do
+sjekk "klikk på pilen ruller en side opp" linje_har 15 '↓'
+for i in 1 2 3 4 5 6 7 8 9; do
   maal kill-session -t "ekstra$i"
   rm "$KONFIG/sessions/ekstra$i.json"
 done
 list_straks
 sjekk "nerdr kobler til igjen når sesjonen den viste, forsvinner" er 1 klienter
-sjekk "når alt får plass igjen, er pilene borte" mangler '[↑↓] [0-9]'
-tast Up Up Up Up Up Up Up Up
+sjekk "når alt får plass igjen, er pilene borte" mangler ' [↑↓] '
+tast Up Up Up Up Up Up Up Up Down Down
 
 maal new-session -d -s lukk -x 80 -y 20 -c "$MAPPE"
 maal select-pane -t lukk -T '✳ Lukk meg'
@@ -507,19 +512,19 @@ sjekk "y lukker vinduet, og sesjonen med det" uten_sesjon lukk
 rm "$KONFIG/sessions/lukk2.json"
 
 dra 36 8 46 8
-sjekk "å dra i streken gjør lista bredere" linje_har 3 '^▎ ●  Fiks testene +<1m +│ '
+sjekk "å dra i streken gjør lista bredere" linje_har 5 '^▎ ●  Fiks testene +<1m +│ '
 sjekk "og alfa smalere" er 58x17 dimensjon alfa
 sjekk "bredden står i tmux" er 46 maal show-options -gqv @nerdr-liste
 klikk 46 8
 klikk 46 8
-sjekk "dobbeltklikk på streken gjør lista til en stripe" linje_har 2 '^▎● │ '
+sjekk "dobbeltklikk på streken gjør lista til en stripe" linje_har 4 '^▎● │ '
 sjekk "med bare tegnene" mangler 'Fiks testene'
 sjekk "også i tmux" er '46 stripe' maal show-options -gqv @nerdr-liste
 klikk 4 8
 klikk 4 8
 sjekk "dobbeltklikk igjen gir bredden tilbake" er 58x17 dimensjon alfa
 dra 46 8 2 8
-sjekk "å dra streken helt inn gir stripa" linje_har 2 '^▎● │ '
+sjekk "å dra streken helt inn gir stripa" linje_har 4 '^▎● │ '
 tast C-b
 sjekk "fra stripa står hintet over panen" linje_har 20 '^ C-b … f ny · w lista · \? mer'
 tast w
@@ -529,8 +534,8 @@ sjekk "og å dra den ut gir lista tilbake" er 68x17 dimensjon alfa
 klikk 5 20
 sjekk "klikk på «avslutt» avslutter" uten_klienter
 
-sjekk "nerdr liste grupperer som TUI-et: alfa venter, og gamma og prosjekt.ny er sett, nyest først" \
-  er 'VENTER: ● nerdr, FERDIG: ○ prosjekt.ny, ○ gamma:0, ' gruppert
+sjekk "nerdr liste grupperer som TUI-et: alfa er aktiv, og gamma og prosjekt.ny er ledige, nyest først" \
+  er 'AKTIVE: ● nerdr, LEDIGE: ○ prosjekt.ny, ○ gamma:0, ' gruppert
 sjekk "nerdr liste --json har tilstanden fra Claude" er 'venter klar klar ' fra_json tilstand
 sjekk "nerdr liste --json har merket" er 'spør sett sett ' fra_json merke
 sjekk "nerdr liste --json har gruppen" er 'venter ferdig ferdig ' fra_json gruppe
