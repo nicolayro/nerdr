@@ -34,9 +34,10 @@ eller med prefikset og en tast, som i tmux. I lista er det bare disse:
 | Tast | Hva |
 | --- | --- |
 | `↑` `↓` / `k` `j` | Velg Claude |
-| `⏎` | Gå inn i sesjonen |
+| `⏎` | Gå inn i Claude-en |
+| `C-c` | Avslutt |
 
-Andre bokstaver i lista gjør ingenting, så du kan ikke trykke på noe ved et uhell.
+Andre bokstaver i lista gjør ingenting.
 
 Nederst i lista står «avslutt», med prefikset og `d`. Claude-ene kjører videre
 i tmux når nerdr avslutter, og er der neste gang du starter nerdr. `tmux
@@ -67,7 +68,7 @@ virker både fra lista og fra panen:
 | Etter prefikset | Hva |
 | --- | --- |
 | `:` | Handlinger: alt nerdr kan gjøre, søkbart |
-| `f` | Ny sesjon, som i tmux-sessionizer |
+| `f` | Ny sesjon |
 | `r` | Hent en tidligere samtale |
 | `c` | Ny terminal, i mappa til panen |
 | `n` `p` | Neste og forrige vindu |

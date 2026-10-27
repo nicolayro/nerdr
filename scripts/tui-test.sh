@@ -228,6 +228,7 @@ sjekk "↑ opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
 tast Down q n
 sjekk "q og n gjør ingenting i lista" linje_har 6 '^▎ ○  gamma:0'
 sjekk "og ingen meny åpner" mangler 't  ny terminal'
+klikk 5 6
 sleep 0.6
 klikk 5 6
 sjekk "to klikk med pause mellom går ikke inn" i_lista
