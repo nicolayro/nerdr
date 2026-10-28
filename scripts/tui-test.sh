@@ -56,6 +56,11 @@ har() { skjerm | grep -Eq -- "$1"; }
 mangler() { ! har "$1"; }
 i_pane() { maal capture-pane -p -t "$1" | grep -qF -- "$2"; }
 ikke_i_pane() { ! i_pane "$@"; }
+# Kolonnen, fra 1, til navnet i fane nummer to, eller til × etter det. Navnene
+# på vinduene endrer seg med programmet som kjører, så de kan ikke letes fram.
+fane_to() {
+  skjerm | sed -n 1p | perl -CSA -Mutf8 -ne 'BEGIN { $hva = shift } /│  [^ ]+ ×   ([^ ]+) ×/ and print $hva eq "navn" ? $-[1] + 1 : $+[1] + 2' "$1"
+}
 # Kolonnen, fra 1, der teksten starter på linja, regnet i tegn.
 kolonne() { skjerm | sed -n "$1p" | perl -CSA -e '$s = shift; while (<STDIN>) { print index($_, $s) + 1 }' "$2"; }
 er() {
@@ -156,7 +161,7 @@ maal set -g @nerdr-utseende paner=bokser
 vert -f /dev/null new-session -d -s vert -x 110 -y 20 \
   "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
-sjekk "paner=bokser fra tmux gir bokser, under streken øverst" linje_har 1 '^─+┬─ [^ ]+ ─'
+sjekk "paner=bokser fra tmux gir bokser, og fanene øverst uten strek" linje_har 1 '^ +│  [^ ]+ × '
 sjekk "overskriften har strek mot skillelinja, uten antallet" linje_har 2 '^ AKTIVE ─+┤'
 sjekk "alfa har ●, repoet og <1m i toppkanten" linje_har 3 '^╭─ ●  nerdr ─+ <1m ─╮'
 beveg 10 4
@@ -329,7 +334,8 @@ tast C-b '&' y
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 
 tast C-b w
-klikk "$(kolonne 1 ' + ')" 1
+sjekk "+ står sist etter fanene" linje_har 1 ' \+$'
+klikk "$(kolonne 1 ' +')" 1
 sjekk "klikk på + etter fanene gir en terminal i et nytt vindu" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
 sjekk "slippet etter klikket kommer ikke fram i alfa" ikke_i_pane alfa '^[[<0;'
@@ -426,7 +432,7 @@ sjekk "boksen er tilbake" har '╭'
 
 tast C-b c
 sjekk "C-b c fra lista lager alfa:1" linjer 2 maal list-windows -t alfa
-sjekk "to faner øverst" linje_har 1 '┬─ [^ ]+ ─ [^ +][^ ]* ─'
+sjekk "to faner øverst" linje_har 1 '│  [^ ]+ ×   [^ +][^ ]* × '
 sjekk "nerdr er inne i det nye vinduet" i_panen
 tast -l 'i vindu 1'
 sjekk "det du skriver, havner i alfa:1" i_pane alfa:1 'i vindu 1'
@@ -437,8 +443,13 @@ tast C-b l
 sjekk "C-b l går tilbake til 1" er 1 vindu_indeks
 tast C-b 0
 sjekk "C-b 0 går til 0" er 0 vindu_indeks
-klikk 46 1
+klikk "$(fane_to navn)" 1
 sjekk "klikk på fane 1 viser vindu 1" er 1 vindu_indeks
+klikk "$(fane_to kryss)" 1
+sjekk "klikk på × på fanen spør" har 'lukke vinduet\? '
+sjekk "med navnet på vinduet" har '«[^»]+», med alle panene i det'
+tast n
+sjekk "n lar vinduet stå" linjer 2 maal list-windows -t alfa
 tast C-b w Enter
 sjekk "C-b w og Enter går inn i Claude-en i vindu 0" er 0 vindu_indeks
 
@@ -446,7 +457,7 @@ tast C-b 1 C-b '&'
 sjekk "C-b & spør" har 'lukke vinduet\? '
 tast y
 sjekk "y lukker vinduet" linjer 1 maal list-windows -t alfa
-sjekk "bare én fane står igjen" linje_mangler 1 '┬─ [^ ]+ ─ [^ +][^ ]* ─'
+sjekk "bare én fane står igjen" linje_mangler 1 '│  [^ ]+ ×   [^ +][^ ]* × '
 tast C-b w
 
 tast C-b w Up Up Up Up Up Up Up Up
@@ -459,7 +470,7 @@ sjekk "får ikke lista plass, har nederste rad en pil" linje_har 15 '^  ↓ +│
 sjekk "og lista starter med luft under streken" linje_har 3 '^ AKTIVE'
 sjekk "øverst er det ingen pil" linje_mangler 1 '↑'
 for i in 1 2 3 4; do hjul 65 5 5; done
-sjekk "hjulet ruller lista, og øverst er det en pil" linje_har 1 '^─ ↑ ─'
+sjekk "hjulet ruller lista, og øverst er det en pil" linje_har 1 '^  ↑ '
 sjekk "som er oransje fordi alfa over spør" linje_med_farger_har 1 '38;2;217;119;87m ↑'
 tast Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 sjekk "den valgte nederst i lista vises" har '^▎ ○'
@@ -517,14 +528,14 @@ sjekk "og alfa smalere" er 58x17 dimensjon alfa
 sjekk "bredden står i tmux" er 46 maal show-options -gqv @nerdr-liste
 klikk 46 8
 klikk 46 8
-sjekk "dobbeltklikk på streken gjør lista til en stripe" linje_har 4 '^▎● │ '
+sjekk "dobbeltklikk på streken gjør lista til en stripe" linje_har 5 '^▎● │ '
 sjekk "med bare tegnene" mangler 'Fiks testene'
 sjekk "også i tmux" er '46 stripe' maal show-options -gqv @nerdr-liste
 klikk 4 8
 klikk 4 8
 sjekk "dobbeltklikk igjen gir bredden tilbake" er 58x17 dimensjon alfa
 dra 46 8 2 8
-sjekk "å dra streken helt inn gir stripa" linje_har 4 '^▎● │ '
+sjekk "å dra streken helt inn gir stripa" linje_har 5 '^▎● │ '
 tast C-b
 sjekk "fra stripa står hintet over panen" linje_har 20 '^ C-b … f ny · w lista · \? mer'
 tast w

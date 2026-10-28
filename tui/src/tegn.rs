@@ -187,11 +187,8 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         buf.set_string(tast_x, y, tast, SVAK.patch(stil));
     }
 
-    // Overskriftene treffer skillestreken, og øverst går streken videre til
-    // fanene. Når lista ruller, står pilen på den.
-    if !overskrifter.contains(&0) {
-        buf.set_string(0, 0, "─".repeat(bredde as usize), SVAK);
-    }
+    // Overskriftene treffer skillestreken. Når lista ruller, står pilen i den
+    // øverste raden, på høyde med fanene.
     if utsnitt.ruller {
         let kort = |p: &&Plassert| matches!(p.rad, Rad::Pane(..));
         let mut over = rader.iter().filter(kort).filter(|p| p.y + p.høyde <= utsnitt.rull).peekable();
@@ -213,7 +210,6 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let skille = if matches!(mus, Some(Mål::Skille)) || app.drar_skille { VANLIG } else { SVAK };
     for y in 0..område.height {
         let tegn = match y {
-            0 => "┬",
             _ if overskrifter.contains(&y) => "┤",
             _ => "│",
         };
@@ -304,7 +300,7 @@ struct Plassert<'a> {
 fn plasser(app: &App) -> Vec<Plassert<'_>> {
     let mut y = 0;
     let midten = app.utseende.ledig == Ledig::Midten && app.utseende.orden == Orden::Nerdr;
-    kort::ordne(app.rader(), stripe(app))
+    kort::ordne(app.rader())
         .into_iter()
         .map(|rad| {
             if midten && rad == Rad::Overskrift(Overskrift::Del(Del::Ledige)) {
@@ -460,12 +456,19 @@ struct Fane {
     vist: bool,
 }
 
+impl Fane {
+    /// Kolonnen til `×`, som står i alle fanene, så de ikke endrer bredde.
+    fn lukk(&self) -> u16 {
+        self.til - 2
+    }
+}
+
 fn faner(app: &App) -> Vec<Fane> {
     let mut x = app.visning.x + 1;
     let mut ut = Vec::new();
     for p in app.faner() {
         let navn = kutt(&p.vindunavn, 20);
-        let til = x + navn.chars().count() as u16 + 2;
+        let til = x + navn.chars().count() as u16 + 4;
         let vist = app.vist.as_ref() == Some(&p.vindu_id);
         ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist });
         x = til + 1;
@@ -473,19 +476,25 @@ fn faner(app: &App) -> Vec<Fane> {
     ut
 }
 
-/// Vinduene i sesjonen på en strek i øverste rad, som fortsetter overskriften
-/// i lista. Vinduet som vises, har bakgrunn.
+/// Vinduene i sesjonen som flater med bakgrunn i øverste rad, uten strek, så
+/// det er bare fanene som har flate. Vinduet som vises, har sterkere bakgrunn.
 fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
     let v = app.visning;
-    buf.set_string(v.x, 0, "─".repeat(v.width as usize), SVAK);
-    for f in faner(app).into_iter().take_while(|f| f.til <= v.right()) {
-        let pekt = matches!(mus, Some(Mål::Fane(vindu)) if *vindu == f.vindu);
+    let faner: Vec<Fane> = faner(app).into_iter().take_while(|f| f.til <= v.right()).collect();
+    for f in faner {
+        let på_kryss = matches!(mus, Some(Mål::LukkFane(vindu)) if *vindu == f.vindu);
+        let pekt = på_kryss || matches!(mus, Some(Mål::Fane(vindu)) if *vindu == f.vindu);
         let stil = match (f.vist, pekt) {
             (true, _) => markert().add_modifier(Modifier::BOLD),
-            (false, true) => under_musen(),
-            (false, false) => SVAK,
+            (false, true) => markert(),
+            (false, false) => under_musen().patch(SVAK),
         };
-        buf.set_string(f.fra, 0, format!(" {} ", f.navn), stil);
+        buf.set_string(f.fra, 0, format!(" {} × ", f.navn), stil);
+        let kryss = match på_kryss {
+            true => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),
+            false => SVAK.remove_modifier(Modifier::BOLD),
+        };
+        buf.set_string(f.lukk(), 0, "×", stil.patch(kryss));
     }
     if let Some(pluss) = ny_fane(app) {
         let stil = if mus == Some(&Mål::NyFane) { under_musen() } else { SVAK };
@@ -496,6 +505,12 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
 /// Vinduet til fanen i kolonne `x`.
 pub fn fane_på(app: &App, x: u16) -> Option<String> {
     faner(app).into_iter().find(|f| (f.fra..f.til).contains(&x)).map(|f| f.vindu)
+}
+
+/// Vinduet og navnet til fanen med `×` i kolonne `x`. Rutene på hver side
+/// treffer også, så den er lettere å treffe.
+pub fn lukk_fane_på(app: &App, x: u16) -> Option<(String, String)> {
+    faner(app).into_iter().find(|f| f.lukk().abs_diff(x) <= 1).map(|f| (f.vindu, f.navn))
 }
 
 /// `+` etter fanene, når et vindu vises og det er plass til den.

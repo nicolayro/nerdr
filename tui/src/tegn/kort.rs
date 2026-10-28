@@ -54,13 +54,9 @@ fn peker(valgt: bool) -> Bit {
     bit(0, if valgt { "▎" } else { " " }, VANLIG)
 }
 
-/// Lista starter under streken øverst. På stripa går overskriften over i
-/// streken øverst.
-pub fn ordne(rader: Vec<Rad<'_>>, stripe: bool) -> Vec<Rad<'_>> {
-    let mut ut = Vec::new();
-    if !stripe || !matches!(rader.first(), Some(Rad::Overskrift(_))) {
-        ut.push(Rad::Tom);
-    }
+/// Lista starter under den øverste raden, der fanene står.
+pub fn ordne(rader: Vec<Rad<'_>>) -> Vec<Rad<'_>> {
+    let mut ut = vec![Rad::Tom];
     ut.extend(rader);
     ut
 }

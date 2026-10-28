@@ -110,6 +110,8 @@ enum Mål {
     Svar(bool),
     /// Id-en til vinduet.
     Fane(String),
+    /// `×` på fanen, med id-en til vinduet.
+    LukkFane(String),
     /// En pane i vinduet som tastene ikke går til.
     Pane(String),
     Knapp(Knapp),
@@ -786,13 +788,7 @@ impl App {
                     kommando: format!("kill-pane -t {id}"),
                 });
             }
-            (KeyCode::Char('&'), _) => {
-                return self.lukke = Some(Lukke {
-                    spørsmål: "lukke vinduet?",
-                    hva: "Vinduet, med alle panene i det.".into(),
-                    kommando: format!("kill-window -t {}", sitat(&aktiv.vindu_id)),
-                });
-            }
+            (KeyCode::Char('&'), _) => return self.lukk_vindu(&aktiv.vindu_id, None),
             (KeyCode::PageUp, _) => {
                 let side = self.bokser().iter().find(|b| b.pane == aktiv.id).map_or(1, |b| b.innhold.height.max(1));
                 return self.rull_til(self.rull.saturating_add(side as u32));
@@ -1186,6 +1182,15 @@ impl App {
         self.lukke = Some(Lukke { spørsmål: "lukke sesjonen?", hva, kommando });
     }
 
+    /// Fra fanen står navnet i popupen. Med C-b & er det vinduet du er i.
+    fn lukk_vindu(&mut self, vindu: &str, navn: Option<&str>) {
+        let hva = match navn {
+            Some(navn) => format!("«{navn}», med alle panene i det."),
+            None => "Vinduet, med alle panene i det.".into(),
+        };
+        self.lukke = Some(Lukke { spørsmål: "lukke vinduet?", hva, kommando: format!("kill-window -t {}", sitat(vindu)) });
+    }
+
     /// Det som starter en Claude, går via lista, så du går inn i den nye selv
     /// om du startet den fra en pane.
     fn ny_sesjon(&mut self, fortsett: bool) {
@@ -1258,6 +1263,9 @@ impl App {
             return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
         }
         if y < v.y {
+            if let Some((vindu, _)) = tegn::lukk_fane_på(self, x) {
+                return Some(Mål::LukkFane(vindu));
+            }
             let ny = tegn::ny_fane_på(self, x).then_some(Mål::NyFane);
             return tegn::fane_på(self, x).map(Mål::Fane).or(ny);
         }
@@ -1327,7 +1335,9 @@ impl App {
             if m.row != 0 || m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
-            if let Some(vindu) = tegn::fane_på(self, m.column) {
+            if let Some((vindu, navn)) = tegn::lukk_fane_på(self, m.column) {
+                self.lukk_vindu(&vindu, Some(&navn));
+            } else if let Some(vindu) = tegn::fane_på(self, m.column) {
                 self.vis_vindu(vindu);
             } else if tegn::ny_fane_på(self, m.column) {
                 self.prefikstast(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));

@@ -61,8 +61,9 @@ tilbake til bunnen. Det du drar over, kopieres når du slipper, med `pbcopy`,
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
 hver sin boks eller med streker mellom. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
-Øverst står vinduene i sesjonen som faner, på en strek som fortsetter streken
-øverst i lista, og vinduet som vises, har bakgrunn. Et klikk på en fane viser vinduet. Fra lista går du alltid inn i vinduet til Claude-en.
+Øverst står vinduene i sesjonen som faner med bakgrunn, og vinduet som vises,
+har sterkere bakgrunn. Et klikk på en fane viser vinduet, og `×` i fanen
+lukker det etter at du har svart. Fra lista går du alltid inn i vinduet til Claude-en.
 
 Prefikset er det du setter i `NERDR_PREFIKS`, ellers det samme som i
 tmux-oppsettet ditt, ellers `C-b`. Tastene etter det er de samme som i tmux, og
