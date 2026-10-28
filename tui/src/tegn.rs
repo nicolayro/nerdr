@@ -230,19 +230,24 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     buf.set_stringn(0, y, format!("{hint} "), bredde as usize, VANLIG);
 }
 
-/// Utenfor lista eller den aktive panen, der tastene går, får rutene uten egen
-/// bakgrunn en annen tone. Snudde ruter står som før, for der er bakgrunnen
-/// tekstfargen.
+/// Der tastene ikke går, får rutene uten egen bakgrunn en tone. Den dekker
+/// hele flater opp til strekene: lista med skillelinja er én, og alt til høyre
+/// for den, med fanerada, er den andre. Inne i en pane tones bare de andre
+/// panene, ikke det rundt som tmux-vinduet ikke fyller. Snudde ruter står som
+/// før, for der er bakgrunnen tekstfargen.
 fn tegn_bakgrunn(buf: &mut Buffer, område: Rect, app: &App, bokser: &[Boks]) {
     let Some(tone) = tonet(None, UTENFOR_ANDEL) else { return };
-    let lista = Rect::new(0, 0, liste_bredde(app).saturating_sub(1), område.height);
-    let her = match app.fokus {
-        Fokus::Liste => Some(lista),
-        Fokus::Pane => aktiv_boks(app, bokser).map(|b| b.ramme.unwrap_or(b.innhold)),
+    let lista = Rect::new(0, 0, liste_bredde(app), område.height);
+    let høyre = Rect::new(liste_bredde(app), 0, område.width.saturating_sub(liste_bredde(app)), område.height);
+    let aktiv = aktiv_boks(app, bokser).map(|b| &b.pane);
+    let flater: Vec<Rect> = match app.fokus {
+        Fokus::Liste => vec![høyre],
+        Fokus::Pane => std::iter::once(lista)
+            .chain(bokser.iter().filter(|b| Some(&b.pane) != aktiv).map(|b| b.ramme.unwrap_or(b.innhold)))
+            .collect(),
     };
-    let Some(her) = her else { return };
-    for del in [lista, app.visning.intersection(område)] {
-        for posisjon in del.positions().filter(|p| !her.contains(*p)) {
+    for flate in flater {
+        for posisjon in flate.intersection(område).positions() {
             let celle = &mut buf[posisjon];
             if celle.bg == Color::Reset && !celle.modifier.contains(Modifier::REVERSED) {
                 celle.bg = tone;
