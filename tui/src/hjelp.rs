@@ -1,6 +1,7 @@
 //! Det nerdr kan, vist med `?` og `nerdr --help`.
 
 use nerdr_kjerne::merke::Merke;
+use ratatui::crossterm::event::KeyCode;
 
 use crate::grupper::glyf;
 use crate::ny;
@@ -47,30 +48,37 @@ pub const PREFIKSTASTER: [(&str, &str); 25] = [
     ("prefiks", "send prefikset til panen"),
 ];
 
-/// `true` er en tast etter prefikset.
-pub type Tast = (bool, &'static str, &'static str);
+/// Tastene etter prefikset, som de er i nerdr, og hva de gjør.
+pub type Tast = (&'static [KeyCode], &'static str);
 
 /// Det du trenger først, i `?`. Resten står i handlingene bak `:`.
 pub const OVERSIKT: [(&str, &[Tast]); 3] = [
     (
         "Sesjoner",
         &[
-            (true, "f", "ny sesjon"),
-            (true, "r", "hent samtale"),
-            (true, "( )", "forrige og neste"),
-            (true, "w", "tilbake til lista"),
+            (&[KeyCode::Char('f')], "ny sesjon"),
+            (&[KeyCode::Char('r')], "hent samtale"),
+            (&[KeyCode::Char('('), KeyCode::Char(')')], "forrige og neste"),
+            (&[KeyCode::Char('w')], "tilbake til lista"),
         ],
     ),
     (
         "Panes",
         &[
-            (true, "% \"", "del side om side, over og under"),
-            (true, "←↑↓→", "gå til panen i den retningen"),
-            (true, "z", "zoom"),
-            (true, "x", "lukk"),
+            (&[KeyCode::Char('%'), KeyCode::Char('"')], "del side om side, over og under"),
+            (&[KeyCode::Left, KeyCode::Up, KeyCode::Down, KeyCode::Right], "gå til panen i den retningen"),
+            (&[KeyCode::Char('z')], "zoom"),
+            (&[KeyCode::Char('x')], "lukk"),
         ],
     ),
-    ("Windows", &[(true, "c", "ny terminal"), (true, "n p", "neste og forrige"), (true, "&", "lukk")]),
+    (
+        "Windows",
+        &[
+            (&[KeyCode::Char('c')], "ny terminal"),
+            (&[KeyCode::Char('n'), KeyCode::Char('p')], "neste og forrige"),
+            (&[KeyCode::Char('&')], "lukk"),
+        ],
+    ),
 ];
 
 pub const MERKER: [(Merke, &str); 5] = [

@@ -3,8 +3,9 @@
 //! for nerdr, så det agenten vet, er det den leser her, via pekeren i
 //! `nerdr --help`.
 
-use nerdr_kjerne::tmux;
+use nerdr_kjerne::{bindinger, tmux};
 
+use crate::bindinger::{Bindinger, tast};
 use crate::grupper::glyf;
 use crate::hjelp::MERKER;
 use crate::ny;
@@ -46,11 +47,17 @@ fn prefiks(socket: Option<&str>) -> String {
     Prefiks::fra_miljø().or_else(fra_tmux).unwrap_or_default().navn()
 }
 
-fn taster(taster: &[Tast], prefiks: &str) -> String {
+/// Med tastene fra tmux-oppsettet, som i hjelpen i TUI-et.
+fn bindinger(socket: Option<&str>) -> Bindinger {
+    let linjer = tmux::kjør(socket, &["list-keys", "-T", "prefix"]).unwrap_or_default();
+    Bindinger::ny(&bindinger::les(&linjer.lines().map(String::from).collect::<Vec<_>>()))
+}
+
+fn taster(taster: &[Tast], prefiks: &str, bindinger: &Bindinger) -> String {
     let tekst: Vec<String> = taster
         .iter()
         .map(|t| match t {
-            P(tast) => format!("{prefiks} {tast}"),
+            P(navn) => format!("{prefiks} {}", tast(navn).map_or_else(|| navn.to_string(), |k| bindinger.vis(&k))),
             Egen(tast) => tast.to_string(),
         })
         .collect();
@@ -59,6 +66,7 @@ fn taster(taster: &[Tast], prefiks: &str) -> String {
 
 pub fn tekst(socket: Option<&str>) -> String {
     let p = prefiks(socket);
+    let b = bindinger(socket);
     let merker: Vec<String> = MERKER.iter().map(|(m, hva)| format!("- {} {hva}", glyf(*m))).collect();
     let mut ut = format!(
         "# nerdr, forklart for en agent
@@ -99,7 +107,7 @@ Merkene i lista:
         merker.join("\n")
     );
     for (hva, mus, t) in OFTEST {
-        ut += &format!("| {hva} | {mus} | {} |\n", taster(t, &p));
+        ut += &format!("| {hva} | {mus} | {} |\n", taster(t, &p, &b).replace('|', "\\|"));
     }
     ut += &format!(
         "
@@ -166,7 +174,7 @@ mod tester {
 
     #[test]
     fn tastene_står_med_prefikset() {
-        assert_eq!(taster(&[P(")"), P("(")], "C-a"), "C-a ), C-a (");
-        assert_eq!(taster(&[Egen("C-c i lista"), P("d")], "C-b"), "C-c i lista, C-b d");
+        assert_eq!(taster(&[P(")"), P("(")], "C-a", &Bindinger::default()), "C-a ), C-a (");
+        assert_eq!(taster(&[Egen("C-c i lista"), P("d")], "C-b", &Bindinger::default()), "C-c i lista, C-b d");
     }
 }

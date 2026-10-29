@@ -1,3 +1,4 @@
+mod bindinger;
 mod bokser;
 mod forklar;
 mod grupper;
@@ -79,6 +80,9 @@ enum Svar {
     NySesjon { navn: String, mappe: PathBuf, claude_kommando: String },
     NyPane { mappe: PathBuf, claude_kommando: String },
     Prefiks,
+    /// Prefikstabellen fra `list-keys`.
+    Bindinger,
+    Gjentatid,
     /// Bredden på lista fra `LISTE_OPTION`.
     Liste,
     Utseende,
@@ -218,6 +222,9 @@ struct App {
     utseende_meny: Option<usize>,
     /// Prefikset er trykket, og neste tast er en kommando.
     etter_prefiks: bool,
+    bindinger: bindinger::Bindinger,
+    /// Til da går en tast med `-r` til tmux-kommandoen uten prefikset.
+    gjentar: Option<Instant>,
     /// Det som lukkes hvis du svarer `y`.
     lukke: Option<Lukke>,
     visning: Rect,
@@ -407,6 +414,8 @@ impl App {
             utseende: Utseende::ny(bokser::Rammer::Linjer),
             utseende_meny: None,
             etter_prefiks: false,
+            bindinger: bindinger::Bindinger::default(),
+            gjentar: None,
             lukke: None,
             visning: Rect::default(),
             musen: None,
@@ -428,6 +437,8 @@ impl App {
         if taster::Prefiks::fra_miljø().is_none() {
             self.send("show-options -gv prefix", Svar::Prefiks);
         }
+        self.send("list-keys -T prefix", Svar::Bindinger);
+        self.send("show-options -gv repeat-time", Svar::Gjentatid);
         self.send(&format!("show-options -gqv {LISTE_OPTION}"), Svar::Liste);
         self.send(&format!("show-options -gqv {}", utseende::OPTION), Svar::Utseende);
         self.list_paner();
@@ -740,6 +751,20 @@ impl App {
                 }
                 false
             }
+            Svar::Bindinger => {
+                if ok {
+                    let gjentatid = self.bindinger.gjentatid;
+                    self.bindinger = bindinger::Bindinger::ny(&nerdr_kjerne::bindinger::les(&linjer));
+                    self.bindinger.gjentatid = gjentatid;
+                }
+                false
+            }
+            Svar::Gjentatid => {
+                if let Some(ms) = linjer.first().filter(|_| ok).and_then(|l| l.parse().ok()) {
+                    self.bindinger.gjentatid = Duration::from_millis(ms);
+                }
+                false
+            }
             Svar::NyttVindu => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
                 self.vis_vindu(id);
@@ -751,8 +776,25 @@ impl App {
         }
     }
 
-    /// Tasten etter prefikset. Tastene er de samme som i tmux, og virker
-    /// både fra lista og fra panen.
+    /// Tasten etter prefikset, med bindingene fra tmux-oppsettet ditt.
+    fn etter_prefikset(&mut self, k: KeyEvent) {
+        match self.bindinger.finn(&k).cloned() {
+            _ if self.prefiks.er(&k) => self.prefikstast(k),
+            Some(bindinger::Hva::Som(nerdr)) => self.prefikstast(nerdr),
+            Some(bindinger::Hva::Send(kommandoer)) => {
+                for kommando in kommandoer {
+                    self.send(&kommando, Svar::Ingenting);
+                }
+            }
+            None => self.prefikstast(k),
+        }
+        if self.bindinger.gjentas(&k) {
+            self.gjentar = Some(Instant::now() + self.bindinger.gjentatid);
+        }
+    }
+
+    /// Tasten nerdr har etter prefikset, som er den samme som i tmux uten
+    /// noe oppsett. Virker både fra lista og fra panen.
     fn prefikstast(&mut self, k: KeyEvent) {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let alt = k.modifiers.contains(KeyModifiers::ALT);
@@ -1163,8 +1205,15 @@ impl App {
             }
             return true;
         }
+        if let Some(til) = self.gjentar.take()
+            && Instant::now() < til
+            && self.bindinger.gjentas(&k)
+        {
+            self.etter_prefikset(k);
+            return true;
+        }
         if std::mem::take(&mut self.etter_prefiks) {
-            self.prefikstast(k);
+            self.etter_prefikset(k);
             return true;
         }
         if self.prefiks.er(&k) {
@@ -1196,7 +1245,7 @@ impl App {
     }
 
     fn åpne_handlinger(&mut self) {
-        self.handlinger = Some(Handlinger::ny(&self.prefiks.navn(), &self.utseende));
+        self.handlinger = Some(Handlinger::ny(&self.prefiks.navn(), &self.bindinger, &self.utseende));
     }
 
     fn kjør(&mut self, handling: Handling) {

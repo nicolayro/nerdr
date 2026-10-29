@@ -1,8 +1,9 @@
 //! Handlingene: alt nerdr kan gjøre, søkbart, med tasten ved siden av, så
 //! du kommer i gang uten å kunne tmux og lærer tastene etter hvert.
 
-use ratatui::crossterm::event::KeyCode;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::bindinger::Bindinger;
 use crate::ny;
 use crate::utseende::{NAVN, Utseende};
 
@@ -54,13 +55,16 @@ pub struct Handlinger {
 }
 
 impl Handlinger {
-    pub fn ny(prefiks: &str, utseende: &Utseende) -> Handlinger {
+    pub fn ny(prefiks: &str, bindinger: &Bindinger, utseende: &Utseende) -> Handlinger {
         let mut alle: Vec<Oppføring> = PREFIKSTASTER
             .iter()
-            .map(|&(kode, ctrl, navn)| Oppføring {
-                navn: navn.into(),
-                tast: format!("{prefiks} {}", tast(kode, ctrl)),
-                handling: Handling::Prefiks(kode, ctrl),
+            .map(|&(kode, ctrl, navn)| {
+                let m = if ctrl { KeyModifiers::CONTROL } else { KeyModifiers::NONE };
+                Oppføring {
+                    navn: navn.into(),
+                    tast: format!("{prefiks} {}", bindinger.vis(&KeyEvent::new(kode, m))),
+                    handling: Handling::Prefiks(kode, ctrl),
+                }
             })
             .collect();
         for (akse, navn) in NAVN.iter().enumerate() {
@@ -120,15 +124,6 @@ impl Handlinger {
     }
 }
 
-fn tast(kode: KeyCode, ctrl: bool) -> String {
-    let tegn = match kode {
-        KeyCode::Char(' ') => "Space".to_string(),
-        KeyCode::Char(c) => c.to_string(),
-        _ => String::new(),
-    };
-    if ctrl { format!("C-{tegn}") } else { tegn }
-}
-
 #[cfg(test)]
 mod tester {
     use super::*;
@@ -136,7 +131,7 @@ mod tester {
 
     #[test]
     fn søket_finner_handlingen_med_tasten() {
-        let mut h = Handlinger::ny("C-b", &Utseende::ny(Rammer::Linjer));
+        let mut h = Handlinger::ny("C-b", &Bindinger::default(), &Utseende::ny(Rammer::Linjer));
         h.skriv("zoom");
         let (k, _) = &h.treff()[0];
         assert_eq!((k.navn.as_str(), k.tast.as_str()), ("zoom pane", "C-b z"));
@@ -147,7 +142,7 @@ mod tester {
 
     #[test]
     fn utseendet_som_er_valgt_står_som_valgt() {
-        let h = Handlinger::ny("C-b", &Utseende::ny(Rammer::Linjer));
+        let h = Handlinger::ny("C-b", &Bindinger::default(), &Utseende::ny(Rammer::Linjer));
         let linjer = h.alle.iter().find(|k| k.navn == "paner med linjer").unwrap();
         assert_eq!(linjer.tast, "✓");
         assert_eq!(h.alle.iter().find(|k| k.navn == "paner i bokser").unwrap().tast, "");

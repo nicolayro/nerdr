@@ -78,6 +78,7 @@ tell() { skjerm | grep -o -- "$1" | wc -l | tr -d ' '; }
 dimensjon() { maal display-message -p -t "$1" '#{window_width}x#{window_height}'; }
 pane_indeks() { maal display-message -p -t alfa:0 '#{pane_index}'; }
 vindu_indeks() { maal display-message -p -t alfa '#{window_index}'; }
+side_om_side() { maal display-message -p -t alfa:0 '#{window_layout}' | grep -q '{'; }
 zoom() { maal display-message -p -t alfa:0 '#{window_zoomed_flag}'; }
 mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
@@ -155,6 +156,10 @@ maal new-session -d -s gamma -x 80 -y 20 /bin/cat
 # Nye sesjoner får cat i stedet for et skall, så «claude» som skrives inn,
 # bare blir stående.
 maal set -g default-command /bin/cat
+# Bindinger som i et tmux-oppsett. nerdr leser dem når den starter. r er
+# «hent samtale» i nerdr, og den vinner.
+maal bind-key '|' split-window -h \; bind-key T set -g @nerdr-binding ja \; \
+  bind-key -r M run-shell "echo x >> $KONFIG/gjentatt" \; bind-key r source-file /dev/null
 
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
 # alfa registreres sist, så den står øverst.
@@ -441,6 +446,15 @@ sjekk "C-b \" deler over og under" er 2 tell '╭'
 tast C-b x
 sjekk "C-b x lukker den nye" linjer 1 maal list-panes -t alfa:0
 sjekk "uten split fyller Claude-en hele visningen igjen" er 68x17 dimensjon alfa:0
+
+tast C-b '|'
+sjekk "C-b | fra tmux-oppsettet deler side om side" side_om_side
+tast C-b x
+sjekk "og C-b x lukker den" linjer 1 maal list-panes -t alfa:0
+tast C-b T
+sjekk "C-b T sender set-option til tmux" er ja maal show-options -gqv @nerdr-binding
+tast C-b M M
+sjekk "M med -r gjentas uten prefikset" linjer 2 cat "$KONFIG/gjentatt"
 tast C-b w
 
 tast C-b b Up Right Escape

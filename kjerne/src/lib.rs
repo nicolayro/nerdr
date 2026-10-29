@@ -5,6 +5,7 @@
 use std::env;
 use std::path::PathBuf;
 
+pub mod bindinger;
 pub mod git;
 pub mod kontroll;
 pub mod merke;
