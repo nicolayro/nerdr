@@ -5,6 +5,7 @@
 //! mappa på nytt nær slutten av fila etter hver tur, så bare halen leses.
 //! Filene kan bli flere megabyte.
 
+use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
@@ -54,7 +55,7 @@ pub fn siste(katalog: &Path, antall: usize, utenom: &HashSet<String>) -> Vec<Sam
         })
         .filter(|(_, id, _)| gyldig_id(id) && !utenom.contains(id))
         .collect();
-    filer.sort_by(|a, b| b.0.cmp(&a.0));
+    filer.sort_by_key(|f| Reverse(f.0));
 
     filer.into_iter().filter_map(|(endret, id, sti)| samtale(&sti, id, endret)).take(antall).collect()
 }
@@ -101,7 +102,7 @@ pub fn mapper(katalog: &Path) -> Vec<PathBuf> {
             mappe.is_dir().then_some((endret, mappe))
         })
         .collect();
-    mapper.sort_by(|a, b| b.0.cmp(&a.0));
+    mapper.sort_by_key(|m| Reverse(m.0));
     let mut sett = HashSet::new();
     mapper.into_iter().map(|(_, m)| m).filter(|m| sett.insert(m.clone())).collect()
 }

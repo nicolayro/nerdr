@@ -139,7 +139,7 @@ fn tidstil(u: Utseende, merke: Merke) -> Style {
 /// Prosjektet i toppkanten. Uten oppgave er prosjektet tittelen, og gruppert
 /// etter mappe står det i overskriften.
 fn prosjekt(i: &Info) -> Option<String> {
-    Some(i.sted.clone()).filter(|_| !i.sted_over && !i.starter && i.oppgave.is_some())
+    (!i.sted_over && !i.starter && i.oppgave.is_some()).then_some(i.sted.clone())
 }
 
 fn tittel_på(i: &Info) -> &str {
