@@ -35,8 +35,9 @@ Du kan også be Claude om å installere og sette opp nerdr etter
 2. Kjør `nerdr` i en vanlig terminalfane, utenfor tmux.
 3. Start en Claude med prefikset og `f`, eller «+ ny sesjon» nederst i lista,
    og velg en mappe. Du er inne i den nye Claude-en med en gang.
-4. Prefikset og `w` tar deg tilbake til lista. Der velger du en Claude med
-   piltastene og går inn i den med `⏎`.
+4. Prefikset og `w` tar deg tilbake til lista. Der blar du med piltastene og
+   går inn i en Claude med `⏎`. Det som vises, byttes først da, og `esc` tar
+   deg tilbake dit du var.
 5. Prefikset og `?` viser hjelpen.
 
 Prefikset er det samme som i tmux, `C-b` hvis du ikke har endret det.
@@ -67,11 +68,12 @@ inni og branchen under. Et worktree står med navnet til repoet det er laget fra
 | **aktive** | `●` spør om noe, `◆` er ferdig og venter på deg, `◐` jobber, `◌` starter |
 | **ledige** | `○` er ferdig, og du har gått ut av den uten å sette den i gang igjen |
 
-Den du er inne i, er aldri ledig, og kortet har bakgrunn så du ser hvor du er.
+Den du er inne i, er aldri ledig. Kortet til den som vises, er markert, og i
+lista har kortet du står på, bakgrunn.
 Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den du
 sist gikk ut av. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
-Får ikke lista plass, ruller den med musehjulet og følger den du velger. Pilene
-øverst og nederst sier at det er flere over og under, og pila øverst er
+Får ikke lista plass, ruller den med musehjulet og følger kortet du står på.
+Pilene øverst og nederst sier at det er flere over og under, og pila øverst er
 oransje når noen over venter på deg. Et klikk på en pil ruller en side.
 
 Nederst i lista står knappene «+ ny sesjon», «handlinger», «hjelp» og
@@ -94,7 +96,7 @@ er lukket, venter på deg neste gang.
 
 ### Musen
 
-Et klikk på en Claude i lista velger den, og et dobbeltklikk går inn i den. Et
+Et klikk på en Claude i lista flytter dit, og et dobbeltklikk går inn i den. Et
 klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Står musen
 over et kort, kommer `×` der tiden står. Den lukker vinduet til Claude-en, med
 det du har åpnet ved siden av, etter at du har svart. Deler flere Claude-er
