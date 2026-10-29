@@ -73,8 +73,8 @@ inni og branchen under. Et worktree står med navnet til repoet det er laget fra
 
 Den du er inne i, er aldri ledig. Kortet til den som vises, er markert, og i
 lista har kortet du står på, bakgrunn.
-Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den du
-sist gikk ut av. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
+Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den som
+sist ble ferdig. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
 Får ikke lista plass, ruller den med musehjulet og følger kortet du står på.
 Pilene øverst og nederst sier at det er flere over og under, og pila øverst er
 oransje når noen over venter på deg. Et klikk på en pil ruller en side.

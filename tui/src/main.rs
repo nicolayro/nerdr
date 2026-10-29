@@ -1770,9 +1770,8 @@ impl App {
     fn plass(&self, pane: &Pane) -> Option<Plass> {
         let merke = self.merke(pane)?;
         let del = Del::fra(merke);
-        let endret = self.claude.get(&pane.id).map(|c| c.endret);
-        // Den du sist gikk ut av, øverst blant de ledige.
-        let siden = if del == Del::Ledige { endret.max(self.sett.get(&pane.id).copied()) } else { endret };
+        // Som tiden på kortet, så de ledige ikke flytter seg når du har vært inne i en.
+        let siden = self.claude.get(&pane.id).map(|c| c.endret);
         Some(match &self.låst {
             // Den du er inne i, blir ikke ledig før du går ut. En ny Claude
             // regnes som sett fra den dukker opp i registeret. Settes en
