@@ -311,7 +311,7 @@ fn uten_tmux(feil: io::Error) -> io::Error {
 
 fn kjør(socket: Option<&str>) -> io::Result<()> {
     if kontroll::inne_i(socket) {
-        return Err(io::Error::other("kjører inne i tmux-serveren den skal vise. Start nerdr i en vanlig terminalfane, utenfor tmux."));
+        return Err(io::Error::other("du er allerede inne i nerdr."));
     }
     tegn::bruk_farger(palett::les());
     let (tx, rx) = mpsc::channel();
