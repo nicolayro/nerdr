@@ -190,6 +190,11 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         buf.set_string(tast_x, y, tast, SVAK.patch(stil));
     }
 
+    if let Some((x, tekst)) = sortering(app) {
+        let stil = if mus == Some(&Mål::Sortering) { under_musen().patch(VANLIG) } else { SVAK };
+        buf.set_string(x.start, 0, tekst, stil);
+    }
+
     // Overskriftene treffer skillestreken. Når lista ruller, står pilen i den
     // øverste raden, på høyde med fanene.
     if utsnitt.ruller {
@@ -218,6 +223,22 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         };
         buf.set_stringn(bredde, y, tegn, 1, skille);
     }
+}
+
+/// Knappen som bytter sortering, til høyre i den øverste raden, der pilen
+/// til venstre ikke kommer i veien.
+fn sortering(app: &App) -> Option<(Range<u16>, String)> {
+    if stripe(app) {
+        return None;
+    }
+    let tekst = format!(" ⇅ {} ", utseende::SORTERINGER[app.utseende.indeks(utseende::ORDEN)]);
+    let slutt = liste_bredde(app) - 1;
+    let start = slutt.checked_sub(tekst.chars().count() as u16).filter(|&x| x >= 4)?;
+    Some((start..slutt, tekst))
+}
+
+pub fn sortering_på(app: &App, x: u16, y: u16) -> bool {
+    y == 0 && sortering(app).is_some_and(|(r, _)| r.contains(&x))
 }
 
 /// Når du har trykket prefikset. Fra stripa går hintet inn over panen, og
@@ -703,18 +724,19 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, bindinger: &Bindin
 /// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
 fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
     let høyde = AKSER.len() as u16 + 4;
-    let Some(ramme) = boks(buf, område, 42, høyde, "konfigurasjon", "↑↓ velg · ←→ endre · esc lukk") else { return };
+    let Some(ramme) = boks(buf, område, 48, høyde, "konfigurasjon", "↑↓ velg · ←→ endre · esc lukk") else { return };
     let x = ramme.x + 2;
-    for (akse, navn) in AKSER.iter().enumerate() {
+    for akse in 0..AKSER.len() {
+        let (navn, verdier) = Utseende::i_menyen(akse);
         // Luft mellom panene og lista.
         let y = ramme.y + 1 + akse as u16 + (akse > 0) as u16 + (akse >= BOKSAKSER) as u16;
         if akse == valgt {
             buf.set_style(Rect::new(ramme.x + 1, y, ramme.width - 2, 1), markert());
             buf.set_string(ramme.x + 1, y, "▎", VANLIG);
         }
-        buf.set_string(x, y, *navn, if akse == valgt { STERK } else { SVAK });
-        let mut vx = x + 9;
-        for (i, verdi) in Utseende::verdier(akse).iter().enumerate() {
+        buf.set_string(x, y, navn, if akse == valgt { STERK } else { SVAK });
+        let mut vx = x + 11;
+        for (i, verdi) in verdier.iter().enumerate() {
             let på = u.gjelder(akse) && i == u.indeks(akse);
             let stil = if på { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { SVAK };
             vx = buf.set_stringn(vx, y, *verdi, ramme.right().saturating_sub(vx + 1) as usize, stil).0 + 2;

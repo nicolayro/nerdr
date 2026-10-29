@@ -29,7 +29,7 @@ pub enum Orden {
     Aktivitet,
 }
 
-/// Hvor de ledige begynner, når lista er ordnet som nerdr.
+/// Hvor de ledige begynner, når lista er sortert prioritert.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Ledig {
     Under,
@@ -51,6 +51,7 @@ pub struct Utseende {
 /// Står i `OPTION` foran verdien, som `farge=på`, så en akse kan komme til
 /// eller forsvinne uten at de andre leses feil.
 pub const AKSER: [&str; 6] = ["paner", "farge", "plass", "orden", "ledig", "tittel"];
+pub const ORDEN: usize = 3;
 const LEDIG: usize = 4;
 /// Aksene fra denne gjelder bare boksene.
 pub const BOKSAKSER: usize = 5;
@@ -63,12 +64,14 @@ const VERDIER: [&[&str]; 6] = [
     &["under", "midten"],
     &["1", "2", "3"],
 ];
+/// Det sorteringen heter i menyen og på knappen, som `VERDIER` for orden.
+pub const SORTERINGER: [&str; 3] = ["prioritert", "prosjekt", "aktivitet"];
 /// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
 pub const NAVN: [&[&str]; 6] = [
     &["paner i bokser", "paner med linjer"],
     &["uten farge", "med farge"],
     &["vanlig liste", "minimal liste"],
-    &["ordne som nerdr", "ordne etter mappe", "ordne etter aktivitet"],
+    &["sorter prioritert", "sorter etter prosjekt", "sorter etter aktivitet"],
     &["ledige under de aktive", "ledige fra midten"],
     &["oppgaven på 1 linje", "oppgaven på 2 linjer", "oppgaven på 3 linjer"],
 ];
@@ -83,8 +86,12 @@ impl Utseende {
         Utseende { paner, farge: Farge::På, plass: Plass::Vanlig, orden: Orden::Nerdr, ledig: Ledig::Under, tittel: 1 }
     }
 
-    pub fn verdier(akse: usize) -> &'static [&'static str] {
-        VERDIER[akse]
+    /// Navnet på aksen og verdiene i menyen.
+    pub fn i_menyen(akse: usize) -> (&'static str, &'static [&'static str]) {
+        match akse {
+            ORDEN => ("sortering", &SORTERINGER),
+            _ => (AKSER[akse], VERDIER[akse]),
+        }
     }
 
     /// Verdien som er valgt på aksen, som indeks i `verdier`.
@@ -117,7 +124,7 @@ impl Utseende {
         self.sett(akse, (self.indeks(akse) as i32 + steg).rem_euclid(antall) as usize);
     }
 
-    /// Minimal har ingen bokser å velge for, og bare nerdr har ledige.
+    /// Minimal har ingen bokser å velge for, og bare prioritert har ledige.
     pub fn gjelder(&self, akse: usize) -> bool {
         match akse {
             LEDIG => self.orden == Orden::Nerdr,

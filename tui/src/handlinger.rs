@@ -151,7 +151,7 @@ mod tester {
     #[test]
     fn hver_verdi_i_utseendet_har_et_navn() {
         for (akse, navn) in NAVN.iter().enumerate() {
-            assert_eq!(navn.len(), Utseende::verdier(akse).len(), "{}", crate::utseende::AKSER[akse]);
+            assert_eq!(navn.len(), Utseende::i_menyen(akse).1.len(), "{}", crate::utseende::AKSER[akse]);
         }
     }
 }

@@ -120,6 +120,8 @@ enum Mål {
     /// En pane i vinduet som tastene ikke går til.
     Pane(String),
     Knapp(Knapp),
+    /// Knappen øverst i lista som bytter sortering.
+    Sortering,
     /// `+` etter fanene.
     NyFane,
     /// Streken mellom lista og panen, som kan dras.
@@ -1354,6 +1356,9 @@ impl App {
         if x < v.x && let Some(knapp) = tegn::knapp_på(self, x, y) {
             return Some(Mål::Knapp(knapp));
         }
+        if x < v.x && tegn::sortering_på(self, x, y) {
+            return Some(Mål::Sortering);
+        }
         if x < v.x {
             if let Some(p) = tegn::lukk_på(self, x, y) {
                 return Some(Mål::Lukk(p.id));
@@ -1457,6 +1462,14 @@ impl App {
                 return false;
             }
             self.prefikstast(KeyEvent::new(KeyCode::Char(tegn::tasten_til(knapp)), KeyModifiers::NONE));
+            return true;
+        }
+        if m.column < v.x && tegn::sortering_på(self, m.column, m.row) {
+            if m.kind != MouseEventKind::Down(MouseButton::Left) {
+                return false;
+            }
+            self.utseende.endre(utseende::ORDEN, 1);
+            self.lagre_utseende();
             return true;
         }
         if m.column < v.x {
