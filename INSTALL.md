@@ -30,8 +30,9 @@ cargo install --locked --git https://github.com/nicolayro/nerdr nerdr
 
 ## 3. Sett mappene for nye Claude-sesjoner
 
-`n` i nerdr starter en Claude i en mappe brukeren velger. Velgeren viser
-mappene brukeren har brukt Claude i, og mappene rett under `~/git`. Spør hvor
+«+ ny sesjon» nederst i lista i nerdr starter en Claude i en mappe brukeren
+velger. Velgeren viser mappene brukeren har brukt Claude i, og mappene og
+prosjektene under `~/git`. Spør hvor
 brukeren har koden sin. Er det ikke `~/git`, sett `NERDR_MAPPER` i skallets
 oppstartsfil, kolonseparert:
 
@@ -39,15 +40,32 @@ oppstartsfil, kolonseparert:
 export NERDR_MAPPER=~/git:~/kode
 ```
 
-## 4. Fortell brukeren hvordan nerdr brukes
+## 4. Tilby skillen
+
+`skill/SKILL.md` lar en Claude lese, starte og sende til de andre Claude-ene i
+tmux, for eksempel når brukeren sier «spør den andre Claude-en» eller «start
+tre sesjoner som …». Spør brukeren om du skal installere den i
+`~/.claude/skills/nerdr/`, eller under `$CLAUDE_CONFIG_DIR/skills/` hvis den er
+satt. Finnes fila fra før, spør før du skriver over den.
+
+```
+mkdir -p ~/.claude/skills/nerdr
+curl -fsSL https://raw.githubusercontent.com/nicolayro/nerdr/main/skill/SKILL.md -o ~/.claude/skills/nerdr/SKILL.md
+```
+
+## 5. Fortell brukeren hvordan nerdr brukes
 
 - nerdr kjøres i en vanlig terminalfane, utenfor tmux.
+- Tastene går til Claude-en brukeren er inne i. nerdr styres med knappene
+  nederst i lista, eller med prefikset fra tmux (`C-b` hvis ikke noe annet er
+  satt) og en tast.
 - Bare Claude som kjører i tmux, vises. Startes Claude i en vanlig fane, ser
-  ikke nerdr den. `n` i nerdr starter en Claude i tmux, og `C-r` fortsetter en
-  tidligere samtale.
-- `?` i nerdr viser tastene. `nerdr --help` viser det samme i terminalen.
-- nerdr avsluttes med `q` fra lista, med prefikset og `d` fra panen, eller
-  med «avslutt» nederst i lista. Claude-ene kjører videre i tmux.
+  ikke nerdr den. «+ ny sesjon», eller prefikset og `f`, starter en Claude i
+  tmux, og prefikset og `r` fortsetter en tidligere samtale.
+- «hjelp» nederst i lista, eller prefikset og `?`, viser tastene.
+  `nerdr --help` viser det samme i terminalen.
+- nerdr avsluttes med `C-c` fra lista, med prefikset og `d`, eller med
+  «avslutt» nederst i lista. Claude-ene kjører videre i tmux.
 - Du kan selv bruke `nerdr liste`, `nerdr samtaler` og `nerdr ny` med
   `--json`, for eksempel for å svare på hvilke Claude-er som venter på
   brukeren, eller for å fortsette en samtale.
@@ -62,20 +80,21 @@ tastene og hvilket prefiks og hvilke mapper som gjelder.
 | Brukeren vil | Svar |
 | --- | --- |
 | stoppe alt | `tmux kill-server`. Spør først, for det stopper alle Claude-er og terminaler i tmux. |
-| se en Claude som mangler i lista | Den kjører ikke i tmux. Avslutt den, og fortsett samtalen med `C-r` i nerdr. |
+| se en Claude som mangler i lista | Den kjører ikke i tmux. Avslutt den, og fortsett samtalen med prefikset og `r` i nerdr. |
 | ha en mappe i velgeren | Sett mappa over den i `NERDR_MAPPER`. Eller start en Claude der med `nerdr ny <mappe>` og skriv noe til den, så står mappa i velgeren etter det. |
 | et annet prefiks | nerdr bruker prefikset fra `~/.tmux.conf`, ellers `C-b`. `NERDR_PREFIKS=C-a` endrer bare nerdr. |
 | endre utseendet | Prefikset og `b`. |
-| beholde utseendet og bredden etter at tmux er stoppet | Valgene står i `@nerdr-utseende` og `@nerdr-liste`, som forsvinner med tmux-serveren. Les verdiene med `tmux show-options -gqv @nerdr-utseende`, og legg dem i `~/.tmux.conf`, som `set -g @nerdr-utseende "farge=mye plass=tett"` og `set -g @nerdr-liste 46`. |
+| beholde utseendet og bredden etter at tmux er stoppet | Valgene står i `@nerdr-utseende` og `@nerdr-liste`, som forsvinner med tmux-serveren. Les verdiene med `tmux show-options -gqv @nerdr-utseende`, og legg dem i `~/.tmux.conf`, som `set -g @nerdr-utseende "farge=av plass=minimal"` og `set -g @nerdr-liste 46`. |
 | tilbake til standardutseendet | `tmux set-option -gu @nerdr-utseende`, og fjern linja i `~/.tmux.conf` hvis den finnes. |
 
 ## Oppdatere og fjerne
 
-Kjør kommandoen i steg 2 på nytt for å oppdatere. nerdr oppdaterer seg ikke
-selv. For å fjerne nerdr:
+Kjør kommandoen i steg 2 på nytt for å oppdatere, og den i steg 4 for skillen.
+nerdr oppdaterer seg ikke selv. For å fjerne nerdr:
 
 ```
 curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/avinstaller.sh | sh
 ```
 
-Fjern også `NERDR_MAPPER`- og `PATH`-linjene du la til, hvis brukeren vil det.
+Fjern også `NERDR_MAPPER`- og `PATH`-linjene du la til, og skillen i
+`~/.claude/skills/nerdr/`, hvis brukeren vil det.
