@@ -202,7 +202,7 @@ SLUTT
   maal kill-session -t farge
 fi
 tast C-b b
-sjekk "C-b b åpner utseende-menyen" har 'farge +av +på'
+sjekk "C-b b åpner utseende-menyen" har 'farge +│ av  på'
 tast Left
 sjekk "farge av tar fargen bort" uten_gronn_glyf 7
 tast Right Down Down Down Right
@@ -211,14 +211,14 @@ sjekk "og bare branchen under oppgaven" linje_har 5 '^│ main +│'
 tast Right
 sjekk "orden aktivitet har ingen overskrifter" mangler 'AKTIVE|LEDIGE'
 tast Right Up Up Right Escape
-sjekk "Esc lukker menyen" mangler 'farge +av'
+sjekk "Esc lukker menyen" mangler 'farge +│ av'
 sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1' maal show-options -gqv @nerdr-utseende
 tast C-b b
-sjekk "med minimal er oppgave borte fra konfigurasjonen" mangler 'oppgave +1'
-klikk_paa ' vanlig '
-sjekk "et klikk på vanlig viser oppgave under kortdesign" har '│   oppgave +1 +2 +3'
-klikk_paa ' minimal '
-sjekk "og minimal tar den bort igjen" mangler 'oppgave +1'
+sjekk "med minimal er oppgave borte fra konfigurasjonen" mangler 'oppgave +│ 1'
+klikk_paa 'vanlig'
+sjekk "et klikk på vanlig viser oppgave under kortdesign" har '│ oppgave +│ 1  2  3'
+klikk_paa 'minimal'
+sjekk "og minimal tar den bort igjen" mangler 'oppgave +│ 1'
 klikk 2 2
 sjekk "et klikk utenfor lukker konfigurasjonen" mangler 'konfigurasjon'
 

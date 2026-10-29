@@ -40,7 +40,8 @@ const UTSEENDE_BREDDE: u16 = 58;
 /// Forklaringen nederst i konfigurasjonen har alltid så mange linjer, så
 /// menyen ikke endrer høyde når du går opp og ned.
 const FORKLARING_LINJER: usize = 2;
-const NØKKEL_BREDDE: u16 = 13;
+/// Nøklene i konfigurasjonen, med streken mot verdiene rett etter.
+const NØKKEL_BREDDE: u16 = 12;
 
 const ORANSJE_RGB: Rgb = (217, 119, 87);
 const ORANSJE: Color = Color::Rgb(ORANSJE_RGB.0, ORANSJE_RGB.1, ORANSJE_RGB.2);
@@ -736,8 +737,8 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, bindinger: &Bindin
 struct Valgmeny {
     boks: Rect,
     overskrifter: Vec<(u16, &'static str)>,
-    /// Aksen, raden, om den har innrykk, og kolonnene til verdiene.
-    rader: Vec<(usize, u16, bool, Vec<Range<u16>>)>,
+    /// Aksen, raden og kolonnene til verdiene.
+    rader: Vec<(usize, u16, Vec<Range<u16>>)>,
     forklaring: u16,
 }
 
@@ -748,8 +749,8 @@ fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
         y += (i > 0) as u16;
         overskrifter.push((y, *tittel));
         y += 1;
-        for &(akse, innrykk) in akser.iter().filter(|(a, _)| u.gjelder(*a)) {
-            rader.push((akse, y, innrykk));
+        for &akse in akser.iter().filter(|&&a| u.gjelder(a)) {
+            rader.push((akse, y));
             y += 1;
         }
     }
@@ -758,18 +759,18 @@ fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
     let (x, topp) = (boks.x + 2, boks.y + 1);
     let rader = rader
         .into_iter()
-        .map(|(akse, y, innrykk)| {
-            let mut vx = x + NØKKEL_BREDDE;
+        .map(|(akse, y)| {
+            let mut vx = x + NØKKEL_BREDDE + 2;
             let kolonner = Utseende::i_menyen(akse)
                 .1
                 .iter()
                 .map(|verdi| {
-                    let r = vx..vx + verdi.chars().count() as u16 + 2;
-                    vx = r.end + 1;
+                    let r = vx..vx + verdi.chars().count() as u16;
+                    vx = r.end + 2;
                     r
                 })
                 .collect();
-            (akse, topp + y, innrykk, kolonner)
+            (akse, topp + y, kolonner)
         })
         .collect();
     let overskrifter = overskrifter.into_iter().map(|(y, t)| (topp + y, t)).collect();
@@ -779,7 +780,7 @@ fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
 /// Verdien under musen i konfigurasjonen, som aksen og indeksen.
 pub fn verdi_på(app: &App, x: u16, y: u16) -> Option<(usize, usize)> {
     let meny = valgmeny(skjerm(app), &app.utseende)?;
-    let (akse, _, _, kolonner) = meny.rader.into_iter().find(|r| r.1 == y)?;
+    let (akse, _, kolonner) = meny.rader.into_iter().find(|r| r.1 == y)?;
     kolonner.iter().position(|r| r.contains(&x)).map(|i| (akse, i))
 }
 
@@ -798,20 +799,21 @@ fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize, mu
     for (y, tittel) in meny.overskrifter.into_iter().filter(|(y, _)| *y < bunn) {
         buf.set_string(x, y, tittel, STERK);
     }
-    for (akse, y, innrykk, kolonner) in meny.rader.into_iter().filter(|r| r.1 < bunn) {
+    for (akse, y, kolonner) in meny.rader.into_iter().filter(|r| r.1 < bunn) {
         let (navn, verdier) = Utseende::i_menyen(akse);
         if akse == valgt {
+            buf.set_style(Rect::new(ramme.x + 1, y, ramme.width - 2, 1), markert());
             buf.set_string(ramme.x + 1, y, "▎", VANLIG);
         }
-        let nøkkel = if innrykk { format!("  {navn}") } else { navn.to_string() };
-        buf.set_string(x, y, nøkkel, if akse == valgt { STERK } else { SVAK });
+        buf.set_string(x, y, navn, if akse == valgt { STERK } else { SVAK });
+        buf.set_string(x + NØKKEL_BREDDE, y, "│", SVAK);
         for (i, (r, verdi)) in kolonner.into_iter().zip(verdier).enumerate() {
             let stil = match () {
-                _ if i == u.indeks(akse) => markert().fg(ORANSJE).add_modifier(Modifier::BOLD),
+                _ if i == u.indeks(akse) => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),
                 _ if mus == Some(&Mål::Verdi(akse, i)) => under_musen().patch(VANLIG),
                 _ => VANLIG,
             };
-            buf.set_stringn(r.start, y, format!(" {verdi} "), ramme.right().saturating_sub(r.start + 1) as usize, stil);
+            buf.set_stringn(r.start, y, *verdi, ramme.right().saturating_sub(r.start + 1) as usize, stil);
         }
     }
     let forklaring = bryt(utseende::FORKLARING[valgt], indre, indre, FORKLARING_LINJER);

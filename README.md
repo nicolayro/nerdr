@@ -209,7 +209,7 @@ og `ferdig` for `sett`.
 
 Prefikset og `b` åpner konfigurasjonen. Et klikk på en verdi velger den, og
 valget gjelder med en gang. tmux husker det i `@nerdr-utseende`. Et valg som
-bare gjelder for valget over, står med innrykk under det, og er borte når det
+bare gjelder for valget over, står rett under det, og er borte når det
 ikke gjelder.
 
 | | |

@@ -69,9 +69,8 @@ pub const SORTERINGER: [&str; 3] = ["prioritert", "prosjekt", "aktivitet"];
 /// Navnene i menyen, i samme rekkefølge som `AKSER`.
 const I_MENYEN: [&str; 6] = ["ramme", "farge", "kortdesign", "sortering", "ledige", "oppgave"];
 /// Rekkefølgen i menyen, under overskriften. Et valg som bare gjelder for
-/// valget over, står med innrykk rett under det.
-pub const MENY: [(&str, &[(usize, bool)]); 2] =
-    [("Pane", &[(0, false)]), ("Liste", &[(1, false), (2, false), (5, true), (3, false), (4, true)])];
+/// valget over, står rett under det.
+pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Liste", &[1, 2, 5, 3, 4])];
 /// Står nederst i menyen for valget du står på, i samme rekkefølge som `AKSER`.
 pub const FORKLARING: [&str; 6] = [
     "Bokser gir hver pane en ramme med luft rundt. Linjer lar panene fylle visningen, med streker mellom.",
@@ -108,7 +107,7 @@ impl Utseende {
 
     /// Valgene som vises i menyen, i rekkefølgen der.
     pub fn synlige(&self) -> Vec<usize> {
-        MENY.iter().flat_map(|(_, akser)| akser.iter()).map(|&(akse, _)| akse).filter(|&a| self.gjelder(a)).collect()
+        MENY.iter().flat_map(|(_, akser)| akser.iter().copied()).filter(|&a| self.gjelder(a)).collect()
     }
 
     /// Valget over eller under `akse` i menyen.
