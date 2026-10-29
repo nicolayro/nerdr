@@ -81,6 +81,7 @@ vindu_indeks() { maal display-message -p -t alfa '#{window_index}'; }
 zoom() { maal display-message -p -t alfa:0 '#{window_zoomed_flag}'; }
 mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
+samme_storrelser() { [ ! -s "$KONFIG/storrelser" ] || ! grep -vxFf "$KONFIG/for" "$KONFIG/storrelser"; }
 uten_klienter() { [ -z "$(tmux -L "${1:-$MAAL}" list-clients)" ]; }
 klienter() { maal list-clients | wc -l | tr -d ' '; }
 uten_sesjon() { ! maal has-session -t "=$1" 2>/dev/null; }
@@ -121,9 +122,12 @@ mkdir -p "$KONFIG/git/prosjekt.ny" "$KONFIG/git/annet" "$KONFIG/kode/tredje"
 mkdir -p "$KONFIG/git/annet/apps/web/node_modules/pakke"
 touch "$KONFIG/git/annet/apps/web/package.json" "$KONFIG/git/annet/apps/web/node_modules/pakke/package.json"
 # En samtale uten meldinger i en mappe utenfor NERDR_MAPPER, som mappevelgeren
-# viser. Den skrives først, så annet er brukt sist.
+# viser. Den er et minutt gammel, så annet er brukt sist. Linux gir filer som
+# skrives rett etter hverandre, samme endringstid, så rekkefølgen de skrives i,
+# er ikke nok.
 mkdir -p "$KONFIG/eget" "$KONFIG/projects/eget"
 printf '{"type":"user","cwd":"%s"}\n' "$KONFIG/eget" > "$KONFIG/projects/eget/tom.jsonl"
+perl -e '$t = time - 60; utime $t, $t, @ARGV' "$KONFIG/projects/eget/tom.jsonl"
 # En tidligere samtale i annet, og en tom en som ikke skal vises.
 mkdir -p "$KONFIG/projects/annet"
 printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"Fiks testene"}\n' "$KONFIG/git/annet" > "$KONFIG/projects/annet/abc-123.jsonl"
@@ -397,14 +401,17 @@ tast -l zoom
 tast Enter
 sjekk "og zoom igjen zoomer ut" er 0 zoom
 
-maal set-hook -g window-resized "run-shell 'echo #{session_name} #{window_width}x#{window_height} >> $KONFIG/storrelser'"
+# tmux 3.4 kjører window-resized også når størrelsen blir den samme, så hver
+# linje fra hooken sammenlignes med størrelsen vinduet hadde før.
+maal list-windows -a -F '#{window_id} #{window_width}x#{window_height}' > "$KONFIG/for"
+maal set-hook -g window-resized "run-shell 'echo #{window_id} #{window_width}x#{window_height} >> $KONFIG/storrelser'"
 tast C-b ')'
 sjekk "C-b ) går til neste Claude" linje_mangler 2 '^▎'
 tast C-b '('
 sjekk "C-b ( går tilbake til alfa" linje_har 5 '^▎ ●  Fiks testene +<1m │'
 # Et vindu som endrer størrelse, gjør det like etter byttet.
 sleep 0.5
-sjekk "ingen vindu endrer størrelse når du bytter Claude" [ ! -s "$KONFIG/storrelser" ]
+sjekk "ingen vindu endrer størrelse når du bytter Claude" samme_storrelser
 maal set-hook -gu window-resized
 
 tast C-b o C-b x
@@ -505,11 +512,13 @@ tast n
 sjekk "n lukker popupen" mangler 'lukke sesjonen'
 sjekk "og lar Claude-en stå" har 'Lukk meg'
 klikk 33 "$rad"
+sjekk "et klikk til spør igjen" har ' avbryt '
 svar=$(linja_med ' avbryt ')
 klikk "$(kolonne "$svar" ' avbryt ')" "$svar"
 sjekk "klikk på «avbryt» lukker popupen" mangler 'lukke sesjonen'
 sjekk "og lar panen stå" linjer 2 maal list-panes -t =lukk:0
 klikk 33 "$rad"
+sjekk "og en gang til" har ' avbryt '
 klikk "$(kolonne "$svar" ' lukk ')" "$svar"
 sjekk "klikk på «lukk» lukker bare panen" linjer 1 maal list-panes -t =lukk:0
 sjekk "og kortet er borte" mangler 'Lukk meg'
