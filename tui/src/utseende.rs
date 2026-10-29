@@ -114,7 +114,7 @@ impl Utseende {
             orden: Orden::Nerdr,
             ledig: Ledig::Under,
             tittel: 1,
-            topp: Topp::Rad,
+            topp: Topp::Strek,
             ulest: Ulestfarge::Oransje,
         }
     }
@@ -194,7 +194,7 @@ mod tester {
         u.endre(1, 1);
         u.endre(3, 1);
         u.endre(4, -1);
-        assert_eq!(u.tekst(), "paner=bokser farge=av ulest=oransje plass=minimal orden=aktivitet topp=rad ledig=under tittel=1");
+        assert_eq!(u.tekst(), "paner=bokser farge=av ulest=oransje plass=minimal orden=aktivitet topp=strek ledig=under tittel=1");
         let mut lest = Utseende::ny(Rammer::Linjer);
         lest.les(&u.tekst());
         assert_eq!(lest, u);

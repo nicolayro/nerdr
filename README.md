@@ -209,9 +209,9 @@ husker det i `@nerdr-utseende`.
 | **tittel** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. |
 
 Standard er linjer mellom panene, farge på med ulest i oransje, vanlig plass,
-ordnet som nerdr med de ledige under, og én linje til oppgaven. `ulest` gjelder
-bare med farge, `topp` bare mappe, `ledig` bare nerdr, og `tittel` gjelder ikke
-minimal. `nerdr liste` er alltid ordnet som nerdr.
+ordnet som nerdr med de ledige under, strek etter repoet, og én linje til
+oppgaven. `ulest` gjelder bare med farge, `topp` bare mappe, `ledig` bare nerdr,
+og `tittel` gjelder ikke minimal. `nerdr liste` er alltid ordnet som nerdr.
 
 ## Innstillinger
 
