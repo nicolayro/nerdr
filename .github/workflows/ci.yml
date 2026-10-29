@@ -1,0 +1,23 @@
+# Kjører sjekkene fra «Før commit» i CLAUDE.md, så en commit som hopper over
+# dem, blir oppdaget før den havner i en release.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sjekk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sudo apt-get update && sudo apt-get install -y tmux
+      - run: cargo test --locked
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo build --locked
+      - run: scripts/tui-test.sh
