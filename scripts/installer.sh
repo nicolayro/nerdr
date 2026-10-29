@@ -82,4 +82,4 @@ case ":$PATH:" in
   *":$bin:"*) ;;
   *) echo "$bin står ikke i PATH. Legg til i skallets oppstartsfil: export PATH=\"$bin:\$PATH\"" ;;
 esac
-command -v tmux >/dev/null || echo "nerdr trenger tmux. Installer den, for eksempel med: brew install tmux"
+command -v tmux >/dev/null || echo "nerdr trenger tmux, og den er ikke installert."

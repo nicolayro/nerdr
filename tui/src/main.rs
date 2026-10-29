@@ -306,7 +306,7 @@ fn ta_flagg(args: &mut Vec<String>, navn: &str) -> bool {
 
 fn uten_tmux(feil: io::Error) -> io::Error {
     match feil.kind() {
-        io::ErrorKind::NotFound => io::Error::other("fant ikke tmux. Installer den, for eksempel med `brew install tmux`."),
+        io::ErrorKind::NotFound => io::Error::other("fant ikke tmux, som nerdr trenger."),
         _ => feil,
     }
 }

@@ -5,7 +5,7 @@ Gå gjennom stegene i rekkefølge, og spør brukeren der det står.
 
 ## 1. Sjekk forutsetningene
 
-`tmux -V` skal gi en versjon. Mangler den, foreslå `brew install tmux` (macOS)
+`tmux -V` skal gi en versjon. Mangler den, si at nerdr trenger tmux,
 og spør før du installerer.
 
 ## 2. Installer binæren
