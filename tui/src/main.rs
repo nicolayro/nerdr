@@ -237,6 +237,11 @@ struct App {
     /// står i registeret. Oppstarten tar flere sekunder, og så lenge vises de
     /// likevel.
     nye: HashMap<String, (PathBuf, Instant)>,
+    /// Panene tmux har fått fargene til terminalen for. En control mode-klient
+    /// har ingen terminal tmux kan spørre, så uten dem svarer tmux svart når en
+    /// pane spør om bakgrunnen, og Claude Code med temaet «auto» blir mørk også
+    /// i en lys terminal.
+    fargelagt: HashSet<String>,
     /// Panen nerdr skal gå inn i når den dukker opp i `list-panes`.
     gå_inn_i: Option<String>,
     ferdig: Option<String>,
@@ -407,6 +412,7 @@ impl App {
             handlinger: None,
             hjelp: None,
             nye: HashMap::new(),
+            fargelagt: HashSet::new(),
             gå_inn_i: None,
             ferdig: None,
         }
@@ -487,12 +493,25 @@ impl App {
         self.kø.clear();
         (self.lister, self.list_igjen, self.henter) = (false, false, false);
         self.størrelser.clear();
+        self.fargelagt.clear();
         self.utdatert = true;
         if let Some(valgt) = self.valgt.clone() {
             self.send(&format!("switch-client -t {}", sitat(&valgt.sesjon_id)), Svar::Ingenting);
         }
         self.list_paner();
         true
+    }
+
+    /// Svarene terminalen ville gitt på OSC 10 og 11, som tmux gir panen når
+    /// den spør. tmux sender også et temavarsel til programmer som har slått
+    /// på modus 2031, så en Claude som kjører, bytter tema med en gang.
+    fn gi_farger(&mut self, pane: &str) {
+        let Some((fg, bg)) = tegn::farger() else { return };
+        for (nr, (r, g, b)) in [(10, fg), (11, bg)] {
+            let svar = format!("{pane}:\x1b]{nr};rgb:{r:02x}{r:02x}/{g:02x}{g:02x}/{b:02x}{b:02x}\x07");
+            self.send(&format!("refresh-client -r {}", dobbelt_sitat(&svar)), Svar::Ingenting);
+        }
+        self.fargelagt.insert(pane.to_string());
     }
 
     fn send(&mut self, kommando: &str, svar: Svar) {
@@ -590,6 +609,12 @@ impl App {
                             && alle.iter().any(|p| &p.id == id)
                             && (startet.elapsed() < STARTER_MAKS || inne(id))
                     });
+                    self.fargelagt.retain(|id| alle.iter().any(|p| &p.id == id));
+                    for pane in &alle {
+                        if !self.fargelagt.contains(&pane.id) {
+                            self.gi_farger(&pane.id);
+                        }
+                    }
                 }
                 self.repoer = self
                     .claude
@@ -674,6 +699,8 @@ impl App {
             }
             Svar::NySesjon { mappe, claude_kommando, .. } | Svar::NyPane { mappe, claude_kommando } => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
+                // Før `claude` skrives inn, så den finner temaet når den starter.
+                self.gi_farger(&id);
                 for kommando in start::skriv_inn(&id, &claude_kommando) {
                     self.send(&tmux::linje(&kommando), Svar::Ingenting);
                 }

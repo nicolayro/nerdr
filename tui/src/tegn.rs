@@ -56,11 +56,15 @@ pub fn bruk_farger(farger: Option<(Rgb, Rgb)>) {
     let _ = FARGER.set(farger);
 }
 
+pub fn farger() -> Option<(Rgb, Rgb)> {
+    FARGER.get().copied().flatten()
+}
+
 /// `andel` av `farge`, eller av forgrunnen, blandet inn i bakgrunnen til
 /// terminalen, så det passer til alle fargetemaer. `None` når terminalen ikke
 /// har sagt hvilke farger den har.
 fn tonet(farge: Option<Rgb>, andel: f32) -> Option<Color> {
-    let (fg, bg) = FARGER.get().copied().flatten()?;
+    let (fg, bg) = farger()?;
     let (r, g, b) = bland(bg, farge.unwrap_or(fg), andel);
     Some(Color::Rgb(r, g, b))
 }

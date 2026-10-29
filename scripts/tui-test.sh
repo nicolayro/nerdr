@@ -162,7 +162,9 @@ registrer gamma gamma busy ",\"cwd\":\"$MAPPE\""
 registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 maal set -g @nerdr-utseende paner=bokser
 
-vert -f /dev/null new-session -d -s vert -x 110 -y 20 \
+# Fargene vertsserveren svarer nerdr med, så testen ser at panene får dem.
+vert -f /dev/null start-server \; set -g window-style 'fg=#d0d1d2,bg=#0a0b0c' \; \
+  new-session -d -s vert -x 110 -y 20 \
   "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
 sjekk "paner=bokser fra tmux gir bokser, og fanene øverst uten strek" linje_har 1 '^ +│  [^ ]+ × '
@@ -176,6 +178,14 @@ sjekk "så oppgaven" linje_har 4 '^│ Fiks testene +│'
 sjekk "og branchen" linje_har 5 '^│ main +│'
 sjekk "gamma står under alfa, og uten oppgave er repoet tittelen" linje_har 8 '^│ nerdr +│'
 sjekk "◐ til gamma er grønn" gronn_glyf 7
+# Spør om bakgrunnen til den får svar, også i en sesjon nerdr ikke står i.
+cat > "$KONFIG/bakgrunn.sh" << 'SLUTT'
+stty -echo -icanon min 0 time 5
+while :; do printf '\033]11;?\007'; cat -v; echo; done
+SLUTT
+maal new-session -d -s farge "sh $KONFIG/bakgrunn.sh"
+sjekk "en pane får bakgrunnen til terminalen fra nerdr" i_pane farge 'rgb:0a0a/0b0b/0c0c'
+maal kill-session -t farge
 tast C-b b
 sjekk "C-b b åpner utseende-menyen" har 'farge +av +på'
 tast Left
