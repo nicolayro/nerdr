@@ -583,6 +583,11 @@ vert send-keys -t tom C-a
 sjekk "NERDR_PREFIKS gir et annet prefiks, og hintet viser det" vert_har tom 'C-a … f ny · w lista'
 vert send-keys -t tom w q C-a d
 sjekk "q gjør ingenting, og C-a d avslutter" uten_klienter "$TOM"
+
+vert new-session -d -s inne -x 120 "$NERDR -L $VERT; echo slutt \$?; CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $VERT liste --json; sleep 30"
+sjekk "inne i serveren den skal vise, sier nerdr fra og avslutter" vert_har inne 'utenfor tmux\.'
+sjekk "med 1" vert_har inne '^slutt 1'
+sjekk "men nerdr liste virker der" vert_har inne '"versjon":1'
 sjekk "uten tmux sier nerdr fra" inneholder "$(PATH=/finnes-ikke "$NERDR" 2>&1)" 'fant ikke tmux'
 
 echo "$antall sjekker, alle grønne"

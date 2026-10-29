@@ -20,7 +20,7 @@ use std::{env, io, thread};
 use bokser::Boks;
 use grupper::{Del, Plass, Rad};
 use handlinger::{Handling, Handlinger};
-use nerdr_kjerne::kontroll::{Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
+use nerdr_kjerne::kontroll::{self, Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{self, FELT, Pane};
 use nerdr_kjerne::{git, konfigkatalog, oppsett, start, tmux};
 use nerdr_kjerne::merke::Merke;
@@ -273,7 +273,9 @@ fn main() {
 }
 
 fn bruk() -> ! {
-    eprintln!("bruk: nerdr [liste | samtaler | ny <mappe>] [--json] [-L socket], eller nerdr --help");
+    eprintln!(
+        "bruk: nerdr [liste | samtaler | ny <mappe> | ny --fortsett <id> [mappe]] [--json] [-L socket], eller nerdr --help"
+    );
     std::process::exit(2);
 }
 
@@ -302,6 +304,9 @@ fn uten_tmux(feil: io::Error) -> io::Error {
 }
 
 fn kjør(socket: Option<&str>) -> io::Result<()> {
+    if kontroll::inne_i(socket) {
+        return Err(io::Error::other("kjører inne i tmux-serveren den skal vise. Start nerdr i en vanlig terminalfane, utenfor tmux."));
+    }
     tegn::bruk_farger(palett::les());
     let (tx, rx) = mpsc::channel();
     let socket = socket.map(String::from);

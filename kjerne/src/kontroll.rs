@@ -100,16 +100,10 @@ impl Kontroll {
         socket: Option<&str>,
         mut melde: impl FnMut(Melding) + Send + 'static,
     ) -> io::Result<Kontroll> {
-        let tmux = || {
-            let mut tmux = tmux::kommando(socket);
-            // Uten dette nekter tmux å koble til fra innsiden av en annen tmux.
-            tmux.env_remove("TMUX");
-            tmux
-        };
         // attach-session uten sesjoner svarer i blokka fra selve oppkoblingen,
         // som tolkeren hopper over, så feilen ville kommet uten grunn.
-        let finnes = tmux().arg("has-session").stdout(Stdio::null()).stderr(Stdio::null()).status()?.success();
-        let mut barn = tmux()
+        let finnes = utenfra(socket).arg("has-session").stdout(Stdio::null()).stderr(Stdio::null()).status()?.success();
+        let mut barn = utenfra(socket)
             .args(["-C", if finnes { "attach-session" } else { "new-session" }])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -143,6 +137,30 @@ impl Kontroll {
     pub fn send(&mut self, kommando: &str) -> io::Result<()> {
         self.inn.write_all(format!("{kommando}\n").as_bytes())
     }
+}
+
+/// Serveren `Kontroll::start` kobler til, med `-L socket` eller
+/// standardserveren, uansett om nerdr selv står i en tmux.
+fn utenfra(socket: Option<&str>) -> std::process::Command {
+    let mut tmux = tmux::kommando(socket);
+    // Uten dette nekter tmux å koble til fra innsiden av en annen tmux.
+    tmux.env_remove("TMUX");
+    tmux
+}
+
+/// Om nerdr står i en pane på serveren `Kontroll::start` ville koblet til.
+/// Der tar tmux prefikset før nerdr ser det, og vinduet nerdr står i, kan
+/// vises i nerdr og krympes til boksen sin, om og om igjen.
+pub fn inne_i(socket: Option<&str>) -> bool {
+    // `$TMUX` er `socket,pid,sesjon`, med pid-en til serveren.
+    let Some(pid) = std::env::var("TMUX").ok().and_then(|t| Some(t.split(',').nth(1)?.to_string())) else {
+        return false;
+    };
+    utenfra(socket)
+        .args(["display-message", "-p", "#{pid}"])
+        .stderr(Stdio::null())
+        .output()
+        .is_ok_and(|ut| ut.status.success() && String::from_utf8_lossy(&ut.stdout).trim() == pid)
 }
 
 impl Drop for Kontroll {
