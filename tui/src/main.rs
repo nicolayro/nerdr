@@ -733,12 +733,8 @@ impl App {
             Svar::Utseende => {
                 if let Some(tekst) = linjer.first().filter(|_| ok) {
                     self.utseende.les(tekst);
+                    self.utdatert = true;
                 }
-                // Midlertidig, så hvert vindu kan starte med sin variant.
-                if let Ok(tekst) = env::var("NERDR_UTSEENDE") {
-                    self.utseende.les(&tekst);
-                }
-                self.utdatert = true;
                 true
             }
             Svar::Prefiks => {

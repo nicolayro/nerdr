@@ -37,7 +37,7 @@ pub enum Ledig {
     Midten,
 }
 
-/// Midlertidig, til vi har valgt hvordan prosjektet står over kortene.
+/// Hvordan prosjektet står over Claude-ene, når lista er ordnet etter mappe.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Topp {
     /// En rad med bakgrunn.
@@ -46,7 +46,7 @@ pub enum Topp {
     Strek,
 }
 
-/// Midlertidig, til vi har valgt fargen til det som er ferdig og ikke sett.
+/// Fargen til det som er ferdig og ikke sett.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Ulestfarge {
     /// Som det som spør.
@@ -69,35 +69,33 @@ pub struct Utseende {
 
 /// Står i `OPTION` foran verdien, som `farge=på`, så en akse kan komme til
 /// eller forsvinne uten at de andre leses feil.
-pub const AKSER: [&str; 8] = ["paner", "farge", "plass", "orden", "ledig", "tittel", "topp", "ulest"];
-const LEDIG: usize = 4;
+pub const AKSER: [&str; 8] = ["paner", "farge", "ulest", "plass", "orden", "topp", "ledig", "tittel"];
+const ULEST: usize = 2;
+const TOPP: usize = 5;
+const LEDIG: usize = 6;
 /// Aksene fra denne gjelder bare boksene.
-pub const BOKSAKSER: usize = 5;
-/// Aksene fra denne prøves ut, og står for seg nederst i menyen.
-pub const MIDLERTIDIGE: usize = 6;
-const TOPP: usize = 6;
-const ULEST: usize = 7;
+pub const BOKSAKSER: usize = 7;
 /// Står i `OPTION`, og endres ikke.
 const VERDIER: [&[&str]; 8] = [
     &["bokser", "linjer"],
     &["av", "på"],
+    &["oransje", "blå"],
     &["vanlig", "minimal"],
     &["nerdr", "mappe", "aktivitet"],
+    &["rad", "strek"],
     &["under", "midten"],
     &["1", "2", "3"],
-    &["rad", "strek"],
-    &["oransje", "blå"],
 ];
 /// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
 pub const NAVN: [&[&str]; 8] = [
     &["paner i bokser", "paner med linjer"],
     &["uten farge", "med farge"],
+    &["ulest i oransje", "ulest i blått"],
     &["vanlig liste", "minimal liste"],
     &["ordne som nerdr", "ordne etter mappe", "ordne etter aktivitet"],
+    &["prosjektet på en rad", "prosjektet med strek"],
     &["ledige under de aktive", "ledige fra midten"],
     &["oppgaven på 1 linje", "oppgaven på 2 linjer", "oppgaven på 3 linjer"],
-    &["prosjektet på en rad", "prosjektet med strek"],
-    &["ulest i oransje", "ulest i blått"],
 ];
 const PANER: [Rammer; 2] = [Rammer::Bokser, Rammer::Linjer];
 const FARGER: [Farge; 2] = [Farge::Av, Farge::På];
@@ -130,12 +128,12 @@ impl Utseende {
         let i = match akse {
             0 => PANER.iter().position(|p| *p == self.paner),
             1 => FARGER.iter().position(|f| *f == self.farge),
-            2 => PLASSER.iter().position(|p| *p == self.plass),
-            3 => ORDNER.iter().position(|o| *o == self.orden),
-            4 => LEDIGE.iter().position(|l| *l == self.ledig),
-            5 => Some(self.tittel - 1),
-            6 => TOPPER.iter().position(|t| *t == self.topp),
-            _ => ULESTFARGER.iter().position(|f| *f == self.ulest),
+            2 => ULESTFARGER.iter().position(|f| *f == self.ulest),
+            3 => PLASSER.iter().position(|p| *p == self.plass),
+            4 => ORDNER.iter().position(|o| *o == self.orden),
+            5 => TOPPER.iter().position(|t| *t == self.topp),
+            6 => LEDIGE.iter().position(|l| *l == self.ledig),
+            _ => Some(self.tittel - 1),
         };
         i.unwrap_or(0)
     }
@@ -144,12 +142,12 @@ impl Utseende {
         match akse {
             0 => self.paner = PANER[i],
             1 => self.farge = FARGER[i],
-            2 => self.plass = PLASSER[i],
-            3 => self.orden = ORDNER[i],
-            4 => self.ledig = LEDIGE[i],
-            5 => self.tittel = i + 1,
-            6 => self.topp = TOPPER[i],
-            _ => self.ulest = ULESTFARGER[i],
+            2 => self.ulest = ULESTFARGER[i],
+            3 => self.plass = PLASSER[i],
+            4 => self.orden = ORDNER[i],
+            5 => self.topp = TOPPER[i],
+            6 => self.ledig = LEDIGE[i],
+            _ => self.tittel = i + 1,
         }
     }
 
@@ -159,7 +157,8 @@ impl Utseende {
         self.sett(akse, (self.indeks(akse) as i32 + steg).rem_euclid(antall) as usize);
     }
 
-    /// Minimal har ingen bokser å velge for, og bare nerdr har ledige.
+    /// Minimal har ingen bokser å velge for, bare nerdr har ledige, og bare
+    /// mappe har prosjekter.
     pub fn gjelder(&self, akse: usize) -> bool {
         match akse {
             LEDIG => self.orden == Orden::Nerdr,
@@ -193,9 +192,9 @@ mod tester {
     fn teksten_leses_tilbake_til_det_samme() {
         let mut u = Utseende::ny(Rammer::Bokser);
         u.endre(1, 1);
-        u.endre(2, 1);
-        u.endre(3, -1);
-        assert_eq!(u.tekst(), "paner=bokser farge=av plass=minimal orden=aktivitet ledig=under tittel=1 topp=rad ulest=oransje");
+        u.endre(3, 1);
+        u.endre(4, -1);
+        assert_eq!(u.tekst(), "paner=bokser farge=av ulest=oransje plass=minimal orden=aktivitet topp=rad ledig=under tittel=1");
         let mut lest = Utseende::ny(Rammer::Linjer);
         lest.les(&u.tekst());
         assert_eq!(lest, u);
@@ -213,7 +212,7 @@ mod tester {
         let mut u = Utseende::ny(Rammer::Linjer);
         u.endre(0, 1);
         assert_eq!(u.paner, Rammer::Bokser);
-        u.endre(3, 4);
+        u.endre(4, 4);
         assert_eq!(u.orden, Orden::Mappe);
     }
 }

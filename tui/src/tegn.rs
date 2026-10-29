@@ -18,7 +18,7 @@ use crate::grupper::{Del, Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::tekst::varighet;
-use crate::utseende::{self, AKSER, BOKSAKSER, Ledig, MIDLERTIDIGE, Orden, Plass, Topp, Utseende};
+use crate::utseende::{self, AKSER, BOKSAKSER, Ledig, Orden, Plass, Topp, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
@@ -764,12 +764,12 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, rull: u16) {
 
 /// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
 fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
-    let høyde = AKSER.len() as u16 + 5;
+    let høyde = AKSER.len() as u16 + 4;
     let Some(ramme) = boks(buf, område, 42, høyde, "konfigurasjon", "↑↓ velg · ←→ endre · esc lukk") else { return };
     let x = ramme.x + 2;
     for (akse, navn) in AKSER.iter().enumerate() {
         // Luft mellom panene og lista.
-        let y = ramme.y + 1 + akse as u16 + (akse > 0) as u16 + (akse >= BOKSAKSER) as u16 + (akse >= MIDLERTIDIGE) as u16;
+        let y = ramme.y + 1 + akse as u16 + (akse > 0) as u16 + (akse >= BOKSAKSER) as u16;
         if akse == valgt {
             buf.set_style(Rect::new(ramme.x + 1, y, ramme.width - 2, 1), markert());
             buf.set_string(ramme.x + 1, y, "▎", VANLIG);

@@ -201,13 +201,16 @@ husker det i `@nerdr-utseende`.
 | --- | --- |
 | **paner** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
 | **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
+| **ulest** | Fargen til det som er ferdig og ikke sett. `oransje` er som det som spør, og `blå` skiller dem. |
 | **plass** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
-| **orden** | `nerdr` deler lista i aktive og ledige. `mappe` har en gruppe for hvert repo, i alfabetisk rekkefølge, og Claude-ene i hver står der de er i tmux. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. |
+| **orden** | `nerdr` deler lista i aktive og ledige. `mappe` har en gruppe for hvert repo, og både repoene og Claude-ene i dem står i den rekkefølgen de ble startet. `←` og `→`, eller `h` og `l`, bretter repoet sammen og ut. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. |
+| **topp** | Repoet over Claude-ene, ordnet etter mappe: på en `rad` med bakgrunn, eller med en `strek` bort til skillelinja. |
 | **ledig** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. |
 | **tittel** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. |
 
-Standard er linjer mellom panene, farge på, vanlig plass, ordnet som nerdr med
-de ledige under, og én linje til oppgaven. `ledig` gjelder bare nerdr, og `tittel` gjelder ikke
+Standard er linjer mellom panene, farge på med ulest i oransje, vanlig plass,
+ordnet som nerdr med de ledige under, og én linje til oppgaven. `ulest` gjelder
+bare med farge, `topp` bare mappe, `ledig` bare nerdr, og `tittel` gjelder ikke
 minimal. `nerdr liste` er alltid ordnet som nerdr.
 
 ## Innstillinger
