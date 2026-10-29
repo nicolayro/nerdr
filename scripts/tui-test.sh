@@ -79,6 +79,13 @@ dimensjon() { maal display-message -p -t "$1" '#{window_width}x#{window_height}'
 pane_indeks() { maal display-message -p -t alfa:0 '#{pane_index}'; }
 vindu_indeks() { maal display-message -p -t alfa '#{window_index}'; }
 side_om_side() { maal display-message -p -t alfa:0 '#{window_layout}' | grep -q '{'; }
+# Linja, fra 1, der teksten står første gang.
+rad_med() { skjerm | grep -n -- "$1" | head -1 | cut -d: -f1; }
+# klikk_paa <tekst>, midt i teksten der den står første gang.
+klikk_paa() {
+  rad=$(rad_med "$1")
+  klikk "$(($(kolonne "$rad" "$1") + 1))" "$rad"
+}
 zoom() { maal display-message -p -t alfa:0 '#{window_zoomed_flag}'; }
 mapper() { maal list-panes -t "$1" -F '#{pane_current_path}' | sort -u; }
 sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+$'; }
@@ -198,14 +205,22 @@ tast C-b b
 sjekk "C-b b åpner utseende-menyen" har 'farge +av +på'
 tast Left
 sjekk "farge av tar fargen bort" uten_gronn_glyf 7
-tast Right Down Down Right
+tast Right Down Down Down Right
 sjekk "orden mappe gir repoet som overskrift" linje_har 2 '^ nerdr {3,}'
 sjekk "og bare branchen under oppgaven" linje_har 5 '^│ main +│'
 tast Right
 sjekk "orden aktivitet har ingen overskrifter" mangler 'AKTIVE|LEDIGE'
-tast Right Up Right Escape
+tast Right Up Up Right Escape
 sjekk "Esc lukker menyen" mangler 'farge +av'
 sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1' maal show-options -gqv @nerdr-utseende
+tast C-b b
+sjekk "med minimal er oppgave borte fra konfigurasjonen" mangler 'oppgave +1'
+klikk_paa ' vanlig '
+sjekk "et klikk på vanlig viser oppgave under kortdesign" har '│   oppgave +1 +2 +3'
+klikk_paa ' minimal '
+sjekk "og minimal tar den bort igjen" mangler 'oppgave +1'
+klikk 2 2
+sjekk "et klikk utenfor lukker konfigurasjonen" mangler 'konfigurasjon'
 
 klikk "$(kolonne 1 '⇅')" 1
 sjekk "et klikk på ⇅ øverst sorterer etter prosjekt" linje_har 2 '^ nerdr ─+┤'
@@ -303,9 +318,12 @@ sjekk "C-b ? viser hjelpen med C-b f" har 'C-b f +ny sesjon'
 tast x
 sjekk "en tast lukker hjelpen igjen" mangler 'trykk en tast for å lukke'
 tast C-b :
-sjekk "C-b : fra lista åpner handlingene" har '⏎ kjør · esc lukk'
+sjekk "C-b : fra lista åpner handlingene" har '⏎ kjør · klikk · esc lukk'
 tast Escape
 sjekk "Esc lukker dem" mangler '⏎ kjør'
+tast C-b :
+klikk 2 2
+sjekk "et klikk utenfor lukker dem også" mangler '⏎ kjør'
 
 klikk 3 17
 sjekk "klikk på «+ ny sesjon» åpner popupen med 4 mapper og 1 prosjekt" linje_har 3 'mappe › .*5/5'
@@ -360,13 +378,13 @@ tast Up Up Up Up Up Up Up Up Down Down Enter
 sjekk "↑ til toppen, ↓ ned til alfa og Enter viser den" linje_har 5 '^▎ ●  Fiks testene +<1m │'
 
 klikk 3 18
-sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · esc lukk'
+sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · klikk · esc lukk'
 tast -l terminal
-tast Enter
+klikk_paa 'ny terminal'
 sjekk "«ny terminal» der gir en terminal i et nytt vindu i alfa" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
 sjekk "og du er inne i den" i_panen
-tast C-b '&' y
+tast C-b '&'
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 
 tast C-b w
@@ -375,7 +393,7 @@ klikk "$(kolonne 1 ' +')" 1
 sjekk "klikk på + etter fanene gir en terminal i et nytt vindu" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
 sjekk "slippet etter klikket kommer ikke fram i alfa" ikke_i_pane alfa '^[[<0;'
-tast C-b '&' y
+tast C-b '&'
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 tast C-b w
 tast C-b
@@ -422,13 +440,13 @@ sjekk "C-b z igjen zoomer ut" er 0 zoom
 sjekk "begge boksene er tilbake" er 2 tell '╭'
 
 tast C-b :
-sjekk "C-b : fra panen åpner handlingene" har '⏎ kjør · esc lukk'
+sjekk "C-b : fra panen åpner handlingene" har '⏎ kjør · klikk · esc lukk'
 tast -l zoom
 sjekk "«zoom» viser kommandoen med tasten" har 'zoom pane +C-b z'
 tast Enter
 sjekk "Enter kjører den" er 1 zoom
 klikk 3 18
-sjekk "klikk på «handlinger» fra panen åpner dem" har '⏎ kjør · esc lukk'
+sjekk "klikk på «handlinger» fra panen åpner dem" har '⏎ kjør · klikk · esc lukk'
 tast -l zoom
 tast Enter
 sjekk "og zoom igjen zoomer ut" er 0 zoom

@@ -108,6 +108,8 @@ musehjul i sesjonen går videre når programmet der har slått på mus, som Clau
 Code i fullskjerm. Ellers ruller hjulet i historikken, og en tast tar deg
 tilbake til bunnen. Det du drar over, kopieres når du slipper, med `pbcopy`,
 `wl-copy`, `xclip` eller `xsel`. I `less` og `man` blir hjulet til piltaster.
+I handlingene, i popupen for ny sesjon og i konfigurasjonen kjører eller
+velger et klikk det du klikker på, hjulet blar, og et klikk utenfor lukker.
 
 ### Panen og vinduene
 
@@ -205,23 +207,25 @@ og `ferdig` for `sett`.
 
 ## Konfigurasjon
 
-Prefikset og `b` åpner konfigurasjonen. Valget gjelder med en gang, og tmux
-husker det i `@nerdr-utseende`.
+Prefikset og `b` åpner konfigurasjonen. Et klikk på en verdi velger den, og
+valget gjelder med en gang. tmux husker det i `@nerdr-utseende`. Et valg som
+bare gjelder for valget over, står med innrykk under det, og er borte når det
+ikke gjelder.
 
 | | |
 | --- | --- |
-| **paner** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
+| **ramme** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
 | **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
-| **plass** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
+| **kortdesign** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
+| **oppgave** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. Bare med `vanlig`. |
 | **sortering** | `prioritert` deler lista i aktive og ledige. `prosjekt` har en gruppe for hvert repo, i alfabetisk rekkefølge, og Claude-ene i hver står der de er i tmux. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. `⇅` øverst i lista bytter også sortering. |
-| **ledig** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. |
-| **tittel** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. |
+| **ledige** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. Bare med `prioritert`. |
 
-Standard er linjer mellom panene, farge på, vanlig plass, sortert prioritert med
-de ledige under, og én linje til oppgaven. `ledig` gjelder bare prioritert, og
-`tittel` gjelder ikke minimal. `nerdr liste` er alltid sortert prioritert. I
-`@nerdr-utseende` heter sorteringen `orden`, med verdiene `nerdr`, `mappe` og
-`aktivitet`.
+Standard er linjer mellom panene, farge på, vanlig kortdesign, én linje til
+oppgaven, og sortert prioritert med de ledige under. `nerdr liste` er alltid
+sortert prioritert. I `@nerdr-utseende` står valgene med navnene de hadde
+først: `paner`, `farge`, `plass`, `tittel`, `orden` med `nerdr`, `mappe` og
+`aktivitet`, og `ledig`.
 
 ## Innstillinger
 

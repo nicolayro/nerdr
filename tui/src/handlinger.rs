@@ -52,6 +52,8 @@ pub struct Handlinger {
     alle: Vec<Oppføring>,
     pub søk: String,
     pub valgt: usize,
+    /// Første treff som vises.
+    pub rull: usize,
 }
 
 impl Handlinger {
@@ -77,7 +79,7 @@ impl Handlinger {
                 });
             }
         }
-        Handlinger { alle, søk: String::new(), valgt: 0 }
+        Handlinger { alle, søk: String::new(), valgt: 0, rull: 0 }
     }
 
     pub fn antall(&self) -> usize {

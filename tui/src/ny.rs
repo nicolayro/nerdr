@@ -47,6 +47,8 @@ pub struct Velger {
     samtaler: Vec<Kandidat>,
     pub søk: String,
     pub valgt: usize,
+    /// Første treff som vises.
+    pub rull: usize,
     /// Prosjektene under mappene er ikke lest ennå.
     pub søker: bool,
     /// Tidligere samtaler vises i stedet for mappene.
@@ -79,7 +81,7 @@ impl Velger {
                 }
             })
             .collect();
-        Velger { mapper, toppmapper, samtaler, søk: String::new(), valgt: 0, søker: true, fortsett }
+        Velger { mapper, toppmapper, samtaler, søk: String::new(), valgt: 0, rull: 0, søker: true, fortsett }
     }
 
     /// Mappene rett under dem i `NERDR_MAPPER`, der prosjektene søkes. Ikke

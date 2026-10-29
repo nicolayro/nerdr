@@ -66,6 +66,21 @@ const VERDIER: [&[&str]; 6] = [
 ];
 /// Det sorteringen heter i menyen og på knappen, som `VERDIER` for orden.
 pub const SORTERINGER: [&str; 3] = ["prioritert", "prosjekt", "aktivitet"];
+/// Navnene i menyen, i samme rekkefølge som `AKSER`.
+const I_MENYEN: [&str; 6] = ["ramme", "farge", "kortdesign", "sortering", "ledige", "oppgave"];
+/// Rekkefølgen i menyen, under overskriften. Et valg som bare gjelder for
+/// valget over, står med innrykk rett under det.
+pub const MENY: [(&str, &[(usize, bool)]); 2] =
+    [("Pane", &[(0, false)]), ("Liste", &[(1, false), (2, false), (5, true), (3, false), (4, true)])];
+/// Står nederst i menyen for valget du står på, i samme rekkefølge som `AKSER`.
+pub const FORKLARING: [&str; 6] = [
+    "Bokser gir hver pane en ramme med luft rundt. Linjer lar panene fylle visningen, med streker mellom.",
+    "Tegnet og tiden får fargen til gruppen, og rammene en tone av den.",
+    "Vanlig har en boks for hver sesjon. Minimal har én linje for hver.",
+    "Prioritert har de aktive øverst. Prosjekt grupperer etter repo. Aktivitet har den som sist endret seg, øverst.",
+    "Om de ledige står rett under de aktive, eller fra midten, så de ikke flytter seg.",
+    "Hvor mange linjer oppgaven får i kortet.",
+];
 /// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
 pub const NAVN: [&[&str]; 6] = [
     &["paner i bokser", "paner med linjer"],
@@ -88,10 +103,19 @@ impl Utseende {
 
     /// Navnet på aksen og verdiene i menyen.
     pub fn i_menyen(akse: usize) -> (&'static str, &'static [&'static str]) {
-        match akse {
-            ORDEN => ("sortering", &SORTERINGER),
-            _ => (AKSER[akse], VERDIER[akse]),
-        }
+        (I_MENYEN[akse], if akse == ORDEN { &SORTERINGER } else { VERDIER[akse] })
+    }
+
+    /// Valgene som vises i menyen, i rekkefølgen der.
+    pub fn synlige(&self) -> Vec<usize> {
+        MENY.iter().flat_map(|(_, akser)| akser.iter()).map(|&(akse, _)| akse).filter(|&a| self.gjelder(a)).collect()
+    }
+
+    /// Valget over eller under `akse` i menyen.
+    pub fn nabo(&self, akse: usize, steg: isize) -> usize {
+        let synlige = self.synlige();
+        let i = synlige.iter().position(|&a| a == akse).unwrap_or(0) as isize;
+        synlige[(i + steg).clamp(0, synlige.len() as isize - 1) as usize]
     }
 
     /// Verdien som er valgt på aksen, som indeks i `verdier`.
@@ -169,6 +193,17 @@ mod tester {
         let mut u = Utseende::ny(Rammer::Linjer);
         u.les("lista=original paner=sirkler bokser farge=av");
         assert_eq!((u.paner, u.farge), (Rammer::Linjer, Farge::Av));
+    }
+
+    #[test]
+    fn menyen_viser_bare_valg_som_gjelder() {
+        let mut u = Utseende::ny(Rammer::Linjer);
+        assert_eq!(u.synlige(), [0, 1, 2, 5, 3, 4]);
+        u.plass = Plass::Minimal;
+        u.orden = Orden::Mappe;
+        assert_eq!(u.synlige(), [0, 1, 2, 3]);
+        assert_eq!(u.nabo(2, 1), 3);
+        assert_eq!(u.nabo(0, -1), 0);
     }
 
     #[test]

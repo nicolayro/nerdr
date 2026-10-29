@@ -113,6 +113,10 @@ enum Mål {
     Lukk(String),
     /// «lukk» eller «avbryt» i popupen som spør.
     Svar(bool),
+    /// Et treff i handlingene eller velgeren.
+    Rad(usize),
+    /// En verdi i konfigurasjonen, som aksen og indeksen.
+    Verdi(usize, usize),
     /// Id-en til vinduet.
     Fane(String),
     /// `×` på fanen, med id-en til vinduet.
@@ -449,6 +453,13 @@ impl App {
             if tegne {
                 let liste = if self.liste_stripe { tegn::STRIPE } else { self.liste_bredde };
                 self.visning = tegn::visning(terminal.size()?, liste);
+                let rader = tegn::menyrader(self);
+                if let Some(h) = &mut self.handlinger {
+                    h.rull = tegn::følg(h.valgt, h.rull, rader, h.treff().len());
+                }
+                if let Some(v) = &mut self.velger {
+                    v.rull = tegn::følg(v.valgt, v.rull, rader, v.treff().len());
+                }
                 let (utsnitt, valgt) = tegn::utsnitt(self);
                 self.liste_rull = match valgt.filter(|_| self.liste_følger) {
                     Some(valgt) => utsnitt.følg(valgt).rull,
@@ -1139,11 +1150,11 @@ impl App {
                     return true;
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
-                    self.utseende_meny = Some(akse.saturating_sub(1));
+                    self.utseende_meny = Some(self.utseende.nabo(akse, -1));
                     return true;
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    self.utseende_meny = Some((akse + 1).min(utseende::AKSER.len() - 1));
+                    self.utseende_meny = Some(self.utseende.nabo(akse, 1));
                     return true;
                 }
                 KeyCode::Left | KeyCode::Char('h') => -1,
@@ -1154,18 +1165,15 @@ impl App {
             self.lagre_utseende();
             return true;
         }
+        let side = tegn::menyrader(self) as isize;
         if let Some(handlinger) = &mut self.handlinger {
             let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
             match k.code {
                 KeyCode::Esc => self.handlinger = None,
                 KeyCode::Char('c') if ctrl => self.handlinger = None,
-                KeyCode::Enter => {
-                    let valgt = handlinger.valgt();
-                    self.handlinger = None;
-                    if let Some(handling) = valgt {
-                        self.kjør(handling);
-                    }
-                }
+                KeyCode::Enter => self.kjør_valgt_handling(),
+                KeyCode::PageUp => handlinger.flytt(-side),
+                KeyCode::PageDown => handlinger.flytt(side),
                 KeyCode::Up => handlinger.flytt(-1),
                 KeyCode::Char('p' | 'k') if ctrl => handlinger.flytt(-1),
                 KeyCode::Down => handlinger.flytt(1),
@@ -1182,13 +1190,9 @@ impl App {
             match k.code {
                 KeyCode::Esc => self.velger = None,
                 KeyCode::Char('c') if ctrl => self.velger = None,
-                KeyCode::Enter => {
-                    if let Some(valgt) = velger.valgt() {
-                        let (mappe, samtale) = (valgt.mappe.clone(), valgt.samtale.clone());
-                        self.velger = None;
-                        self.start_claude(mappe, samtale.as_deref());
-                    }
-                }
+                KeyCode::Enter => self.start_valgt(),
+                KeyCode::PageUp => velger.flytt(-side),
+                KeyCode::PageDown => velger.flytt(side),
                 KeyCode::Char('r') if ctrl => velger.bytt(),
                 KeyCode::Up => velger.flytt(-1),
                 KeyCode::Char('p' | 'k') if ctrl => velger.flytt(-1),
@@ -1244,6 +1248,30 @@ impl App {
             _ => return false,
         }
         true
+    }
+
+    fn kjør_valgt_handling(&mut self) {
+        if let Some(handling) = self.handlinger.take().and_then(|h| h.valgt()) {
+            self.kjør(handling);
+        }
+    }
+
+    /// Uten treff står velgeren åpen, så du kan søke på nytt.
+    fn start_valgt(&mut self) {
+        let Some((mappe, samtale)) = self.velger.as_ref().and_then(|v| v.valgt()).map(|k| (k.mappe.clone(), k.samtale.clone()))
+        else {
+            return;
+        };
+        self.velger = None;
+        self.start_claude(mappe, samtale.as_deref());
+    }
+
+    fn flytt_i_menyen(&mut self, steg: isize) {
+        if let Some(h) = &mut self.handlinger {
+            h.flytt(steg);
+        } else if let Some(v) = &mut self.velger {
+            v.flytt(steg);
+        }
     }
 
     fn åpne_handlinger(&mut self) {
@@ -1343,8 +1371,14 @@ impl App {
     /// under en mus som står stille.
     fn under_musen(&self) -> Option<Mål> {
         let (x, y) = self.musen?;
-        if self.velger.is_some() || self.handlinger.is_some() || self.hjelp.is_some() || self.utseende_meny.is_some() {
+        if self.hjelp.is_some() {
             return None;
+        }
+        if self.utseende_meny.is_some() {
+            return tegn::verdi_på(self, x, y).map(|(akse, i)| Mål::Verdi(akse, i));
+        }
+        if self.velger.is_some() || self.handlinger.is_some() {
+            return tegn::meny_rad_på(self, x, y).map(Mål::Rad);
         }
         if self.lukke.is_some() {
             return tegn::svar_på(self, x, y).map(Mål::Svar);
@@ -1406,8 +1440,43 @@ impl App {
             }
             return true;
         }
-        if self.velger.is_some() || self.handlinger.is_some() || self.utseende_meny.is_some() {
-            return false;
+        if self.velger.is_some() || self.handlinger.is_some() {
+            let (x, y) = (m.column, m.row);
+            match m.kind {
+                MouseEventKind::ScrollUp => self.flytt_i_menyen(-1),
+                MouseEventKind::ScrollDown => self.flytt_i_menyen(1),
+                // Et klikk utenfor lukker, som Esc.
+                MouseEventKind::Down(MouseButton::Left) => match tegn::meny_rad_på(self, x, y) {
+                    Some(i) => {
+                        if let Some(h) = &mut self.handlinger {
+                            h.valgt = i;
+                            self.kjør_valgt_handling();
+                        } else if let Some(v) = &mut self.velger {
+                            v.valgt = i;
+                            self.start_valgt();
+                        }
+                    }
+                    None if tegn::i_menyboks(self, x, y) => {}
+                    None => (self.handlinger, self.velger) = (None, None),
+                },
+                _ => return false,
+            }
+            return true;
+        }
+        if self.utseende_meny.is_some() {
+            if m.kind != MouseEventKind::Down(MouseButton::Left) {
+                return false;
+            }
+            match tegn::verdi_på(self, m.column, m.row) {
+                Some((akse, i)) => {
+                    self.utseende_meny = Some(akse);
+                    self.utseende.sett(akse, i);
+                    self.lagre_utseende();
+                }
+                None if tegn::i_valgmenyen(self, m.column, m.row) => {}
+                None => self.utseende_meny = None,
+            }
+            return true;
         }
         if self.lukke.is_some() {
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
