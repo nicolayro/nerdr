@@ -46,8 +46,6 @@ const SVAK: Style = Style::new().add_modifier(Modifier::DIM);
 /// musen står.
 const MARKERT_ANDEL: f32 = 0.12;
 const UNDER_MUSEN_ANDEL: f32 = 0.06;
-/// Der tastene ikke går.
-const UTENFOR_ANDEL: f32 = 0.03;
 
 /// Forgrunns- og bakgrunnsfargen til terminalen.
 static FARGER: OnceLock<Option<(Rgb, Rgb)>> = OnceLock::new();
@@ -104,7 +102,6 @@ pub fn alt(f: &mut Frame, app: &App) {
     tegn_faner(buf, app, mus.as_ref());
     tegn_pane(buf, app, &bokser, mus.as_ref());
     tegn_hint(buf, område, app);
-    tegn_bakgrunn(buf, område, app, &bokser);
 
     if let Some(rull) = app.hjelp {
         tegn_hjelp(buf, område, &app.prefiks.navn(), rull);
@@ -145,10 +142,10 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
             }
             Rad::Pane(pane, _) => {
                 let Some(kort) = kort else { continue };
-                let valgt = er_valgt(app, pane);
+                // Inne i en pane viser kortet til den valgte hvor du er.
+                let pekt = app.fokus == Fokus::Liste && app.peker.as_ref() == Some(&pane.id);
                 let bakgrunn = match () {
-                    // Også når du er inne i den, så du ser hvor du er.
-                    _ if valgt => Some(markert()),
+                    _ if pekt => Some(markert()),
                     _ if matches!(mus, Some(Mål::Kort(id) | Mål::Lukk(id)) if *id == pane.id) => Some(under_musen()),
                     _ => None,
                 };
@@ -232,32 +229,6 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     let bredde = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
     let y = if alle_knapper(app) { plass(app) + 1 } else { område.height.saturating_sub(1) };
     buf.set_stringn(0, y, format!("{hint} "), bredde as usize, VANLIG);
-}
-
-/// Der tastene ikke går, får rutene uten egen bakgrunn en tone. Den dekker
-/// hele flater opp til strekene: lista med skillelinja er én, og alt til høyre
-/// for den, med fanerada, er den andre. Inne i en pane tones bare de andre
-/// panene, ikke det rundt som tmux-vinduet ikke fyller. Snudde ruter står som
-/// før, for der er bakgrunnen tekstfargen.
-fn tegn_bakgrunn(buf: &mut Buffer, område: Rect, app: &App, bokser: &[Boks]) {
-    let Some(tone) = tonet(None, UTENFOR_ANDEL) else { return };
-    let lista = Rect::new(0, 0, liste_bredde(app), område.height);
-    let høyre = Rect::new(liste_bredde(app), 0, område.width.saturating_sub(liste_bredde(app)), område.height);
-    let aktiv = aktiv_boks(app, bokser).map(|b| &b.pane);
-    let flater: Vec<Rect> = match app.fokus {
-        Fokus::Liste => vec![høyre],
-        Fokus::Pane => std::iter::once(lista)
-            .chain(bokser.iter().filter(|b| Some(&b.pane) != aktiv).map(|b| b.ramme.unwrap_or(b.innhold)))
-            .collect(),
-    };
-    for flate in flater {
-        for posisjon in flate.intersection(område).positions() {
-            let celle = &mut buf[posisjon];
-            if celle.bg == Color::Reset && !celle.modifier.contains(Modifier::REVERSED) {
-                celle.bg = tone;
-            }
-        }
-    }
 }
 
 fn er_valgt(app: &App, pane: &Pane) -> bool {
@@ -383,11 +354,11 @@ impl Utsnitt {
     }
 }
 
-/// Utsnittet nå, og radene til den valgte i lista, med overskriften over når
-/// den er den første i gruppen.
+/// Utsnittet nå, og radene til den markerte i lista, med overskriften over
+/// når den er den første i gruppen.
 pub fn utsnitt(app: &App) -> (Utsnitt, Option<Range<u16>>) {
     let (rader, utsnitt) = liste(app);
-    let i = app.valgt.as_ref().and_then(|v| rader.iter().position(|p| matches!(p.rad, Rad::Pane(pane, _) if pane.id == v.id)));
+    let i = app.markert().and_then(|id| rader.iter().position(|p| matches!(p.rad, Rad::Pane(pane, _) if pane.id == id)));
     let valgt = i.map(|i| {
         let p = &rader[i];
         let topp = match i.checked_sub(1).map(|f| &rader[f]) {

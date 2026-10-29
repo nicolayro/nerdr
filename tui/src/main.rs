@@ -165,8 +165,11 @@ struct App {
     /// der i delen til du går ut, så kortet ikke flytter seg for hver melding.
     låst: Option<(String, Plass)>,
 
-    /// Claude-en som er valgt i lista.
+    /// Claude-en som er valgt i lista, og som vises til høyre.
     valgt: Option<Pane>,
+    /// Pane-id-en til kortet piltastene står på i lista. Den byttes til først
+    /// med `⏎`, så du kan bla forbi andre uten å bytte sesjon i tmux.
+    peker: Option<String>,
     /// Bredden på lista med skillelinja, når den ikke er en stripe.
     liste_bredde: u16,
     /// Lista er en stripe med bare tegnene.
@@ -377,6 +380,7 @@ impl App {
             sett: HashMap::new(),
             låst: None,
             valgt: None,
+            peker: None,
             liste_bredde: tegn::LISTE,
             liste_stripe: false,
             drar_skille: false,
@@ -650,6 +654,9 @@ impl App {
                         }
                     }
                 }
+                if !self.peker.as_ref().is_some_and(|id| self.claude_paner.iter().any(|p| &p.id == id)) {
+                    self.peker = self.valgt.as_ref().map(|p| p.id.clone());
+                }
                 let ny = self.gå_inn_i.as_ref().and_then(|id| self.claude_paner.iter().find(|p| &p.id == id));
                 if let Some(pane) = ny.cloned() {
                     self.gå_inn_i = None;
@@ -839,7 +846,10 @@ impl App {
         let inne = self.fokus == Fokus::Pane;
         // Via lista, så panen du forlater, merkes som sett.
         self.bytt_fokus(Fokus::Liste);
-        self.flytt(steg);
+        let fra = self.valgt.as_ref().map(|p| p.id.clone());
+        if let Some(neste) = self.nabo(fra.as_deref(), steg) {
+            self.velg(neste);
+        }
         if inne {
             self.bytt_fokus(Fokus::Pane);
         }
@@ -926,6 +936,7 @@ impl App {
         self.send(&format!("select-window -t {}", sitat(&pane.vindu_id)), Svar::Ingenting);
         self.send(&format!("select-pane -t {}", sitat(&pane.id)), Svar::Ingenting);
         let (id, vindu) = (pane.id.clone(), pane.vindu_id.clone());
+        self.peker = Some(id.clone());
         self.valgt = Some(pane);
         self.liste_følger = true;
         self.vis(vindu, Some(&id));
@@ -1184,6 +1195,7 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
             KeyCode::Enter => self.gå_inn(),
+            KeyCode::Esc if self.valgt.is_some() => self.bytt_fokus(Fokus::Pane),
             _ => return false,
         }
         true
@@ -1446,9 +1458,7 @@ impl App {
             let Some(pane) = pane else { return ute };
             let kort = Mål::Kort(pane.id.clone());
             let dobbelt = self.sist_klikket.take().is_some_and(|(mål, t)| mål == kort && t.elapsed() < DOBBELTKLIKK);
-            if self.valgt.as_ref().map(|p| &p.id) != Some(&pane.id) {
-                self.velg(pane.clone());
-            }
+            self.peker = Some(pane.id.clone());
             if dobbelt {
                 self.gå_inn();
             } else {
@@ -1564,23 +1574,44 @@ impl App {
         (self.historie as i64 - self.rull as i64 + y as i64, x)
     }
 
+    /// Flytter pekeren, ikke det som vises.
     fn flytt(&mut self, steg: isize) {
-        let paner = self.i_rekkefølge();
-        if paner.is_empty() {
-            return;
-        }
-        let nå = self.valgt.as_ref().and_then(|v| paner.iter().position(|p| p.id == v.id)).unwrap_or(0);
-        let ny = (nå as isize + steg).clamp(0, paner.len() as isize - 1) as usize;
-        if ny != nå {
-            self.velg(paner[ny].clone());
+        let fra = self.peker.clone();
+        if let Some(neste) = self.nabo(fra.as_deref(), steg) {
+            self.peker = Some(neste.id);
+            self.liste_følger = true;
         }
     }
 
-    /// Fra lista går du inn i Claude-en, også når et annet vindu i sesjonen
-    /// vises, som `choose-tree` i tmux.
+    /// Claude-en `steg` kort fra `fra` i lista, stoppet ved endene.
+    fn nabo(&self, fra: Option<&str>, steg: isize) -> Option<Pane> {
+        let paner = self.i_rekkefølge();
+        if paner.is_empty() {
+            return None;
+        }
+        let nå = fra.and_then(|id| paner.iter().position(|p| p.id == id)).unwrap_or(0);
+        let ny = (nå as isize + steg).clamp(0, paner.len() as isize - 1) as usize;
+        (ny != nå).then(|| paner[ny].clone())
+    }
+
+    /// Kortet som er markert i lista: pekeren når tastene går dit, ellers den
+    /// valgte.
+    fn markert(&self) -> Option<&str> {
+        match self.fokus {
+            Fokus::Liste => self.peker.as_deref(),
+            Fokus::Pane => self.valgt.as_ref().map(|p| p.id.as_str()),
+        }
+    }
+
+    /// Velger kortet pekeren står på, og går inn i det, også når et annet
+    /// vindu i sesjonen vises, som `choose-tree` i tmux.
     fn gå_inn(&mut self) {
-        if let Some(valgt) = self.valgt.clone().filter(|v| Some(&v.vindu_id) != self.vist.as_ref()) {
-            self.velg(valgt);
+        let pekt = self.peker.as_ref().and_then(|id| self.claude_paner.iter().find(|p| &p.id == id)).cloned();
+        if let Some(pane) = pekt {
+            let vises = self.valgt.as_ref().is_some_and(|v| v.id == pane.id) && Some(&pane.vindu_id) == self.vist.as_ref();
+            if !vises {
+                self.velg(pane);
+            }
         }
         self.bytt_fokus(Fokus::Pane);
     }
@@ -1593,6 +1624,8 @@ impl App {
             Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.plass(p)?))),
             Fokus::Liste => None,
         };
+        self.peker = self.valgt.as_ref().map(|p| p.id.clone());
+        self.liste_følger = true;
         // Det du har sett, er ledig, så det merkes først når du går ut. Ellers
         // ville den du går inn i, blitt ledig med en gang.
         if fokus == Fokus::Liste

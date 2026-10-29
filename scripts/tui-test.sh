@@ -228,12 +228,18 @@ registrer alfa alfa waiting ",\"cwd\":\"$MAPPE\""
 list_straks
 
 tast C-b w j
-sjekk "C-b w og j velger gamma" linje_har 4 '^▎ ◐  nerdr '
+sjekk "j i lista bytter ikke, så alfa vises fortsatt" linje_har 3 '^▎ ●  Fiks testene'
+sjekk "og gamma har ikke ▎" linje_har 4 '^  ◐  nerdr '
+tast Escape
+sjekk "Esc går tilbake til alfa" i_panen
+tast C-b w j Enter
+sjekk "j og Enter viser gamma" linje_har 4 '^▎ ◐  nerdr '
+sjekk "og går inn i den" i_panen
 sjekk "alfa venter igjen" linje_har 3 '^  ●  Fiks testene'
 
 klikk 5 3
-sjekk "klikk på alfa velger den, og musen over den viser ×" linje_har 3 '^▎ ●  Fiks testene +×  │'
-sjekk "og du blir i lista" i_lista
+sjekk "klikk på alfa fra gamma går ut i lista uten å bytte, og musen over alfa viser ×" linje_har 3 '^  ●  Fiks testene +×  │'
+sjekk "og du er i lista" i_lista
 klikk 5 3
 sjekk "et klikk til på samme kort går inn i alfa" i_panen
 klikk 5 14
@@ -257,7 +263,7 @@ sjekk "LEDIGE treffer skillestreken" linje_har 5 '^ LEDIGE .*┤'
 sjekk "nerdr har skrevet når du var inne i gamma, i @nerdr-sett" sett_er_tall gamma
 
 tast Up
-sjekk "↑ opp til alfa" linje_har 3 '^▎ ●  Fiks testene +<1m │'
+sjekk "↑ opp til alfa bytter ikke" linje_har 6 '^▎ ○  gamma:0'
 tast Down q n
 sjekk "q og n gjør ingenting i lista" linje_har 6 '^▎ ○  gamma:0'
 klikk 5 6
@@ -267,7 +273,7 @@ sjekk "to klikk med pause mellom går ikke inn" i_lista
 klikk 5 6
 sjekk "dobbeltklikk på gamma går inn i den" i_panen
 klikk 5 3
-sjekk "klikk på alfa fra panen velger alfa og går ut i lista" linje_har 3 '^▎ ●  Fiks testene'
+sjekk "klikk på alfa fra panen går ut i lista uten å bytte" linje_har 6 '^▎ ○  gamma:0'
 sjekk "tilbake i lista" i_lista
 
 sjekk "nederst i lista er det en strek" linje_har 16 '^─+┤'
@@ -337,8 +343,8 @@ sjekk "Esc går tilbake til lista" i_lista
 sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
 
 # De to som starter, står øverst blant de aktive, over alfa.
-tast Up Up Up Up Up Up Up Up Down Down
-sjekk "↑ til toppen og ↓ ned til alfa" linje_har 5 '^▎ ●  Fiks testene +<1m │'
+tast Up Up Up Up Up Up Up Up Down Down Enter
+sjekk "↑ til toppen, ↓ ned til alfa og Enter viser den" linje_har 5 '^▎ ●  Fiks testene +<1m │'
 
 klikk 3 18
 sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · esc lukk'
@@ -492,8 +498,9 @@ sjekk "øverst er det ingen pil" linje_mangler 1 '↑'
 for i in 1 2 3 4; do hjul 65 5 5; done
 sjekk "hjulet ruller lista, og øverst er det en pil" linje_har 1 '^  ↑ '
 sjekk "som er oransje fordi alfa over spør" linje_med_farger_har 1 '38;2;217;119;87m ↑'
-tast Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+tast Down Down Down Down Down Down Down Down Down Down Down Down Down Down Enter
 sjekk "den valgte nederst i lista vises" har '^▎ ○'
+tast C-b w
 sjekk "nederst er det ingen pil" linje_mangler 15 '↓'
 klikk 3 1
 sjekk "klikk på pilen ruller en side opp" linje_har 15 '↓'
@@ -504,7 +511,7 @@ done
 list_straks
 sjekk "nerdr kobler til igjen når sesjonen den viste, forsvinner" er 1 klienter
 sjekk "når alt får plass igjen, er pilene borte" mangler ' [↑↓] '
-tast Up Up Up Up Up Up Up Up Down Down
+tast Up Up Up Up Up Up Up Up Down Down Enter C-b w
 
 maal new-session -d -s lukk -x 80 -y 20 -c "$MAPPE"
 maal select-pane -t lukk -T '✳ Lukk meg'
