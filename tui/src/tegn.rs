@@ -638,27 +638,25 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
     Some(boks)
 }
 
-const HJELP_BREDDE: u16 = 58;
+const HJELP_BREDDE: u16 = 52;
 
 fn hjelp_linjer(prefiks: &str) -> Vec<(String, Style)> {
-    let indre = (HJELP_BREDDE - 4) as usize;
-    let mut linjer: Vec<(String, Style)> = bryt(hjelp::OM, indre, indre, 3).into_iter().map(|l| (l, VANLIG)).collect();
-    linjer.push((String::new(), VANLIG));
-    for (tast, hva) in hjelp::TASTER {
-        linjer.push((format!("{tast:<9}{hva}"), VANLIG));
+    let tast = |etter: bool, tast: &str| if etter { format!("{prefiks} {tast}") } else { tast.to_string() };
+    let alle = hjelp::OVERSIKT.iter().flat_map(|(_, taster)| taster.iter());
+    let bredde = alle.map(|&(etter, t, _)| tast(etter, t).chars().count()).max().unwrap_or(0) + 3;
+    let mut linjer = Vec::new();
+    for (overskrift, taster) in hjelp::OVERSIKT {
+        linjer.push((overskrift.to_string(), STERK));
+        for &(etter, t, hva) in taster {
+            linjer.push((format!("{:<bredde$}{hva}", tast(etter, t)), VANLIG));
+        }
+        linjer.push((String::new(), VANLIG));
     }
+    let merker: Vec<String> =
+        hjelp::MERKER.iter().map(|(m, hva)| format!("{} {}", glyf(*m), hva.split([' ', ',']).next().unwrap_or(hva))).collect();
+    linjer.push((merker.join("  "), VANLIG));
     linjer.push((String::new(), VANLIG));
-    for (tast, hva) in hjelp::PREFIKSTASTER {
-        let tast = if tast == "prefiks" { format!("{prefiks} {prefiks}") } else { format!("{prefiks} {tast}") };
-        linjer.push((format!("{tast:<13}{hva}"), VANLIG));
-    }
-    linjer.push((String::new(), VANLIG));
-    for (merke, hva) in hjelp::MERKER {
-        linjer.push((format!("{}  {hva}", glyf(merke)), VANLIG));
-    }
-    linjer.push((String::new(), VANLIG));
-    linjer.push((hjelp::BARE_TMUX.to_string(), SVAK));
-    linjer.push((hjelp::mapper(), SVAK));
+    linjer.push((format!("{:<bredde$}alt annet, søkbart", tast(true, ":")), VANLIG));
     linjer
 }
 
@@ -1103,30 +1101,27 @@ mod tester {
     }
 
     #[test]
-    fn hele_hjelpen_kan_leses_i_80x24() {
+    fn hjelpen_får_plass_i_80x24() {
         let linjer = hjelp_linjer("C-b");
-        let (_, maks) = hjelp_boks(Rect::new(0, 0, 80, 24), linjer.len()).unwrap();
-        assert!(maks > 0);
-        let sett: Vec<String> = (0..=maks).flat_map(|rull| tegnet_hjelp(80, 24, rull)).collect();
+        assert_eq!(hjelp_boks(Rect::new(0, 0, 80, 24), linjer.len()).unwrap().1, 0);
+        let rader = tegnet_hjelp(80, 24, 0);
         for (tekst, _) in linjer.iter().filter(|(t, _)| !t.is_empty()) {
-            let tekst: String = tekst.chars().take(54).collect();
-            assert!(sett.iter().any(|rad| rad.contains(&tekst)), "{tekst}");
+            assert!(rader.iter().any(|rad| rad.contains(tekst.as_str())), "{tekst}");
         }
-        assert!(sett.iter().any(|rad| rad.contains("C-b ?")));
     }
 
     #[test]
     fn pilene_i_rammen_viser_hva_som_er_over_og_under() {
-        let maks = hjelp_boks(Rect::new(0, 0, 80, 24), hjelp_linjer("C-b").len()).unwrap().1;
+        let maks = hjelp_boks(Rect::new(0, 0, 80, 16), hjelp_linjer("C-b").len()).unwrap().1;
         let pil = |rader: &[String], pil: &str| rader.iter().any(|r| r.contains(pil));
-        let toppen = tegnet_hjelp(80, 24, 0);
+        let toppen = tegnet_hjelp(80, 16, 0);
         assert!(!pil(&toppen, " ↑ ") && pil(&toppen, " ↓ ") && pil(&toppen, "↑↓ rull · trykk en tast for å lukke"));
-        let midten = tegnet_hjelp(80, 24, 1);
+        let midten = tegnet_hjelp(80, 16, 1);
         assert!(pil(&midten, " ↑ ") && pil(&midten, " ↓ "));
         // Lenger enn bunnen går den ikke.
-        let bunnen = tegnet_hjelp(80, 24, maks + 10);
+        let bunnen = tegnet_hjelp(80, 16, maks + 10);
         assert!(pil(&bunnen, " ↑ ") && !pil(&bunnen, " ↓ "));
-        assert_eq!(bunnen, tegnet_hjelp(80, 24, maks));
+        assert_eq!(bunnen, tegnet_hjelp(80, 16, maks));
     }
 
     #[test]

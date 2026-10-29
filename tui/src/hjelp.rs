@@ -12,7 +12,7 @@ og du kan gå inn i den og skrive.";
 /// I lista. Alt annet er etter prefikset, eller en knapp.
 pub const TASTER: [(&str, &str); 5] = [
     ("↑↓  k j", "flytt i lista"),
-    ("⏎", "vis Claude-en og gå inn i den"),
+    ("⏎", "vis sesjonen og gå inn i den"),
     ("esc", "tilbake dit du var"),
     ("klikk", "flytt dit, dobbeltklikk går inn"),
     ("C-c", "avslutt"),
@@ -39,12 +39,38 @@ pub const PREFIKSTASTER: [(&str, &str); 25] = [
     ("C-o", "roter paner"),
     ("C-←↑↓→", "endre størrelse, med M- fem om gangen"),
     ("PgUp", "rull en side opp"),
-    ("( )", "forrige og neste Claude"),
+    ("( )", "forrige og neste sesjon"),
     ("b", "konfigurasjon"),
     ("w s", "tilbake til lista"),
     ("d", "avslutt"),
     ("?", "hjelp"),
     ("prefiks", "send prefikset til panen"),
+];
+
+/// `true` er en tast etter prefikset.
+pub type Tast = (bool, &'static str, &'static str);
+
+/// Det du trenger først, i `?`. Resten står i handlingene bak `:`.
+pub const OVERSIKT: [(&str, &[Tast]); 3] = [
+    (
+        "Sesjoner",
+        &[
+            (true, "f", "ny sesjon"),
+            (true, "r", "hent samtale"),
+            (true, "( )", "forrige og neste"),
+            (true, "w", "tilbake til lista"),
+        ],
+    ),
+    (
+        "Panes",
+        &[
+            (true, "% \"", "del side om side, over og under"),
+            (true, "←↑↓→", "gå til panen i den retningen"),
+            (true, "z", "zoom"),
+            (true, "x", "lukk"),
+        ],
+    ),
+    ("Windows", &[(true, "c", "ny terminal"), (true, "n p", "neste og forrige"), (true, "&", "lukk")]),
 ];
 
 pub const MERKER: [(Merke, &str); 5] = [

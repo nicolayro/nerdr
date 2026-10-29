@@ -149,7 +149,7 @@ virker både fra lista og fra panen:
 | `C-o` | Roter paner |
 | `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
 | `PgUp` | Rull en side opp |
-| `(` `)` | Forrige og neste Claude |
+| `(` `)` | Forrige og neste sesjon |
 | `b` | Konfigurasjon |
 | `w` `s` | Tilbake til lista |
 | `d` | Avslutt |
