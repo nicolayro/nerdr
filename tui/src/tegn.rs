@@ -235,12 +235,14 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
 }
 
 /// Knappen som bytter sortering, til høyre i den øverste raden, der pilen
-/// til venstre ikke kommer i veien.
+/// til venstre ikke kommer i veien. Den er like bred for alle sorteringene,
+/// så den ikke flytter seg når du klikker.
 fn sortering(app: &App) -> Option<(Range<u16>, String)> {
     if stripe(app) {
         return None;
     }
-    let tekst = format!(" ⇅ {} ", utseende::SORTERINGER[app.utseende.indeks(utseende::ORDEN)]);
+    let bredde = utseende::SORTERINGER.iter().map(|s| s.chars().count()).max().unwrap_or(0);
+    let tekst = format!(" {:<bredde$} ", utseende::SORTERINGER[app.utseende.indeks(utseende::ORDEN)]);
     let slutt = liste_bredde(app) - 1;
     let start = slutt.checked_sub(tekst.chars().count() as u16).filter(|&x| x >= 4)?;
     Some((start..slutt, tekst))

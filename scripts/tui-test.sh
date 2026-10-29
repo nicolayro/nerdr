@@ -179,7 +179,7 @@ vert -f /dev/null start-server \; set -g window-style 'fg=#d0d1d2,bg=#0a0b0c' \;
   new-session -d -s vert -x 110 -y 20 \
   "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
-sjekk "paner=bokser fra tmux gir bokser, og fanene øverst uten strek" linje_har 1 '^ +⇅ prioritert │  [^ ]+ × '
+sjekk "paner=bokser fra tmux gir bokser, og fanene øverst uten strek" linje_har 1 '^ +prioritert │  [^ ]+ × '
 sjekk "overskriften har strek mot skillelinja, uten antallet" linje_har 2 '^ AKTIVE ─+┤'
 sjekk "alfa har ●, repoet og <1m i toppkanten" linje_har 3 '^╭─ ●  nerdr ─+ <1m ─╮'
 beveg 10 4
@@ -222,12 +222,13 @@ sjekk "og minimal tar den bort igjen" mangler 'oppgave +1'
 klikk 2 2
 sjekk "et klikk utenfor lukker konfigurasjonen" mangler 'konfigurasjon'
 
-klikk "$(kolonne 1 '⇅')" 1
-sjekk "et klikk på ⇅ øverst sorterer etter prosjekt" linje_har 2 '^ nerdr ─+┤'
-sjekk "og knappen sier det" linje_har 1 '⇅ prosjekt │'
-klikk "$(kolonne 1 '⇅')" 1
-sjekk "så etter aktivitet" mangler 'AKTIVE|LEDIGE'
-klikk "$(kolonne 1 '⇅')" 1
+venstre=$(kolonne 1 'prioritert')
+klikk "$venstre" 1
+sjekk "et klikk på sorteringen øverst sorterer etter prosjekt" linje_har 2 '^ nerdr ─+┤'
+sjekk "og knappen sier det, like langt til venstre" er "$venstre" kolonne 1 'prosjekt'
+klikk "$(kolonne 1 'prosjekt')" 1
+sjekk "så etter aktivitet, med bare en strek øverst" linje_har 2 '^─+┤'
+klikk "$(kolonne 1 'aktivitet')" 1
 sjekk "og prioritert igjen" linje_har 2 '^ AKTIVE ─+┤'
 
 sjekk "minimal har én linje: alfa under AKTIVE med ●, oppgaven og <1m til høyre" linje_har 3 '^▎ ●  Fiks testene +<1m │'

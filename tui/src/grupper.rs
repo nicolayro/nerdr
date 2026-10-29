@@ -17,6 +17,9 @@ pub enum Overskrift {
     Del(Del),
     /// Repoet, eller mappa når den ikke er i et repo.
     Mappe(String),
+    /// Over lista sortert etter aktivitet. Den har bare streken, så kortene
+    /// starter på samme rad som i de andre sorteringene.
+    Alle,
 }
 
 impl Overskrift {
@@ -24,6 +27,7 @@ impl Overskrift {
         match self {
             Overskrift::Del(d) => tittel(*d),
             Overskrift::Mappe(navn) => navn,
+            Overskrift::Alle => "",
         }
     }
 }
@@ -95,12 +99,12 @@ pub fn etter_mappe<'a>(paner: &'a [Pane], mappe: impl Fn(&Pane) -> Option<(Merke
     med_overskrifter(plassert.into_iter().map(|(p, m, navn)| (p, m, Some(Overskrift::Mappe(navn)))))
 }
 
-/// Uten grupper, med den som sist endret tilstand, øverst. En som ikke har
+/// Én gruppe, med den som sist endret tilstand, øverst. En som ikke har
 /// meldt noe ennå, har nettopp startet.
 pub fn etter_aktivitet<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> Vec<Rad<'a>> {
     let mut plassert: Vec<(&Pane, Plass)> = paner.iter().filter_map(|p| Some((p, plass(p)?))).collect();
     plassert.sort_by_key(|(_, pl)| std::cmp::Reverse(pl.siden.unwrap_or(u64::MAX)));
-    med_overskrifter(plassert.into_iter().map(|(p, pl)| (p, pl.merke, None)))
+    med_overskrifter(plassert.into_iter().map(|(p, pl)| (p, pl.merke, Some(Overskrift::Alle))))
 }
 
 /// En overskrift der overskriften skifter, med en tom rad over.
@@ -205,7 +209,7 @@ mod tester {
     }
 
     #[test]
-    fn sist_aktiv_først_uten_overskrifter() {
+    fn sist_aktiv_først_under_én_strek() {
         let paner = [pane("%1"), pane("%2"), pane("%3")];
         let rader = etter_aktivitet(&paner, |p| match p.id.as_str() {
             "%1" => plass(Merke::Spør, 10),
@@ -213,6 +217,7 @@ mod tester {
             _ => Some(Plass::fra(Merke::Starter, None)),
         });
         assert_eq!(rekkefølge(&rader), ["%3", "%2", "%1"]);
-        assert!(!rader.iter().any(|r| matches!(r, Rad::Overskrift(_) | Rad::Tom)));
+        assert_eq!(rader[0], Rad::Overskrift(Overskrift::Alle));
+        assert!(!rader[1..].iter().any(|r| matches!(r, Rad::Overskrift(_) | Rad::Tom)));
     }
 }

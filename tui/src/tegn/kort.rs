@@ -68,7 +68,7 @@ pub fn overskrift(u: Utseende, buf: &mut Buffer, y: u16, bredde: u16, o: &Oversk
     let strek = |buf: &mut Buffer, x: u16, stil: Style| {
         buf.set_stringn(x, y, "─".repeat(bredde.saturating_sub(x) as usize), b, stil);
     };
-    if stripe {
+    if stripe || *o == Overskrift::Alle {
         strek(buf, 0, SVAK);
         return true;
     }

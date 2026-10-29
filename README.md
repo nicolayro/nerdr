@@ -218,7 +218,7 @@ ikke gjelder.
 | **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
 | **kortdesign** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
 | **oppgave** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. Bare med `vanlig`. |
-| **sortering** | `prioritert` deler lista i aktive og ledige. `prosjekt` har en gruppe for hvert repo, i alfabetisk rekkefølge, og Claude-ene i hver står der de er i tmux. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. `⇅` øverst i lista bytter også sortering. |
+| **sortering** | `prioritert` deler lista i aktive og ledige. `prosjekt` har en gruppe for hvert repo, i alfabetisk rekkefølge, og Claude-ene i hver står der de er i tmux. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. Et klikk på sorteringen øverst til høyre i lista bytter til neste. |
 | **ledige** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. Bare med `prioritert`. |
 
 Standard er linjer mellom panene, farge på, vanlig kortdesign, én linje til
