@@ -398,8 +398,8 @@ sjekk "hintet står i stedet for knappene" har 'v marker · y kopier · q ut'
 tast k w v e y
 sjekk "k w v e y kopierer det siste ordet på linja over" er meg cat "$KONFIG/kopiert"
 sjekk "y går ut av kopimodus" mangler 'v marker'
-tast C-b '[' k V k y
-sjekk "V og k kopierer begge linjene" er 2 grep -c '^kopier meg$' "$KONFIG/kopiert"
+tast C-b ']' k V k y
+sjekk "C-b ] starter også kopimodus, og V og k kopierer begge linjene" er 2 grep -c '^kopier meg$' "$KONFIG/kopiert"
 tast C-b '[' g g
 sjekk "gg ruller til toppen av historikken" linje_har 2 ' kopi [0-9]+/[0-9]+ '
 tast q

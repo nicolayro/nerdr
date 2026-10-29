@@ -36,7 +36,7 @@ const PREFIKSTASTER: [(KeyCode, bool, &str); 24] = [
     (KeyCode::Char('o'), false, "neste pane"),
     (KeyCode::Char(';'), false, "siste pane"),
     (KeyCode::Char('z'), false, "zoom pane"),
-    (KeyCode::Char('['), false, "kopimodus"),
+    (KeyCode::Char(']'), false, "kopimodus"),
     (KeyCode::Char('{'), false, "flytt pane bakover"),
     (KeyCode::Char('}'), false, "flytt pane framover"),
     (KeyCode::Char(' '), false, "neste oppsett"),

@@ -38,7 +38,7 @@ pub const PREFIKSTASTER: [(&str, &str); 26] = [
     ("C-o", "roter paner"),
     ("C-←↑↓→", "endre størrelse, med M- fem om gangen"),
     ("PgUp", "rull en side opp"),
-    ("[", "kopimodus: hjkl w b e, v og V marker, y kopier"),
+    ("[ ]", "kopimodus: hjkl w b e, v og V marker, y kopier"),
     ("( )", "forrige og neste Claude"),
     ("b", "konfigurasjon"),
     ("w s", "tilbake til lista"),
