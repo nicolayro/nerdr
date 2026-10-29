@@ -5,14 +5,19 @@ Gå gjennom stegene i rekkefølge, og spør brukeren der det står.
 
 ## 1. Sjekk forutsetningene
 
-`tmux -V` skal gi en versjon. Mangler den, si at nerdr trenger tmux,
-og spør før du installerer.
+`tmux -V` skal gi en versjon. Mangler den, si at nerdr trenger tmux, og spør
+om installeringen i steg 2 kan installere den. Scriptet kan ikke spørre selv
+når du kjører det, så sett `NERDR_TMUX=ja` foran `sh` hvis brukeren sier ja.
 
 ## 2. Installer binæren
 
 ```
 curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/installer.sh | sh
 ```
+
+Uten `NERDR_TMUX=ja` skriver scriptet bare kommandoen som installerer tmux.
+`sudo` på Linux spør etter passordet, så den kan brukeren måtte kjøre selv,
+med `! <kommando>`.
 
 Scriptet laster ned siste release for maskinen, sjekker sjekksummen og legger
 `nerdr` i `~/opt/bin`, `~/bin` eller `~/.local/bin`, den første som finnes, eller

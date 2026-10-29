@@ -63,6 +63,28 @@ printf '%064d  %s\n' 0 "$pakke" > "$T/releases/latest/download/$pakke.sha256"
 installer
 ls "$T/hjem/.local/bin" 2>/dev/null
 
+tar -czf "$T/releases/latest/download/$pakke" -C "$NERDR/target/debug" nerdr
+(cd "$T/releases/latest/download" && shasum -a 256 "$pakke" > "$pakke.sha256")
+# Uten tmux i PATH, og med en brew som bare sier hva den ble bedt om.
+mkdir -p "$T/brew"
+printf '#!/bin/sh\necho "brew $*"\n' > "$T/brew/brew"
+chmod +x "$T/brew/brew"
+if env PATH=/usr/bin:/bin sh -c 'command -v tmux' >/dev/null; then
+  echo "=== tmux ligger i /usr/bin, så tilfellene uten tmux hoppes over ==="
+else
+  echo "=== NERDR_TMUX=ja installerer tmux med brew ==="
+  nytt_hjem
+  installer PATH="$T/brew:/usr/bin:/bin" NERDR_TMUX=ja
+
+  echo "=== NERDR_TMUX=nei skriver bare kommandoen ==="
+  nytt_hjem
+  installer PATH="$T/brew:/usr/bin:/bin" NERDR_TMUX=nei
+
+  echo "=== uten pakkebehandler sier den fra ==="
+  nytt_hjem
+  installer PATH=/usr/bin:/bin
+fi
+
 echo "=== avinstaller fjerner filen og lar lenken stå ==="
 nytt_hjem opt/bin bin
 ln -s /et/annet/sted "$T/hjem/opt/bin/nerdr"
