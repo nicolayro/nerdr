@@ -180,6 +180,7 @@ med et `versjon`-felt.
 | `nerdr samtaler` | Tidligere samtaler, nyest først, med id, mappe og tittel |
 | `nerdr ny <mappe>` | Start en Claude i mappa, som «+ ny sesjon» |
 | `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som «hent samtale» |
+| `nerdr forklar` | Hvordan nerdr brukes, skrevet for en agent som skal forklare det eller gjøre noe for deg. `nerdr --help` viser til den. |
 
 I JSON fra `liste` er `tilstand` det Claude melder selv (`venter`, `jobber`
 eller `klar`), eller `null` når nerdr ikke kjenner statusen. `merke` er det lista viser (`spør`, `ulest`, `jobber` eller

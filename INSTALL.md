@@ -40,20 +40,7 @@ oppstartsfil, kolonseparert:
 export NERDR_MAPPER=~/git:~/kode
 ```
 
-## 4. Tilby skillen
-
-`skill/SKILL.md` lar en Claude lese, starte og sende til de andre Claude-ene i
-tmux, for eksempel når brukeren sier «spør den andre Claude-en» eller «start
-tre sesjoner som …». Spør brukeren om du skal installere den i
-`~/.claude/skills/nerdr/`, eller under `$CLAUDE_CONFIG_DIR/skills/` hvis den er
-satt. Finnes fila fra før, spør før du skriver over den.
-
-```
-mkdir -p ~/.claude/skills/nerdr
-curl -fsSL https://raw.githubusercontent.com/nicolayro/nerdr/main/skill/SKILL.md -o ~/.claude/skills/nerdr/SKILL.md
-```
-
-## 5. Fortell brukeren hvordan nerdr brukes
+## 4. Fortell brukeren hvordan nerdr brukes
 
 - nerdr kjøres i en vanlig terminalfane, utenfor tmux.
 - Tastene går til Claude-en brukeren er inne i. nerdr styres med knappene
@@ -66,6 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/nicolayro/nerdr/main/skill/SKILL.md
   `nerdr --help` viser det samme i terminalen.
 - nerdr avsluttes med `C-c` fra lista, med prefikset og `d`, eller med
   «avslutt» nederst i lista. Claude-ene kjører videre i tmux.
+- Spør brukeren senere hvordan noe gjøres i nerdr, kjør `nerdr forklar`. Den
+  sier hvordan det gjøres med knappene og med tastene.
 - Du kan selv bruke `nerdr liste`, `nerdr samtaler` og `nerdr ny` med
   `--json`, for eksempel for å svare på hvilke Claude-er som venter på
   brukeren, eller for å fortsette en samtale.
@@ -89,12 +78,11 @@ tastene og hvilket prefiks og hvilke mapper som gjelder.
 
 ## Oppdatere og fjerne
 
-Kjør kommandoen i steg 2 på nytt for å oppdatere, og den i steg 4 for skillen.
+Kjør kommandoen i steg 2 på nytt for å oppdatere.
 nerdr oppdaterer seg ikke selv. For å fjerne nerdr:
 
 ```
 curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/avinstaller.sh | sh
 ```
 
-Fjern også `NERDR_MAPPER`- og `PATH`-linjene du la til, og skillen i
-`~/.claude/skills/nerdr/`, hvis brukeren vil det.
+Fjern også `NERDR_MAPPER`- og `PATH`-linjene du la til, hvis brukeren vil det.

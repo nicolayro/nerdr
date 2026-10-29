@@ -1,0 +1,166 @@
+//! `nerdr forklar`: hvordan nerdr brukes, skrevet for en agent som skal
+//! forklare det for brukeren eller gjøre noe for dem. Brukerne har ingen skill
+//! for nerdr, så det agenten vet, er det den leser her, via pekeren i
+//! `nerdr --help`.
+
+use nerdr_kjerne::tmux;
+
+use crate::grupper::glyf;
+use crate::hjelp::MERKER;
+use crate::ny;
+use crate::taster::{PREFIKS_VARIABEL, Prefiks};
+
+enum Tast {
+    /// Etter prefikset, som i `hjelp::PREFIKSTASTER`.
+    Prefiks(&'static str),
+    Egen(&'static str),
+}
+
+use Tast::{Egen, Prefiks as P};
+
+/// Det brukeren vil, med musen og med tastaturet. Musen står først, for de
+/// fleste kan ikke tmux.
+const OFTEST: [(&str, &str, &[Tast]); 17] = [
+    ("Starte en ny Claude", "«+ ny sesjon» nederst i lista, søk fram mappa og trykk ⏎", &[P("f")]),
+    ("Fortsette en tidligere samtale", "«handlinger», så «hent samtale»", &[P("r")]),
+    ("Se på en Claude", "klikk på kortet i lista", &[Egen("↑"), Egen("↓")]),
+    ("Gå inn og skrive", "dobbeltklikk på kortet, eller klikk i Claude-en til høyre", &[Egen("⏎")]),
+    ("Tilbake til lista", "klikk i lista", &[P("w")]),
+    ("Neste eller forrige Claude", "klikk på kortet i lista", &[P(")"), P("(")]),
+    ("Lukke en Claude", "hold musen over kortet og klikk ×", &[P("&")]),
+    ("Ny terminal ved siden av Claude-en", "+ etter fanene øverst", &[P("c")]),
+    ("Dele skjermen", "", &[P("%"), P("\"")]),
+    ("Bytte mellom fanene øverst", "klikk på fanen", &[P("n"), P("p")]),
+    ("Kopiere tekst", "dra over teksten, den kopieres når du slipper", &[]),
+    ("Rulle tilbake", "musehjulet", &[P("PgUp")]),
+    ("Bredere eller smalere liste", "dra i streken mellom lista og Claude-en", &[]),
+    ("Endre utseendet", "«handlinger», og søk på det, som «farge»", &[P("b")]),
+    ("Finne alt nerdr kan gjøre", "«handlinger», og søk", &[P(":")]),
+    ("Hjelp", "«hjelp»", &[P("?")]),
+    ("Avslutte nerdr", "«avslutt». Claude-ene kjører videre", &[Egen("C-c i lista"), P("d")]),
+];
+
+/// Prefikset fra `NERDR_PREFIKS`, ellers fra tmux, ellers `C-b`, som i TUI-et.
+fn prefiks(socket: Option<&str>) -> String {
+    let fra_tmux = || tmux::kjør(socket, &["show-options", "-gv", "prefix"]).ok().and_then(|p| Prefiks::fra_tmux(&p));
+    Prefiks::fra_miljø().or_else(fra_tmux).unwrap_or_default().navn()
+}
+
+fn taster(taster: &[Tast], prefiks: &str) -> String {
+    let tekst: Vec<String> = taster
+        .iter()
+        .map(|t| match t {
+            P(tast) => format!("{prefiks} {tast}"),
+            Egen(tast) => tast.to_string(),
+        })
+        .collect();
+    tekst.join(", ")
+}
+
+pub fn tekst(socket: Option<&str>) -> String {
+    let p = prefiks(socket);
+    let merker: Vec<String> = MERKER.iter().map(|(m, hva)| format!("- {} {hva}", glyf(*m))).collect();
+    let mut ut = format!(
+        "# nerdr, forklart for en agent
+
+Brukeren spør hvordan nerdr fungerer, hva de kan gjøre i nerdr, eller hvordan
+de gjør noe bestemt der. Svar med det de vil få til, og hvordan.
+
+## Slik svarer du
+
+- Forklar hva brukeren får til, ikke hvordan nerdr eller tmux virker.
+- Nevn knappen eller musen først, og tasten som et alternativ, som «Klikk
+  «+ ny sesjon» nederst i lista, eller trykk {p} f.» Mange bruker bare musen.
+- Første gang du nevner en tast: «{p} f» betyr trykk {p}, slipp, og trykk f.
+- Unngå tmux-ord som pane, socket, tmux-sesjon og prefiks, med mindre brukeren
+  bruker dem selv. Si Claude, liste, fane og terminal.
+- Svar på det brukeren spurte om. Tabellen under er for deg, ikke for å gjentas.
+
+## Hva nerdr er
+
+nerdr viser alle Claude-ene til brukeren i en liste til venstre. Den som er
+valgt, vises til høyre, og brukeren går inn i den og skriver som vanlig. Lista
+viser hvem som spør om noe, hvem som er ferdige og venter, og hvem som jobber,
+så brukeren ser hvem som trenger dem. Claude-ene kjører videre når nerdr lukkes,
+og er der neste gang.
+
+nerdr startes med `nerdr` i en vanlig terminalfane. Bare Claude-er som er
+startet i nerdr, vises, ikke de i en vanlig terminalfane.
+
+Merkene i lista:
+
+{}
+
+## Det brukeren gjør oftest
+
+| Brukeren vil | Med musen | Med tastaturet |
+| --- | --- | --- |
+",
+        merker.join("\n")
+    );
+    for (hva, mus, t) in OFTEST {
+        ut += &format!("| {hva} | {mus} | {} |\n", taster(t, &p));
+    }
+    ut += &format!(
+        "
+Er vinduet lavt, står bare «+ ny sesjon» nederst. Resten finnes under
+«handlinger», eller {p} :.
+
+## Vanlige spørsmål
+
+- **En Claude vises ikke i lista:** den er startet i en vanlig terminalfane.
+  Avslutt den der, og fortsett samtalen i nerdr med «hent samtale» ({p} r).
+- **Mappene i velgeren:** velgeren viser mappene brukeren har brukt Claude i,
+  og mappene under {mapper}. En mappe til legges til i skallets oppstartsfil,
+  kolonseparert: `export {mapper_variabel}={mapper}:~/kode`.
+- **En annen tast enn {p}:** `export {PREFIKS_VARIABEL}=<tast>`, som C-s eller
+  C-Space, i skallets oppstartsfil. Uten den gjelder tasten fra tmux-oppsettet,
+  ellers C-b.
+- **Stoppe alle Claude-ene:** `tmux kill-server`. Spør brukeren først.
+
+## Det du kan gjøre selv
+
+- `nerdr ny <mappe>` starter en Claude i mappa, som «+ ny sesjon», og brukeren
+  ser den i lista med en gang.
+- `nerdr samtaler` viser tidligere samtaler med id, og `nerdr ny --fortsett <id>`
+  fortsetter én i mappa den hørte til.
+- `nerdr liste --json` viser Claude-ene. `merke` er `spør` når en spør om noe,
+  `ulest` når den er ferdig og venter, og `jobber` eller `sett` ellers.
+- Endre ikke skallets oppstartsfil eller tmux-oppsettet uten å spørre brukeren.
+",
+        mapper = ny::mapper(),
+        mapper_variabel = ny::MAPPER_VARIABEL,
+    );
+    ut
+}
+
+#[cfg(test)]
+mod tester {
+    use super::*;
+    use crate::hjelp::PREFIKSTASTER;
+
+    #[test]
+    fn hver_prefikstast_står_i_hjelpen() {
+        let i_hjelpen: Vec<&str> = PREFIKSTASTER.iter().flat_map(|(t, _)| t.split_whitespace()).collect();
+        for (hva, _, taster) in OFTEST {
+            for tast in taster {
+                if let P(tast) = tast {
+                    assert!(i_hjelpen.contains(tast), "{hva}: {tast}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hver_rad_har_mus_eller_tast() {
+        for (hva, mus, taster) in OFTEST {
+            assert!(!mus.is_empty() || !taster.is_empty(), "{hva}");
+        }
+    }
+
+    #[test]
+    fn tastene_står_med_prefikset() {
+        assert_eq!(taster(&[P(")"), P("(")], "C-a"), "C-a ), C-a (");
+        assert_eq!(taster(&[Egen("C-c i lista"), P("d")], "C-b"), "C-c i lista, C-b d");
+    }
+}

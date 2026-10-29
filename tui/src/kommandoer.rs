@@ -139,7 +139,7 @@ pub fn ny(socket: Option<&str>, mappe: Option<&str>, fortsett: Option<&str>, som
 }
 
 /// `println!` får panikk når den som leser, lukker, som `nerdr samtaler | head`.
-fn skriv(tekst: &str) -> io::Result<()> {
+pub fn skriv(tekst: &str) -> io::Result<()> {
     match io::stdout().lock().write_all(tekst.as_bytes()) {
         Err(feil) if feil.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         res => res,

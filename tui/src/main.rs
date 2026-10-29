@@ -1,4 +1,5 @@
 mod bokser;
+mod forklar;
 mod grupper;
 mod handlinger;
 mod hjelp;
@@ -260,6 +261,7 @@ fn main() {
         [] if !json && fortsett.is_none() => kjør(socket),
         ["liste"] if fortsett.is_none() => kommandoer::liste(socket, json),
         ["samtaler"] if fortsett.is_none() => kommandoer::samtaler(json),
+        ["forklar"] if !json && fortsett.is_none() => kommandoer::skriv(&forklar::tekst(socket)),
         ["ny"] if fortsett.is_some() => kommandoer::ny(socket, None, fortsett, json),
         ["ny", mappe] => kommandoer::ny(socket, Some(mappe), fortsett, json),
         ["-h" | "--help"] => {
@@ -280,7 +282,7 @@ fn main() {
 
 fn bruk() -> ! {
     eprintln!(
-        "bruk: nerdr [liste | samtaler | ny <mappe> | ny --fortsett <id> [mappe]] [--json] [-L socket], eller nerdr --help"
+        "bruk: nerdr [liste | samtaler | ny <mappe> | ny --fortsett <id> [mappe] | forklar] [--json] [-L socket], eller nerdr --help"
     );
     std::process::exit(2);
 }

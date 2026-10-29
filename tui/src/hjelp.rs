@@ -63,7 +63,10 @@ pub fn mapper() -> String {
 pub fn tekst() -> String {
     let mut ut = format!(
         "nerdr {}\n{OM}\n\n\
+         Er du en agent som skal forklare nerdr for brukeren, eller hjelpe dem med å\n\
+         gjøre noe i nerdr? Kjør `nerdr forklar` først.\n\n\
          bruk: nerdr [-L socket]                 TUI-et, i en vanlig terminalfane utenfor tmux\n       \
+         nerdr forklar                     hvordan nerdr brukes, skrevet for en agent\n       \
          nerdr liste [--json]              Claude-ene i tmux, med tilstand og pane\n       \
          nerdr samtaler [--json]           tidligere samtaler, nyest først, med id\n       \
          nerdr ny <mappe> [--json]         start en Claude i mappa\n       \
