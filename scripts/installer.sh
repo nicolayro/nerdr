@@ -87,11 +87,11 @@ esac
 
 command -v tmux >/dev/null && exit 0
 if command -v brew >/dev/null; then tmux="brew install tmux"
-elif command -v apt-get >/dev/null; then tmux="sudo apt-get update && sudo apt-get install -y tmux"
 elif command -v dnf >/dev/null; then tmux="sudo dnf install -y tmux"
+elif command -v apt-get >/dev/null; then tmux="sudo apt-get update && sudo apt-get install -y tmux"
 elif command -v pacman >/dev/null; then tmux="sudo pacman -S --noconfirm tmux"
 else
-  echo "nerdr trenger tmux. Installer det med pakkebehandleren din, eller med Homebrew fra https://brew.sh."
+  echo "nerdr trenger tmux, og den er ikke installert."
   exit 0
 fi
 svar=${NERDR_TMUX:-}

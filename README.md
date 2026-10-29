@@ -24,8 +24,8 @@ curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/installer
   finnes, eller der den ligger fra før.
 - `NERDR_BIN=<mappe>` foran `sh` velger en annen mappe, og
   `NERDR_VERSJON=v0.1.0` en bestemt versjon.
-- Mangler tmux, spør scriptet om det skal installere den med `brew`,
-  `apt-get`, `dnf` eller `pacman`. `NERDR_TMUX=ja` eller `nei` svarer på
+- Mangler tmux, spør scriptet om det skal installere den med `brew`, `dnf`,
+  `apt-get` eller `pacman`. `NERDR_TMUX=ja` eller `nei` svarer på
   forhånd.
 - Kjør kommandoen på nytt for å oppdatere. nerdr oppdaterer seg ikke selv.
 

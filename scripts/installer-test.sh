@@ -69,6 +69,11 @@ tar -czf "$T/releases/latest/download/$pakke" -C "$NERDR/target/debug" nerdr
 mkdir -p "$T/brew"
 printf '#!/bin/sh\necho "brew $*"\n' > "$T/brew/brew"
 chmod +x "$T/brew/brew"
+# Og en dnf med en sudo som bare kjører den, så ingenting spør etter passord.
+mkdir -p "$T/dnf"
+printf '#!/bin/sh\necho "dnf $*"\n' > "$T/dnf/dnf"
+printf '#!/bin/sh\n"$@"\n' > "$T/dnf/sudo"
+chmod +x "$T/dnf/dnf" "$T/dnf/sudo"
 if env PATH=/usr/bin:/bin sh -c 'command -v tmux' >/dev/null; then
   echo "=== tmux ligger i /usr/bin, så tilfellene uten tmux hoppes over ==="
 else
@@ -79,6 +84,10 @@ else
   echo "=== NERDR_TMUX=nei skriver bare kommandoen ==="
   nytt_hjem
   installer PATH="$T/brew:/usr/bin:/bin" NERDR_TMUX=nei
+
+  echo "=== uten brew brukes dnf ==="
+  nytt_hjem
+  installer PATH="$T/dnf:/usr/bin:/bin" NERDR_TMUX=ja
 
   echo "=== uten pakkebehandler sier den fra ==="
   nytt_hjem
