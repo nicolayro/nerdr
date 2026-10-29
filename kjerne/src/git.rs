@@ -11,6 +11,8 @@ pub struct Repo {
     /// Branchen, eller de sju første tegnene av commiten når HEAD ikke peker
     /// på en.
     pub branch: Option<String>,
+    /// Mappa til repoet. Et worktree får mappa til repoet det er laget fra.
+    pub rot: PathBuf,
 }
 
 pub fn les(mappe: &Path) -> Option<Repo> {
@@ -28,7 +30,11 @@ pub fn les(mappe: &Path) -> Option<Repo> {
         };
         (git, felles)
     } else {
-        (punkt_git.clone(), punkt_git)
+        (punkt_git.clone(), punkt_git.clone())
+    };
+    let rot = match felles.file_name()? {
+        n if n == ".git" => felles.parent()?.to_path_buf(),
+        _ => punkt_git.parent()?.to_path_buf(),
     };
     let navn = match felles.file_name()? {
         n if n == ".git" => felles.parent()?.file_name()?,
@@ -36,7 +42,7 @@ pub fn les(mappe: &Path) -> Option<Repo> {
         n => n,
     };
     let navn = navn.to_string_lossy();
-    Some(Repo { navn: navn.strip_suffix(".git").unwrap_or(&navn).to_string(), branch: branch(&git) })
+    Some(Repo { navn: navn.strip_suffix(".git").unwrap_or(&navn).to_string(), branch: branch(&git), rot })
 }
 
 fn branch(git: &Path) -> Option<String> {
@@ -73,6 +79,9 @@ mod tester {
         assert_eq!(repo_og_branch(&repo.join("app/src")), Some(("repo".into(), "main".into())));
         assert_eq!(repo_og_branch(&rot.join("wt")), Some(("repo".into(), "0123456".into())));
         assert_eq!(repo_og_branch(&repo.join(".claude/worktrees/rel")), Some(("repo".into(), "fiks".into())));
+        let rot_til = |m: &Path| les(m).and_then(|r| fs::canonicalize(r.rot).ok());
+        let ekte = fs::canonicalize(&repo).ok();
+        assert_eq!((rot_til(&repo.join("app/src")), rot_til(&rot.join("wt"))), (ekte.clone(), ekte));
         fs::remove_dir_all(rot).unwrap();
     }
 

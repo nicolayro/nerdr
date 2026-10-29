@@ -194,13 +194,13 @@ sjekk "C-b b åpner utseende-menyen" har 'farge +av +på'
 tast Left
 sjekk "farge av tar fargen bort" uten_gronn_glyf 7
 tast Right Down Down Right
-sjekk "orden mappe gir repoet som overskrift" linje_har 2 '^ nerdr {3,}'
+sjekk "orden mappe gir repoet som overskrift" linje_har 2 '^ ▾  nerdr {3,}'
 sjekk "og bare branchen under oppgaven" linje_har 5 '^│ main +│'
 tast Right
 sjekk "orden aktivitet har ingen overskrifter" mangler 'AKTIVE|LEDIGE'
 tast Right Up Right Escape
 sjekk "Esc lukker menyen" mangler 'farge +av'
-sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1' maal show-options -gqv @nerdr-utseende
+sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1 mapper=startet kort=bokser topp=tekst valgt=bakgrunn ulest=oransje sti=av' maal show-options -gqv @nerdr-utseende
 
 sjekk "minimal har én linje: alfa under AKTIVE med ●, oppgaven og <1m til høyre" linje_har 3 '^▎ ●  Fiks testene +<1m │'
 sjekk "overskriftene treffer skillestreken med ┤" linje_har 2 '^ AKTIVE ─+┤'

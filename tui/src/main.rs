@@ -164,6 +164,8 @@ struct App {
     /// Panen du er inne i, og plassen den hadde da du gikk inn. Den blir stående
     /// der i delen til du går ut, så kortet ikke flytter seg for hver melding.
     låst: Option<(String, Plass)>,
+    /// Prosjektene som er brettet sammen, når lista er ordnet etter mappe.
+    brettet: HashSet<String>,
 
     /// Claude-en som er valgt i lista.
     valgt: Option<Pane>,
@@ -376,6 +378,7 @@ impl App {
             repoer: HashMap::new(),
             sett: HashMap::new(),
             låst: None,
+            brettet: HashSet::new(),
             valgt: None,
             liste_bredde: tegn::LISTE,
             liste_stripe: false,
@@ -723,8 +726,12 @@ impl App {
             Svar::Utseende => {
                 if let Some(tekst) = linjer.first().filter(|_| ok) {
                     self.utseende.les(tekst);
-                    self.utdatert = true;
                 }
+                // Midlertidig, så hvert vindu kan starte med sin variant.
+                if let Ok(tekst) = env::var("NERDR_UTSEENDE") {
+                    self.utseende.les(&tekst);
+                }
+                self.utdatert = true;
                 true
             }
             Svar::Prefiks => {
@@ -1174,19 +1181,31 @@ impl App {
             }
             return self.markering.take().is_some();
         }
-        // Bokstaver i lista gjør ingenting utenom j og k, som i choose-tree i
-        // tmux, så den som ikke er vant til moduser, ikke trykker på noe uten
-        // å vite det.
+        // Bokstaver i lista gjør ingenting utenom h, j, k og l, som pilene, så
+        // den som ikke er vant til moduser, ikke trykker på noe uten å vite det.
         match k.code {
             KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.ferdig = Some(String::new())
             }
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
+            KeyCode::Left | KeyCode::Char('h') => return self.brett(true),
+            KeyCode::Right | KeyCode::Char('l') => return self.brett(false),
+            KeyCode::Enter if self.valgt_prosjekt().is_some_and(|p| self.brettet.contains(&p)) => return self.brett(false),
             KeyCode::Enter => self.gå_inn(),
             _ => return false,
         }
         true
+    }
+
+    /// Prosjektet til den valgte, når lista er ordnet etter mappe.
+    fn valgt_prosjekt(&self) -> Option<String> {
+        self.valgt.as_ref().filter(|_| self.utseende.orden == Orden::Mappe).map(|p| self.sted(p))
+    }
+
+    fn brett(&mut self, sammen: bool) -> bool {
+        let Some(prosjekt) = self.valgt_prosjekt() else { return false };
+        if sammen { self.brettet.insert(prosjekt) } else { self.brettet.remove(&prosjekt) }
     }
 
     fn åpne_handlinger(&mut self) {
@@ -1437,6 +1456,12 @@ impl App {
                 self.lukk_sesjon(&pane);
                 return true;
             }
+            if let Some(prosjekt) = tegn::prosjekt_på(self, m.row) {
+                if !self.brettet.remove(&prosjekt) {
+                    self.brettet.insert(prosjekt);
+                }
+                return true;
+            }
             let ute = self.fokus == Fokus::Pane;
             // Kortet slås opp før låsen tas bort, ellers kan kortene ha flyttet
             // seg under klikket.
@@ -1664,7 +1689,9 @@ impl App {
         let paner = &self.claude_paner;
         match self.utseende.orden {
             Orden::Nerdr => grupper::rader(paner, |p| self.plass(p)),
-            Orden::Mappe => grupper::etter_mappe(paner, |p| Some((self.plass(p)?.merke, self.sted(p)))),
+            Orden::Mappe => {
+                grupper::etter_mappe(paner, self.utseende.prosjekter, &self.brettet, |p| Some((self.plass(p)?.merke, self.sted(p))))
+            }
             Orden::Aktivitet => grupper::etter_aktivitet(paner, |p| self.plass(p)),
         }
     }
@@ -1676,12 +1703,26 @@ impl App {
         tekst::sted(pane, mappe, self.repoer.get(&pane.id))
     }
 
+    /// Mappa til repoet panen jobber i, eller mappa når den ikke er i et repo.
+    fn prosjektsti(&self, pane: &Pane) -> Option<String> {
+        if let Some(repo) = self.repoer.get(&pane.id) {
+            return Some(tekst::med_tilde(&repo.rot));
+        }
+        let ny = self.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
+        self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny).map(tekst::med_tilde)
+    }
+
     fn i_rekkefølge(&self) -> Vec<Pane> {
         let rader = self.rader();
         rader
             .into_iter()
             .filter_map(|r| match r {
                 Rad::Pane(p, _) => Some(p.clone()),
+                // Den valgte står for prosjektet, så du kan flytte deg forbi det.
+                Rad::Brettet(_, paner) => {
+                    let valgt = paner.iter().find(|(p, _)| self.valgt.as_ref().is_some_and(|v| v.id == p.id));
+                    valgt.or(paner.first()).map(|(p, _)| (*p).clone())
+                }
                 _ => None,
             })
             .collect()
