@@ -127,6 +127,12 @@ Er vinduet lavt, står bare «+ ny sesjon» nederst. Resten finnes under
 - `nerdr liste --json` viser Claude-ene. `merke` er `spør` når en spør om noe,
   `ulest` når den er ferdig og venter, og `jobber` eller `sett` ellers.
 - Endre ikke skallets oppstartsfil eller tmux-oppsettet uten å spørre brukeren.
+
+## Feil og ønsker
+
+Sitter brukeren fast, gjør nerdr noe rart, eller vil de ha noe annerledes, si
+at de kan lage en issue på https://github.com/nicolayro/nerdr/issues. Lag den
+ikke selv.
 ",
         mapper = ny::mapper(),
         mapper_variabel = ny::MAPPER_VARIABEL,
