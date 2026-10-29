@@ -7,7 +7,6 @@ use std::collections::HashSet;
 use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::paner::Pane;
 
-use crate::utseende::Prosjekter;
 
 #[derive(Debug, PartialEq)]
 pub enum Rad<'a> {
@@ -98,7 +97,6 @@ pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> V
 /// rad.
 pub fn etter_mappe<'a>(
     paner: &'a [Pane],
-    rekkefølge: Prosjekter,
     brettet: &HashSet<String>,
     mappe: impl Fn(&Pane) -> Option<(Merke, String)>,
 ) -> Vec<Rad<'a>> {
@@ -110,9 +108,6 @@ pub fn etter_mappe<'a>(
             Some((_, paner)) => paner.push((pane, merke)),
             None => mapper.push((navn, vec![(pane, merke)])),
         }
-    }
-    if rekkefølge == Prosjekter::Alfabetisk {
-        mapper.sort_by_cached_key(|(navn, _)| navn.to_lowercase());
     }
     let mut rader = Vec::new();
     for (i, (navn, paner)) in mapper.into_iter().enumerate() {
@@ -225,21 +220,21 @@ mod tester {
     }
 
     #[test]
-    fn mappene_i_alfabetisk_rekkefølge_og_panene_som_i_tmux() {
+    fn en_overskrift_for_hver_mappe() {
         let paner = [pane("%1"), pane("%2"), pane("%3")];
-        let rader = etter_mappe(&paner, Prosjekter::Alfabetisk, &HashSet::new(), |p| match p.id.as_str() {
+        let rader = etter_mappe(&paner, &HashSet::new(), |p| match p.id.as_str() {
             "%2" => Some((Merke::Spør, "dotfiles".into())),
             _ => Some((Merke::Sett, "Nerdr".into())),
         });
         assert_eq!(
             rader,
             [
-                Rad::Overskrift(Overskrift::Mappe("dotfiles".into())),
-                Rad::Pane(&paner[1], Merke::Spør),
-                Rad::Tom,
                 Rad::Overskrift(Overskrift::Mappe("Nerdr".into())),
                 Rad::Pane(&paner[0], Merke::Sett),
                 Rad::Pane(&paner[2], Merke::Sett),
+                Rad::Tom,
+                Rad::Overskrift(Overskrift::Mappe("dotfiles".into())),
+                Rad::Pane(&paner[1], Merke::Spør),
             ]
         );
     }
@@ -247,7 +242,7 @@ mod tester {
     #[test]
     fn prosjektene_og_panene_i_den_rekkefølgen_de_ble_laget() {
         let paner = [pane("%12"), pane("%3"), pane("%7")];
-        let rader = etter_mappe(&paner, Prosjekter::Startet, &HashSet::new(), |p| match p.id.as_str() {
+        let rader = etter_mappe(&paner, &HashSet::new(), |p| match p.id.as_str() {
             "%7" => Some((Merke::Spør, "nerdr".into())),
             _ => Some((Merke::Sett, "awl".into())),
         });
@@ -258,7 +253,7 @@ mod tester {
     fn et_brettet_prosjekt_er_én_rad() {
         let paner = [pane("%1"), pane("%2"), pane("%3")];
         let brettet = HashSet::from(["awl".to_string()]);
-        let rader = etter_mappe(&paner, Prosjekter::Startet, &brettet, |p| match p.id.as_str() {
+        let rader = etter_mappe(&paner, &brettet, |p| match p.id.as_str() {
             "%2" => Some((Merke::Spør, "nerdr".into())),
             "%1" => Some((Merke::Jobber, "awl".into())),
             _ => Some((Merke::Sett, "awl".into())),

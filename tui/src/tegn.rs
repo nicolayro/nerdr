@@ -18,7 +18,7 @@ use crate::grupper::{Del, Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::tekst::varighet;
-use crate::utseende::{self, AKSER, BOKSAKSER, Kort, Ledig, MIDLERTIDIGE, Orden, Plass, Topp, Utseende};
+use crate::utseende::{self, AKSER, BOKSAKSER, Ledig, MIDLERTIDIGE, Orden, Plass, Topp, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
@@ -140,9 +140,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let på_skjermen = |y: u16| u16::try_from(utsnitt.skjerm(y)).ok().filter(|y| vis.contains(y));
     let rad_bakgrunn = (på_egen_rad(app) && app.utseende.topp == Topp::Rad).then(overskrift_bakgrunn);
     let med_strek = på_egen_rad(app) && app.utseende.topp == Topp::Strek;
-    for Plassert { y, rad, kort, pynt, .. } in &rader {
-        let under = utsnitt.skjerm(*y) + kort.as_ref().map_or(1, |k| k.len()) as i32;
-        tegn_kort(buf, under, &vis, bredde, pynt, None);
+    for Plassert { y, rad, kort, .. } in &rader {
         match rad {
             Rad::Tom => {}
             Rad::Overskrift(_) if kort.is_some() => {
@@ -267,7 +265,7 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
 /// Prosjektet står på en rad for seg over kortene.
 fn på_egen_rad(app: &App) -> bool {
     let u = app.utseende;
-    u.topp != Topp::Tekst && u.orden == Orden::Mappe && u.form() != Kort::Ramme && !stripe(app)
+    u.orden == Orden::Mappe && !stripe(app)
 }
 
 fn er_valgt(app: &App, pane: &Pane) -> bool {
@@ -278,14 +276,10 @@ fn er_valgt(app: &App, pane: &Pane) -> bool {
 /// jobbet eller vært ferdig, og repoet og branchen. Uten oppgave er repoet
 /// tittelen.
 fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
-    kort::kort(app.utseende, &info(app, pane, merke), liste_bredde(app) - 1, er_valgt(app, pane), stripe(app))
-}
-
-fn info(app: &App, pane: &Pane, merke: Merke) -> kort::Info {
     let repo = app.repoer.get(&pane.id);
     // En som starter, er ikke i registeret ennå, og har ingen tid.
     let tid = app.claude.get(&pane.id).map(|c| varighet(crate::nå_ms().saturating_sub(c.endret)));
-    kort::Info {
+    let info = kort::Info {
         merke,
         oppgave: pane.oppgave().map(str::to_string),
         sted: app.sted(pane),
@@ -293,7 +287,8 @@ fn info(app: &App, pane: &Pane, merke: Merke) -> kort::Info {
         tid,
         starter: app.nye.contains_key(&pane.id),
         sted_over: app.utseende.orden == Orden::Mappe,
-    }
+    };
+    kort::kort(app.utseende, &info, liste_bredde(app) - 1, er_valgt(app, pane), stripe(app))
 }
 
 /// Kortet med første linje på rad `topp`, som kan være over skjermen når
@@ -316,24 +311,6 @@ struct Plassert<'a> {
     høyde: u16,
     rad: Rad<'a>,
     kort: Option<Vec<kort::Linje>>,
-    /// Linjer under kortet uten bakgrunn, som streken til neste Claude i
-    /// rammen.
-    pynt: Vec<kort::Linje>,
-}
-
-/// Tegnene til Claude-ene i prosjektet raden `n` hører til.
-fn prosjektet(rader: &[Rad], n: usize) -> Vec<Merke> {
-    let start = match rader[n] {
-        Rad::Overskrift(_) => n + 1,
-        _ => (0..=n).rev().take_while(|&k| matches!(rader[k], Rad::Pane(..))).last().unwrap_or(n),
-    };
-    rader[start..]
-        .iter()
-        .map_while(|r| match r {
-            Rad::Pane(_, m) => Some(*m),
-            _ => None,
-        })
-        .collect()
 }
 
 /// Radene i lista, etter hverandre fra toppen.
@@ -342,59 +319,28 @@ fn plasser(app: &App) -> Vec<Plassert<'_>> {
     let midten = app.utseende.ledig == Ledig::Midten && app.utseende.orden == Orden::Nerdr;
     let u = app.utseende;
     let bredde = liste_bredde(app) - 1;
-    let ramme = u.form() == Kort::Ramme && !stripe(app);
-    let kant = u.form() == Kort::Kant && !stripe(app);
     let på_rad = på_egen_rad(app);
-    let rader = kort::ordne(app.rader());
-    let neste_pane: Vec<bool> = (0..rader.len()).map(|n| matches!(rader.get(n + 1), Some(Rad::Pane(..)))).collect();
-    let neste_første: Vec<Option<&Pane>> = (0..rader.len())
-        .map(|n| match rader.get(n + 1) {
-            Some(Rad::Pane(p, _)) => Some(*p),
-            _ => None,
-        })
-        .collect();
-    let prosjekter: Vec<Vec<Merke>> = (0..rader.len()).map(|n| prosjektet(&rader, n)).collect();
-    rader
+    kort::ordne(app.rader())
         .into_iter()
-        .enumerate()
-        .map(|(n, rad)| {
+        .map(|rad| {
             if midten && rad == Rad::Overskrift(Overskrift::Del(Del::Ledige)) {
                 y = y.max(plass(app) / 2);
             }
-            let merker = &prosjekter[n];
-            let (kort, pynt) = match &rad {
-                Rad::Pane(pane, merke) if ramme => {
-                    let stil = kort::prosjektramme(u, merker);
-                    let seksjon = kort::seksjon(u, &info(app, pane, *merke), bredde, er_valgt(app, pane), stil);
-                    let under = if neste_pane[n] { kort::ramme_skille(u, merker, bredde) } else { kort::ramme_bunn(u, merker, bredde) };
-                    (Some(seksjon), vec![under])
-                }
-                Rad::Pane(pane, merke) => (Some(kort(app, pane, *merke)), if kant && neste_pane[n] { vec![Vec::new()] } else { Vec::new() }),
-                Rad::Overskrift(Overskrift::Mappe(navn)) if ramme => (Some(kort::ramme_topp(u, navn, merker, bredde, false)), Vec::new()),
-                Rad::Overskrift(Overskrift::Mappe(navn)) if på_rad => {
-                    let sti = match neste_første.get(n) {
-                        Some(Some(pane)) => app.prosjektsti(pane),
-                        _ => None,
-                    };
-                    (Some(kort::overskriftrad(u, navn, sti.as_deref(), merker, bredde, false, false)), Vec::new())
-                }
+            let kort = match &rad {
+                Rad::Pane(pane, merke) => Some(kort(app, pane, *merke)),
+                Rad::Overskrift(Overskrift::Mappe(navn)) if på_rad => Some(vec![kort::prosjektrad(u, navn, &[], bredde, false, false)]),
                 Rad::Brettet(navn, paner) => {
                     let merker: Vec<Merke> = paner.iter().map(|(_, m)| *m).collect();
                     let valgt = paner.iter().any(|(p, _)| er_valgt(app, p));
-                    let linjer = match () {
-                        _ if ramme => kort::ramme_topp(u, navn, &merker, bredde, true),
-                        _ if på_rad => {
-                            let sti = paner.first().and_then(|(p, _)| app.prosjektsti(p));
-                            kort::overskriftrad(u, navn, sti.as_deref(), &merker, bredde, true, valgt)
-                        }
-                        _ => vec![kort::brettet(u, navn, &merker, bredde, valgt, stripe(app))],
-                    };
-                    (Some(linjer), Vec::new())
+                    Some(vec![match på_rad {
+                        true => kort::prosjektrad(u, navn, &merker, bredde, true, valgt),
+                        false => kort::brettet_stripe(u, &merker, valgt),
+                    }])
                 }
-                _ => (None, Vec::new()),
+                _ => None,
             };
-            let høyde = kort.as_ref().map_or(1, |k| k.len() as u16) + pynt.len() as u16;
-            let plassert = Plassert { y, høyde, rad, kort, pynt };
+            let høyde = kort.as_ref().map_or(1, |k| k.len() as u16);
+            let plassert = Plassert { y, høyde, rad, kort };
             y += høyde;
             plassert
         })

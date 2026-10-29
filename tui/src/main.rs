@@ -1724,7 +1724,7 @@ impl App {
         match self.utseende.orden {
             Orden::Nerdr => grupper::rader(paner, |p| self.plass(p)),
             Orden::Mappe => {
-                grupper::etter_mappe(paner, self.utseende.prosjekter, &self.brettet, |p| Some((self.plass(p)?.merke, self.sted(p))))
+                grupper::etter_mappe(paner, &self.brettet, |p| Some((self.plass(p)?.merke, self.sted(p))))
             }
             Orden::Aktivitet => grupper::etter_aktivitet(paner, |p| self.plass(p)),
         }
@@ -1735,15 +1735,6 @@ impl App {
         let ny = self.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
         let mappe = self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny);
         tekst::sted(pane, mappe, self.repoer.get(&pane.id))
-    }
-
-    /// Mappa til repoet panen jobber i, eller mappa når den ikke er i et repo.
-    fn prosjektsti(&self, pane: &Pane) -> Option<String> {
-        if let Some(repo) = self.repoer.get(&pane.id) {
-            return Some(tekst::med_tilde(&repo.rot));
-        }
-        let ny = self.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
-        self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny).map(tekst::med_tilde)
     }
 
     fn i_rekkefølge(&self) -> Vec<Pane> {
