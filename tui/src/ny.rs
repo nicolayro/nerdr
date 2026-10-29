@@ -312,8 +312,8 @@ mod tester {
     #[test]
     fn treff_i_siste_del_av_stien_står_først() {
         let mappe = |vis: &str| Kandidat { mappe: PathBuf::from(vis), vis: vis.into(), samtale: None, alder: None };
-        let p = |vis: &str| poeng_for(&mappe(vis), "kontorfront").unwrap().0;
-        assert!(p("~/git/awl/apps/kontorfront-skjema") > p("~/git/awl/apps/kontorfront-fond/app"));
+        let p = |vis: &str| poeng_for(&mappe(vis), "nettside").unwrap().0;
+        assert!(p("~/git/mono/apps/nettside-blogg") > p("~/git/mono/apps/nettside-butikk/app"));
     }
 
     #[test]

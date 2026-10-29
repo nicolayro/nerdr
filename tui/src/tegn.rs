@@ -1071,8 +1071,8 @@ mod tester {
     fn bryter_på_ord_og_kutter_det_som_ikke_får_plass() {
         assert_eq!(bryt("Fiks testene", 31, 31, 2), ["Fiks testene"]);
         assert_eq!(
-            bryt("Forbindelser i Newcustomere2elocal for case", 31, 31, 2),
-            ["Forbindelser i", "Newcustomere2elocal for case"]
+            bryt("Lenkesjekken i dokumentasjonssiden gir feil", 31, 31, 2),
+            ["Lenkesjekken i", "dokumentasjonssiden gir feil"]
         );
         assert_eq!(bryt("en to tre fire", 7, 7, 2), ["en to", "tre…"]);
         assert_eq!(bryt("Langtordsomikkefårplass", 10, 10, 2), ["Langtords…"]);

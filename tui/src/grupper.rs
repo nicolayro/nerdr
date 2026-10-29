@@ -188,13 +188,13 @@ mod tester {
     fn mappene_i_alfabetisk_rekkefølge_og_panene_som_i_tmux() {
         let paner = [pane("%1"), pane("%2"), pane("%3")];
         let rader = etter_mappe(&paner, |p| match p.id.as_str() {
-            "%2" => Some((Merke::Spør, "awl".into())),
+            "%2" => Some((Merke::Spør, "dotfiles".into())),
             _ => Some((Merke::Sett, "Nerdr".into())),
         });
         assert_eq!(
             rader,
             [
-                Rad::Overskrift(Overskrift::Mappe("awl".into())),
+                Rad::Overskrift(Overskrift::Mappe("dotfiles".into())),
                 Rad::Pane(&paner[1], Merke::Spør),
                 Rad::Tom,
                 Rad::Overskrift(Overskrift::Mappe("Nerdr".into())),
