@@ -434,18 +434,12 @@ sjekk "ingen vindu endrer størrelse når du bytter Claude" samme_storrelser
 maal set-hook -gu window-resized
 
 tast C-b o C-b x
-sjekk "C-b x spør i en popup" har 'lukke panen\? '
-sjekk "med «lukk» og «avbryt»" har ' lukk  y +avbryt  n '
-tast n
-sjekk "n lar panen stå" mangler 'lukke panen'
-sjekk "begge panene er der" linjer 2 maal list-panes -t alfa:0
-tast C-b x y
-sjekk "C-b x y lukker panen" linjer 1 maal list-panes -t alfa:0
+sjekk "C-b x lukker panen uten å spørre" linjer 1 maal list-panes -t alfa:0
 
 tast C-b '"'
 sjekk "C-b \" deler over og under" er 2 tell '╭'
-tast C-b x y
-sjekk "C-b x y lukker den nye" linjer 1 maal list-panes -t alfa:0
+tast C-b x
+sjekk "C-b x lukker den nye" linjer 1 maal list-panes -t alfa:0
 sjekk "uten split fyller Claude-en hele visningen igjen" er 68x17 dimensjon alfa:0
 tast C-b w
 
@@ -472,18 +466,15 @@ sjekk "C-b 0 går til 0" er 0 vindu_indeks
 klikk "$(fane_to navn)" 1
 sjekk "klikk på fane 1 viser vindu 1" er 1 vindu_indeks
 klikk "$(fane_to kryss)" 1
-sjekk "klikk på × på fanen spør" har 'lukke vinduet\? '
-sjekk "med navnet på vinduet" har '«[^»]+», med alle panene i det'
-tast n
-sjekk "n lar vinduet stå" linjer 2 maal list-windows -t alfa
+sjekk "klikk på × på fanen lukker vinduet uten å spørre" linjer 1 maal list-windows -t alfa
+sjekk "bare én fane står igjen" linje_mangler 1 '│  [^ ]+ ×   [^ +][^ ]* × '
 tast C-b w Enter
 sjekk "C-b w og Enter går inn i Claude-en i vindu 0" er 0 vindu_indeks
 
-tast C-b 1 C-b '&'
-sjekk "C-b & spør" har 'lukke vinduet\? '
-tast y
-sjekk "y lukker vinduet" linjer 1 maal list-windows -t alfa
-sjekk "bare én fane står igjen" linje_mangler 1 '│  [^ ]+ ×   [^ +][^ ]* × '
+tast C-b c
+sjekk "C-b c lager alfa:1 igjen" linjer 2 maal list-windows -t alfa
+tast C-b '&'
+sjekk "C-b & lukker vinduet uten å spørre" linjer 1 maal list-windows -t alfa
 tast C-b w
 
 tast C-b w Up Up Up Up Up Up Up Up

@@ -113,7 +113,7 @@ hver sin boks eller med streker mellom. Tastene går til den aktive panen, og et
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
 Øverst står vinduene i sesjonen som faner med bakgrunn, og vinduet som vises,
 har sterkere bakgrunn. Et klikk på en fane viser vinduet, og `×` i fanen
-lukker det etter at du har svart. Fra lista går du alltid inn i vinduet til Claude-en.
+lukker det. Fra lista går du alltid inn i vinduet til Claude-en.
 
 Med tmux 3.5 eller nyere får panene fargene terminalen hadde da nerdr startet,
 så Claude Code med «Auto (match terminal)» i `/theme` blir lys eller mørk som
@@ -134,13 +134,13 @@ virker både fra lista og fra panen:
 | `n` `p` | Neste og forrige vindu |
 | `0`–`9` | Vinduet med det nummeret |
 | `l` | Siste vindu, det du var i før |
-| `&` | Lukk vindu, etter at du har svart |
+| `&` | Lukk vindu |
 | `%` | Del side om side |
 | `"` | Del over og under |
 | `o` / `←` `↑` `↓` `→` | Neste pane, eller panen i den retningen |
 | `;` | Siste pane, den som var aktiv før |
 | `z` | Zoom pane, inn og ut |
-| `x` | Lukk pane, etter at du har svart |
+| `x` | Lukk pane |
 | `{` `}` | Flytt pane bakover og framover |
 | `Space` | Neste oppsett |
 | `C-o` | Roter paner |

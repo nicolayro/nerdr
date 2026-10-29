@@ -487,10 +487,10 @@ pub fn fane_på(app: &App, x: u16) -> Option<String> {
     faner(app).into_iter().find(|f| (f.fra..f.til).contains(&x)).map(|f| f.vindu)
 }
 
-/// Vinduet og navnet til fanen med `×` i kolonne `x`. Rutene på hver side
-/// treffer også, så den er lettere å treffe.
-pub fn lukk_fane_på(app: &App, x: u16) -> Option<(String, String)> {
-    faner(app).into_iter().find(|f| f.lukk().abs_diff(x) <= 1).map(|f| (f.vindu, f.navn))
+/// Vinduet til fanen med `×` i kolonne `x`. Rutene på hver side treffer
+/// også, så den er lettere å treffe.
+pub fn lukk_fane_på(app: &App, x: u16) -> Option<String> {
+    faner(app).into_iter().find(|f| f.lukk().abs_diff(x) <= 1).map(|f| f.vindu)
 }
 
 /// `+` etter fanene, når et vindu vises og det er plass til den.
