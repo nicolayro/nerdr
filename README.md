@@ -113,8 +113,9 @@ terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
 har sterkere bakgrunn. Et klikk på en fane viser vinduet, og `×` i fanen
 lukker det etter at du har svart. Fra lista går du alltid inn i vinduet til Claude-en.
 
-Panene får fargene terminalen hadde da nerdr startet, så Claude Code med
-«Auto (match terminal)» i `/theme` blir lys eller mørk som terminalen.
+Med tmux 3.5 eller nyere får panene fargene terminalen hadde da nerdr startet,
+så Claude Code med «Auto (match terminal)» i `/theme` blir lys eller mørk som
+terminalen.
 
 ### Prefikset
 

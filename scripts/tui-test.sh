@@ -179,13 +179,16 @@ sjekk "og branchen" linje_har 5 '^│ main +│'
 sjekk "gamma står under alfa, og uten oppgave er repoet tittelen" linje_har 8 '^│ nerdr +│'
 sjekk "◐ til gamma er grønn" gronn_glyf 7
 # Spør om bakgrunnen til den får svar, også i en sesjon nerdr ikke står i.
-cat > "$KONFIG/bakgrunn.sh" << 'SLUTT'
+# refresh-client -r kom i tmux 3.5, og med eldre tmux svarer panene svart.
+if tmux -V | awk '{ split($2, v, "."); exit !(v[1] > 3 || (v[1] == 3 && v[2] + 0 >= 5)) }'; then
+  cat > "$KONFIG/bakgrunn.sh" << 'SLUTT'
 stty -echo -icanon min 0 time 5
 while :; do printf '\033]11;?\007'; cat -v; echo; done
 SLUTT
-maal new-session -d -s farge "sh $KONFIG/bakgrunn.sh"
-sjekk "en pane får bakgrunnen til terminalen fra nerdr" i_pane farge 'rgb:0a0a/0b0b/0c0c'
-maal kill-session -t farge
+  maal new-session -d -s farge "sh $KONFIG/bakgrunn.sh"
+  sjekk "en pane får bakgrunnen til terminalen fra nerdr" i_pane farge 'rgb:0a0a/0b0b/0c0c'
+  maal kill-session -t farge
+fi
 tast C-b b
 sjekk "C-b b åpner utseende-menyen" har 'farge +av +på'
 tast Left
