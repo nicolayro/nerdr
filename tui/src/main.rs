@@ -231,7 +231,8 @@ struct App {
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
     handlinger: Option<Handlinger>,
-    hjelp: bool,
+    /// Hjelpen er åpen, rullet så mange linjer ned.
+    hjelp: Option<u16>,
     /// Pane-id → mappe og starttid for Claude-er nerdr har startet, til de
     /// står i registeret. Oppstarten tar flere sekunder, og så lenge vises de
     /// likevel.
@@ -404,7 +405,7 @@ impl App {
             kopiert: None,
             velger: None,
             handlinger: None,
-            hjelp: false,
+            hjelp: None,
             nye: HashMap::new(),
             gå_inn_i: None,
             ferdig: None,
@@ -743,7 +744,7 @@ impl App {
                 self.utseende_meny = Some(1);
                 return;
             }
-            KeyCode::Char('?') => return self.hjelp = true,
+            KeyCode::Char('?') => return self.hjelp = Some(0),
             KeyCode::Char(c @ ('f' | 'r')) if !ctrl => return self.ny_sesjon(c == 'r'),
             KeyCode::Char(':') => return self.åpne_handlinger(),
             _ => {}
@@ -1039,8 +1040,18 @@ impl App {
     }
 
     fn tast(&mut self, k: KeyEvent) -> bool {
-        if self.hjelp {
-            self.hjelp = false;
+        if self.hjelp.is_some() {
+            let steg = match k.code {
+                KeyCode::Up | KeyCode::Char('k') => -1,
+                KeyCode::Down | KeyCode::Char('j') => 1,
+                _ => 0,
+            };
+            // Får hjelpen plass, lukker hver tast den, som hintet sier.
+            if steg == 0 || tegn::hjelp_rull_maks(self) == 0 {
+                self.hjelp = None;
+            } else {
+                self.rull_hjelp(steg);
+            }
             return true;
         }
         if let Some(akse) = self.utseende_meny {
@@ -1235,6 +1246,13 @@ impl App {
         }
     }
 
+    fn rull_hjelp(&mut self, steg: i16) {
+        let maks = tegn::hjelp_rull_maks(self);
+        if let Some(rull) = &mut self.hjelp {
+            *rull = rull.saturating_add_signed(steg).min(maks);
+        }
+    }
+
     fn mus(&mut self, m: MouseEvent) -> bool {
         let før = self.under_musen();
         self.musen = Some((m.column, m.row));
@@ -1248,7 +1266,7 @@ impl App {
     /// under en mus som står stille.
     fn under_musen(&self) -> Option<Mål> {
         let (x, y) = self.musen?;
-        if self.velger.is_some() || self.handlinger.is_some() || self.hjelp || self.utseende_meny.is_some() {
+        if self.velger.is_some() || self.handlinger.is_some() || self.hjelp.is_some() || self.utseende_meny.is_some() {
             return None;
         }
         if self.lukke.is_some() {
@@ -1300,7 +1318,15 @@ impl App {
         if m.kind == MouseEventKind::Down(MouseButton::Left) {
             self.svelg_slipp = true;
         }
-        if self.velger.is_some() || self.handlinger.is_some() || self.hjelp || self.utseende_meny.is_some() {
+        if self.hjelp.is_some() {
+            match m.kind {
+                MouseEventKind::ScrollUp => self.rull_hjelp(-(RULL_STEG as i16)),
+                MouseEventKind::ScrollDown => self.rull_hjelp(RULL_STEG as i16),
+                _ => return false,
+            }
+            return true;
+        }
+        if self.velger.is_some() || self.handlinger.is_some() || self.utseende_meny.is_some() {
             return false;
         }
         if self.lukke.is_some() {

@@ -102,8 +102,8 @@ pub fn alt(f: &mut Frame, app: &App) {
     tegn_hint(buf, område, app);
     tegn_bakgrunn(buf, område, app, &bokser);
 
-    if app.hjelp {
-        tegn_hjelp(buf, område, &app.prefiks.navn());
+    if let Some(rull) = app.hjelp {
+        tegn_hjelp(buf, område, &app.prefiks.navn(), rull);
     } else if let Some(lukke) = &app.lukke {
         tegn_lukke(buf, område, app, lukke, mus.as_ref());
     } else if let Some(akse) = app.utseende_meny {
@@ -663,39 +663,60 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
     Some(boks)
 }
 
-fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str) {
-    const BREDDE: u16 = 58;
-    let indre = (BREDDE - 4) as usize;
-    let om = bryt(hjelp::OM, indre, indre, 3);
-    let høyde = om.len() + 1 + hjelp::TASTER.len() + 1 + hjelp::PREFIKSTASTER.len() + 1 + hjelp::MERKER.len() + 1 + 2 + 2;
-    let Some(boks) = boks(buf, område, BREDDE, høyde as u16, "nerdr", "trykk en tast for å lukke") else { return };
-    let x = boks.x + 2;
-    let indre = (boks.width - 4) as usize;
-    let mut y = boks.y + 1..boks.bottom() - 1;
-    let mut linje = |tekst: &str, stil: Style| {
-        if let Some(y) = y.next() {
-            buf.set_stringn(x, y, tekst, indre, stil);
-        }
-    };
-    for l in om {
-        linje(&l, VANLIG);
-    }
-    linje("", Style::new());
+const HJELP_BREDDE: u16 = 58;
+
+fn hjelp_linjer(prefiks: &str) -> Vec<(String, Style)> {
+    let indre = (HJELP_BREDDE - 4) as usize;
+    let mut linjer: Vec<(String, Style)> = bryt(hjelp::OM, indre, indre, 3).into_iter().map(|l| (l, VANLIG)).collect();
+    linjer.push((String::new(), VANLIG));
     for (tast, hva) in hjelp::TASTER {
-        linje(&format!("{tast:<9}{hva}"), VANLIG);
+        linjer.push((format!("{tast:<9}{hva}"), VANLIG));
     }
-    linje("", Style::new());
+    linjer.push((String::new(), VANLIG));
     for (tast, hva) in hjelp::PREFIKSTASTER {
         let tast = if tast == "prefiks" { format!("{prefiks} {prefiks}") } else { format!("{prefiks} {tast}") };
-        linje(&format!("{tast:<13}{hva}"), VANLIG);
+        linjer.push((format!("{tast:<13}{hva}"), VANLIG));
     }
-    linje("", Style::new());
+    linjer.push((String::new(), VANLIG));
     for (merke, hva) in hjelp::MERKER {
-        linje(&format!("{}  {hva}", glyf(merke)), VANLIG);
+        linjer.push((format!("{}  {hva}", glyf(merke)), VANLIG));
     }
-    linje("", Style::new());
-    linje(hjelp::BARE_TMUX, SVAK);
-    linje(&hjelp::mapper(), SVAK);
+    linjer.push((String::new(), VANLIG));
+    linjer.push((hjelp::BARE_TMUX.to_string(), SVAK));
+    linjer.push((hjelp::mapper(), SVAK));
+    linjer
+}
+
+/// Hjelpen på skjermen, og hvor mange linjer den kan rulles. 0 når alt får plass.
+fn hjelp_boks(område: Rect, linjer: usize) -> Option<(Rect, u16)> {
+    let boks = midt_på(område, HJELP_BREDDE, linjer as u16 + 2)?;
+    Some((boks, (linjer as u16).saturating_sub(boks.height - 2)))
+}
+
+pub fn hjelp_rull_maks(app: &App) -> u16 {
+    let linjer = hjelp_linjer(&app.prefiks.navn()).len();
+    hjelp_boks(skjerm(app), linjer).map_or(0, |(_, maks)| maks)
+}
+
+fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, rull: u16) {
+    let linjer = hjelp_linjer(prefiks);
+    let Some((plass, maks)) = hjelp_boks(område, linjer.len()) else { return };
+    let hint = if maks > 0 { "↑↓ rull · trykk en tast for å lukke" } else { "trykk en tast for å lukke" };
+    let Some(boks) = boks(buf, område, plass.width, plass.height, "nerdr", hint) else { return };
+    let rull = rull.min(maks);
+    let x = boks.x + 2;
+    let indre = (boks.width - 4) as usize;
+    for ((tekst, stil), y) in linjer.iter().skip(rull as usize).zip(boks.y + 1..boks.bottom() - 1) {
+        buf.set_stringn(x, y, tekst, indre, *stil);
+    }
+    // Som pilene i lista, men i rammen, så de ikke tar en linje av teksten.
+    let pil = SVAK.fg(Color::Reset);
+    if rull > 0 {
+        buf.set_string(boks.right() - 5, boks.y, " ↑ ", pil);
+    }
+    if rull < maks {
+        buf.set_string(boks.right() - 5, boks.bottom() - 1, " ↓ ", pil);
+    }
 }
 
 /// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
@@ -1097,6 +1118,49 @@ mod tester {
         assert_eq!(visning(Size::new(80, 40), 50).x, 40);
         assert_eq!(visning(Size::new(80, 40), STRIPE).x, STRIPE);
         assert_eq!(visning(Size::new(6, 40), LISTE).x, 4);
+    }
+
+    fn tegnet_hjelp(bredde: u16, høyde: u16, rull: u16) -> Vec<String> {
+        let område = Rect::new(0, 0, bredde, høyde);
+        let mut buf = Buffer::empty(område);
+        tegn_hjelp(&mut buf, område, "C-b", rull);
+        (0..høyde).map(|y| (0..bredde).map(|x| buf[(x, y)].symbol()).collect()).collect()
+    }
+
+    #[test]
+    fn hele_hjelpen_kan_leses_i_80x24() {
+        let linjer = hjelp_linjer("C-b");
+        let (_, maks) = hjelp_boks(Rect::new(0, 0, 80, 24), linjer.len()).unwrap();
+        assert!(maks > 0);
+        let sett: Vec<String> = (0..=maks).flat_map(|rull| tegnet_hjelp(80, 24, rull)).collect();
+        for (tekst, _) in linjer.iter().filter(|(t, _)| !t.is_empty()) {
+            let tekst: String = tekst.chars().take(54).collect();
+            assert!(sett.iter().any(|rad| rad.contains(&tekst)), "{tekst}");
+        }
+        assert!(sett.iter().any(|rad| rad.contains("C-b ?")));
+    }
+
+    #[test]
+    fn pilene_i_rammen_viser_hva_som_er_over_og_under() {
+        let maks = hjelp_boks(Rect::new(0, 0, 80, 24), hjelp_linjer("C-b").len()).unwrap().1;
+        let pil = |rader: &[String], pil: &str| rader.iter().any(|r| r.contains(pil));
+        let toppen = tegnet_hjelp(80, 24, 0);
+        assert!(!pil(&toppen, " ↑ ") && pil(&toppen, " ↓ ") && pil(&toppen, "↑↓ rull · trykk en tast for å lukke"));
+        let midten = tegnet_hjelp(80, 24, 1);
+        assert!(pil(&midten, " ↑ ") && pil(&midten, " ↓ "));
+        // Lenger enn bunnen går den ikke.
+        let bunnen = tegnet_hjelp(80, 24, maks + 10);
+        assert!(pil(&bunnen, " ↑ ") && !pil(&bunnen, " ↓ "));
+        assert_eq!(bunnen, tegnet_hjelp(80, 24, maks));
+    }
+
+    #[test]
+    fn hjelpen_som_får_plass_ruller_ikke() {
+        let (_, maks) = hjelp_boks(Rect::new(0, 0, 120, 60), hjelp_linjer("C-b").len()).unwrap();
+        assert_eq!(maks, 0);
+        let rader = tegnet_hjelp(120, 60, 0);
+        assert!(rader.iter().any(|r| r.contains("trykk en tast")));
+        assert!(!rader.iter().any(|r| r.contains(" ↑ ") || r.contains(" ↓ ")));
     }
 
     #[test]

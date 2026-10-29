@@ -18,7 +18,7 @@ pub const TASTER: [(&str, &str); 4] = [
 ];
 
 /// Etter prefikset, fra lista og fra panen.
-pub const PREFIKSTASTER: [(&str, &str); 24] = [
+pub const PREFIKSTASTER: [(&str, &str); 25] = [
     (":", "handlinger: alt nerdr kan gjøre"),
     ("f", "ny sesjon"),
     ("r", "hent samtale"),
@@ -42,6 +42,7 @@ pub const PREFIKSTASTER: [(&str, &str); 24] = [
     ("b", "konfigurasjon"),
     ("w s", "tilbake til lista"),
     ("d", "avslutt"),
+    ("?", "hjelp"),
     ("prefiks", "send prefikset til panen"),
 ];
 
