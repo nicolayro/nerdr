@@ -1,6 +1,12 @@
 # nerdr
 
-En TUI for oversikt over og navigasjon mellom Claude-sesjonene dine.
+nerdr gir deg oversikt over Claude Code-sesjonene dine i tmux. Du ser hvilke
+Claude-er som spør om noe og hvilke som er ferdige, og går inn i den du vil.
+nerdr bygger på tmux og har ingen egen server. Den gjør ingen nettverkskall,
+oppdaterer seg ikke selv og er én binær. Den virker bare med Claude Code, på
+macOS og Linux.
+
+![nerdr](docs/nerdr.png)
 
 ## Forutsetninger
 
@@ -23,10 +29,24 @@ curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/installer
 Du kan også be Claude om å installere og sette opp nerdr etter
 [INSTALL.md](INSTALL.md).
 
+## Kom i gang
+
+1. Installer nerdr som over.
+2. Kjør `nerdr` i en vanlig terminalfane, utenfor tmux.
+3. Start en Claude med prefikset og `f`, eller «+ ny sesjon» nederst i lista,
+   og velg en mappe. Du er inne i den nye Claude-en med en gang.
+4. Prefikset og `w` tar deg tilbake til lista. Der velger du en Claude med
+   piltastene og går inn i den med `⏎`.
+5. Prefikset og `?` viser hjelpen.
+
+Prefikset er det samme som i tmux, `C-b` hvis du ikke har endret det.
+
 ## Bruk
 
 Kjør `nerdr` i en vanlig terminalfane, utenfor tmux. Bare Claude som kjører i
 tmux, vises. Har ikke tmux noen sesjon, lager nerdr en.
+
+### Lista
 
 Tastene går til Claude-en du er inne i. nerdr selv styrer du med knappene,
 eller med prefikset og en tast, som i tmux. I lista er det bare disse:
@@ -39,6 +59,21 @@ eller med prefikset og en tast, som i tmux. I lista er det bare disse:
 
 Andre bokstaver i lista gjør ingenting.
 
+Hver Claude står i en boks, med tegnet, repoet og tiden i toppkanten, oppgaven
+inni og branchen under. Et worktree står med navnet til repoet det er laget fra. Lista er delt i to:
+
+| | |
+| --- | --- |
+| **aktive** | `●` spør om noe, `◆` er ferdig og venter på deg, `◐` jobber, `◌` starter |
+| **ledige** | `○` er ferdig, og du har gått ut av den uten å sette den i gang igjen |
+
+Den du er inne i, er aldri ledig, og kortet har bakgrunn så du ser hvor du er.
+Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den du
+sist gikk ut av. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
+Får ikke lista plass, ruller den med musehjulet og følger den du velger. Pilene
+øverst og nederst sier at det er flere over og under, og pila øverst er
+oransje når noen over venter på deg. Et klikk på en pil ruller en side.
+
 Nederst i lista står knappene «+ ny sesjon», «handlinger», «hjelp» og
 «avslutt», hver med tasten etter prefikset som gjør det samme. I et lavt vindu og
 på stripa står bare «+ ny sesjon» der. Claude-ene
@@ -47,6 +82,17 @@ nerdr. `tmux kill-server` stopper tmux og alt som kjører i det.
 
 «handlinger», eller prefikset og `:`, viser alt nerdr kan gjøre, med tasten ved siden av, og du søker fram det du vil og trykker `⏎`.
 Valgene i konfigurasjonen står der også, som «mye farge» og «skjul tiden».
+
+Dra i streken mellom lista og panen for å gjøre lista bredere eller smalere.
+Drar du den helt inn, blir lista en stripe med bare tegnene, og et dobbeltklikk
+på streken bytter mellom stripa og bredden du hadde. Bredden står i den globale
+tmux-optionen `@nerdr-liste`, så den er den samme neste gang.
+
+Når du sist var inne i en Claude, skriver nerdr i pane-optionen `@nerdr-sett`
+i tmux. Den forsvinner med panen, og det en Claude blir ferdig med mens nerdr
+er lukket, venter på deg neste gang.
+
+### Musen
 
 Et klikk på en Claude i lista velger den, og et dobbeltklikk går inn i den. Et
 klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Står musen
@@ -58,12 +104,16 @@ Code i fullskjerm. Ellers ruller hjulet i historikken, og en tast tar deg
 tilbake til bunnen. Det du drar over, kopieres når du slipper, med `pbcopy`,
 `wl-copy`, `xclip` eller `xsel`. I `less` og `man` blir hjulet til piltaster.
 
+### Panen og vinduene
+
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
 hver sin boks eller med streker mellom. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
 Øverst står vinduene i sesjonen som faner med bakgrunn, og vinduet som vises,
 har sterkere bakgrunn. Et klikk på en fane viser vinduet, og `×` i fanen
 lukker det etter at du har svart. Fra lista går du alltid inn i vinduet til Claude-en.
+
+### Prefikset
 
 Prefikset er det du setter i `NERDR_PREFIKS`, ellers det samme som i
 tmux-oppsettet ditt, ellers `C-b`. Tastene etter det er de samme som i tmux, og
@@ -96,30 +146,6 @@ virker både fra lista og fra panen:
 | `d` | Avslutt |
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
-
-Hver Claude står i en boks, med tegnet, repoet og tiden i toppkanten, oppgaven
-inni og branchen under. Et worktree står med navnet til repoet det er laget fra. Lista er delt i to:
-
-| | |
-| --- | --- |
-| **aktive** | `●` spør om noe, `◆` er ferdig og venter på deg, `◐` jobber, `◌` starter |
-| **ledige** | `○` er ferdig, og du har gått ut av den uten å sette den i gang igjen |
-
-Den du er inne i, er aldri ledig, og kortet har bakgrunn så du ser hvor du er.
-Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den du
-sist gikk ut av. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
-Får ikke lista plass, ruller den med musehjulet og følger den du velger. Pilene
-øverst og nederst sier at det er flere over og under, og pila øverst er
-oransje når noen over venter på deg. Et klikk på en pil ruller en side.
-
-Dra i streken mellom lista og panen for å gjøre lista bredere eller smalere.
-Drar du den helt inn, blir lista en stripe med bare tegnene, og et dobbeltklikk
-på streken bytter mellom stripa og bredden du hadde. Bredden står i den globale
-tmux-optionen `@nerdr-liste`, så den er den samme neste gang.
-
-Når du sist var inne i en Claude, skriver nerdr i pane-optionen `@nerdr-sett`
-i tmux. Den forsvinner med panen, og det en Claude blir ferdig med mens nerdr
-er lukket, venter på deg neste gang.
 
 ### Starte og fortsette
 
@@ -173,8 +199,8 @@ husker det i `@nerdr-utseende`.
 | **ledig** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. |
 | **tittel** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. |
 
-Standard er farge på, vanlig plass, ordnet som nerdr med de ledige under, og
-én linje til oppgaven. `ledig` gjelder bare nerdr, og `tittel` gjelder ikke
+Standard er linjer mellom panene, farge på, vanlig plass, ordnet som nerdr med
+de ledige under, og én linje til oppgaven. `ledig` gjelder bare nerdr, og `tittel` gjelder ikke
 minimal. `nerdr liste` er alltid ordnet som nerdr.
 
 ## Innstillinger
