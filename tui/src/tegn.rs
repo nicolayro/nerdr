@@ -19,7 +19,7 @@ use crate::palett::{Rgb, bland};
 use crate::grupper::{Del, Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
-use crate::tekst::{med_tilde, varighet};
+use crate::tekst::varighet;
 use crate::utseende::{self, Ledig, Orden, Plass, Sti, Topp, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
@@ -35,7 +35,7 @@ pub const STRIPE: u16 = 4;
 /// aldri færre rader enn dette.
 const MENY_RADER: u16 = 13;
 const HANDLINGER_BREDDE: u16 = 56;
-const VELGER_BREDDE: u16 = 64;
+const VELGER_BREDDE: u16 = 100;
 const UTSEENDE_BREDDE: u16 = 58;
 /// Forklaringen nederst i konfigurasjonen har alltid så mange linjer, så
 /// menyen ikke endrer høyde når du går opp og ned.
@@ -912,11 +912,19 @@ fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize, mu
     }
 }
 
+/// Rammen, søkefeltet og streken under det.
+const OVER_TREFFENE: u16 = 3;
+
 /// Boksen til handlingene eller velgeren, og hvor mange treff den har plass til.
 fn menyboks(område: Rect, bredde: u16) -> Option<(Rect, usize)> {
-    let rader = (område.height * 2 / 3).saturating_sub(3).max(MENY_RADER);
-    let boks = midt_på(område, bredde, rader + 3)?;
-    Some((boks, boks.height.saturating_sub(3) as usize))
+    let rader = (område.height * 2 / 3).saturating_sub(OVER_TREFFENE + 1).max(MENY_RADER);
+    let boks = midt_på(område, bredde, rader + OVER_TREFFENE + 1)?;
+    Some((boks, boks.height.saturating_sub(OVER_TREFFENE + 1) as usize))
+}
+
+fn søkestrek(buf: &mut Buffer, boks: Rect) {
+    let strek = format!("├{}┤", "─".repeat(boks.width as usize - 2));
+    buf.set_string(boks.x, boks.y + 2, strek, Style::new().fg(ORANSJE));
 }
 
 pub fn menyrader(app: &App) -> usize {
@@ -947,7 +955,7 @@ pub fn meny_rad_på(app: &App, x: u16, y: u16) -> Option<usize> {
     if !(boks.x + 1..boks.right() - 1).contains(&x) {
         return None;
     }
-    let rad = y.checked_sub(boks.y + 2)? as usize;
+    let rad = y.checked_sub(boks.y + OVER_TREFFENE)? as usize;
     (rad < rader && rull + rad < antall).then_some(rull + rad)
 }
 
@@ -985,6 +993,7 @@ fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger, mus
     let Some(boks) = boks(buf, område, plass.width, plass.height, "handlinger", "⏎ kjør · klikk · esc lukk") else {
         return (0, 0);
     };
+    søkestrek(buf, boks);
     let indre = (boks.width - 4) as usize;
     let treff = handlinger.treff();
     let (x, y) = (boks.x + 2, boks.y + 1);
@@ -995,7 +1004,7 @@ fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger, mus
 
     let fra = handlinger.rull;
     for (i, (k, tegn)) in treff.iter().enumerate().skip(fra).take(linjer) {
-        let y = boks.y + 2 + (i - fra) as u16;
+        let y = boks.y + OVER_TREFFENE + (i - fra) as u16;
         let valgt = i == handlinger.valgt;
         menyrad(buf, boks, y, valgt, mus == Some(&Mål::Rad(i)));
         let bredde = k.tast.chars().count();
@@ -1020,6 +1029,7 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger, mus: Option<&M�
     let Some(boks) = boks(buf, område, plass.width, plass.height, tittel, hint) else {
         return (0, 0);
     };
+    søkestrek(buf, boks);
     let bredde = boks.width;
     let indre = (bredde - 4) as usize;
 
@@ -1031,20 +1041,15 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger, mus: Option<&M�
     let etter = buf.set_stringn(x, y, prompt, indre, Style::new().fg(ORANSJE)).0;
     let markør = buf.set_stringn(etter, y, &søk, indre, VANLIG).0;
     let søker = if velger.søker && !velger.fortsett { " …" } else { "" };
-    let tomt = søk.is_empty() && !velger.fortsett;
-    let antall = match tomt {
+    let antall = match søk.is_empty() && !velger.fortsett {
         true => format!("{}{søker}", velger.antall()),
         false => format!("{}/{}{søker}", treff.len(), velger.antall()),
     };
     buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
-    if tomt {
-        let under = velger.røtter().iter().map(|r| med_tilde(r)).collect::<Vec<_>>().join(", ");
-        buf.set_stringn(x, y + 1, format!("skriv for å søke i mappene under {under}"), indre, SVAK);
-    }
 
     let fra = velger.rull;
     for (i, t) in treff.iter().enumerate().skip(fra).take(linjer) {
-        let y = boks.y + 2 + (i - fra) as u16;
+        let y = boks.y + OVER_TREFFENE + (i - fra) as u16;
         let valgt = i == velger.valgt;
         menyrad(buf, boks, y, valgt, mus == Some(&Mål::Rad(i)));
         let stil = if valgt { STERK } else { VANLIG };

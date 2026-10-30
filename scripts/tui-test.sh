@@ -321,16 +321,17 @@ klikk 2 2
 sjekk "et klikk utenfor lukker dem også" mangler '⏎ kjør'
 
 klikk 3 16
-sjekk "klikk på «+ ny sesjon» åpner popupen uten treff" linje_har 4 'skriv for å søke i mappene under ~/git, ~/kode'
+sjekk "klikk på «+ ny sesjon» åpner popupen med en strek under søkefeltet" linje_har 4 '├─+┤'
+sjekk "og uten treff" linje_har 5 '│ +│ +│$'
 sjekk "og 6 mapper: de 2 du har brukt, og 4 under mappene, uten node_modules" linje_har 3 'mappe › +6 │'
 tast -l an
 sjekk "«an» treffer annet og de 2 under" linje_har 3 'mappe › an .*3/6'
-sjekk "~/git/annet står først og er valgt" linje_har 4 '▎~/git/annet +│'
-sjekk "og prosjektet i annet" linje_har 6 '~/git/annet/apps/web +│'
+sjekk "~/git/annet står først og er valgt" linje_har 5 '▎~/git/annet +│'
+sjekk "og prosjektet i annet" linje_har 7 '~/git/annet/apps/web +│'
 tast C-u
 tast -l pny
 sjekk "«pny» treffer bare prosjekt.ny" linje_har 3 'mappe › pny .*1/6'
-sjekk "prosjekt.ny er valgt" linje_har 4 '▎~/git/prosjekt\.ny'
+sjekk "prosjekt.ny er valgt" linje_har 5 '▎~/git/prosjekt\.ny'
 
 tast Enter
 sjekk "Enter lager sesjonen prosjekt-ny i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny
@@ -355,7 +356,7 @@ sjekk "nerdr er inne i den nye sesjonen" i_panen
 tast C-b r
 sjekk "C-b r viser samtalene" linje_har 2 'hent samtale'
 sjekk "bare samtalen med meldinger, 1/1" linje_har 3 '1/1'
-sjekk "annet  Fiks testene er valgt" linje_har 4 '▎annet  Fiks testene +<1m'
+sjekk "annet  Fiks testene er valgt" linje_har 5 '▎annet  Fiks testene +<1m'
 tast C-r
 sjekk "C-r bytter til mappene" linje_har 2 'ny sesjon'
 tast C-r
