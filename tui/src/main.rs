@@ -178,6 +178,8 @@ struct App {
     /// Panen du er inne i, og plassen den hadde da du gikk inn. Den blir stående
     /// der i delen til du går ut, så kortet ikke flytter seg for hver melding.
     låst: Option<(String, Plass)>,
+    /// Prosjektene som er brettet sammen, når lista er ordnet etter mappe.
+    brettet: HashSet<String>,
 
     /// Claude-en som er valgt i lista, og som vises til høyre.
     valgt: Option<Pane>,
@@ -397,6 +399,7 @@ impl App {
             repoer: HashMap::new(),
             sett: HashMap::new(),
             låst: None,
+            brettet: HashSet::new(),
             valgt: None,
             peker: None,
             liste_bredde: tegn::LISTE,
@@ -1255,20 +1258,33 @@ impl App {
             }
             return self.markering.take().is_some();
         }
-        // Bokstaver i lista gjør ingenting utenom j og k, som i choose-tree i
-        // tmux, så den som ikke er vant til moduser, ikke trykker på noe uten
-        // å vite det.
+        // Bokstaver i lista gjør ingenting utenom h, j, k og l, som pilene, så
+        // den som ikke er vant til moduser, ikke trykker på noe uten å vite det.
         match k.code {
             KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.ferdig = Some(String::new())
             }
             KeyCode::Up | KeyCode::Char('k') => self.flytt(-1),
             KeyCode::Down | KeyCode::Char('j') => self.flytt(1),
+            KeyCode::Left | KeyCode::Char('h') => return self.brett(true),
+            KeyCode::Right | KeyCode::Char('l') => return self.brett(false),
+            KeyCode::Enter if self.valgt_prosjekt().is_some_and(|p| self.brettet.contains(&p)) => return self.brett(false),
             KeyCode::Enter => self.gå_inn(),
             KeyCode::Esc if self.valgt.is_some() => self.bytt_fokus(Fokus::Pane),
             _ => return false,
         }
         true
+    }
+
+    /// Prosjektet til kortet som er markert, når lista er ordnet etter mappe.
+    fn valgt_prosjekt(&self) -> Option<String> {
+        let id = self.markert().filter(|_| self.utseende.orden == Orden::Mappe)?;
+        self.claude_paner.iter().find(|p| p.id == id).map(|p| self.prosjekt(p))
+    }
+
+    fn brett(&mut self, sammen: bool) -> bool {
+        let Some(prosjekt) = self.valgt_prosjekt() else { return false };
+        if sammen { self.brettet.insert(prosjekt) } else { self.brettet.remove(&prosjekt) }
     }
 
     fn kjør_valgt_handling(&mut self) {
@@ -1639,6 +1655,12 @@ impl App {
                 self.lukk_sesjon(&pane);
                 return true;
             }
+            if let Some(prosjekt) = tegn::prosjekt_på(self, m.row) {
+                if !self.brettet.remove(&prosjekt) {
+                    self.brettet.insert(prosjekt);
+                }
+                return true;
+            }
             let ute = self.fokus == Fokus::Pane;
             // Kortet slås opp før låsen tas bort, ellers kan kortene ha flyttet
             // seg under klikket.
@@ -1889,16 +1911,41 @@ impl App {
         let paner = &self.claude_paner;
         match self.utseende.orden {
             Orden::Nerdr => grupper::rader(paner, |p| self.plass(p)),
-            Orden::Mappe => grupper::etter_mappe(paner, |p| Some((self.plass(p)?.merke, self.sted(p)))),
+            Orden::Mappe => {
+                grupper::etter_mappe(paner, &self.brettet, |p| Some((self.plass(p)?.merke, self.prosjekt(p))))
+            }
             Orden::Aktivitet => grupper::etter_aktivitet(paner, |p| self.plass(p)),
         }
     }
 
     /// Repoet panen jobber i, eller mappa når den ikke er i et repo.
     fn sted(&self, pane: &Pane) -> String {
+        tekst::sted(pane, self.mappe(pane), self.repoer.get(&pane.id))
+    }
+
+    fn mappe(&self, pane: &Pane) -> Option<&std::path::Path> {
         let ny = self.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
-        let mappe = self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny);
-        tekst::sted(pane, mappe, self.repoer.get(&pane.id))
+        self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny)
+    }
+
+    /// Stien til repoet panen jobber i, så et worktree hører til repoet det
+    /// er laget fra, og to repoer med samme navn er to prosjekter.
+    fn prosjekt(&self, pane: &Pane) -> String {
+        match (self.repoer.get(&pane.id), self.mappe(pane)) {
+            (Some(repo), _) => tekst::med_tilde(&repo.rot),
+            (None, Some(mappe)) => tekst::med_tilde(mappe),
+            (None, None) => self.sted(pane),
+        }
+    }
+
+    /// Hvor panen jobber, når det ikke er i mappa til prosjektet: stien inne
+    /// i repoet, eller hele stien til et worktree.
+    fn undermappe(&self, pane: &Pane) -> Option<String> {
+        let (repo, mappe) = (self.repoer.get(&pane.id)?, self.mappe(pane)?);
+        if mappe == repo.rot {
+            return None;
+        }
+        Some(mappe.strip_prefix(&repo.rot).map_or_else(|_| tekst::med_tilde(mappe), |inne| inne.display().to_string()))
     }
 
     fn i_rekkefølge(&self) -> Vec<Pane> {
@@ -1907,6 +1954,11 @@ impl App {
             .into_iter()
             .filter_map(|r| match r {
                 Rad::Pane(p, _) => Some(p.clone()),
+                // Pekeren står for prosjektet, så du kan flytte deg forbi det.
+                Rad::Brettet(_, paner) => {
+                    let valgt = paner.iter().find(|(p, _)| self.peker.as_ref() == Some(&p.id));
+                    valgt.or(paner.first()).map(|(p, _)| (*p).clone())
+                }
                 _ => None,
             })
             .collect()

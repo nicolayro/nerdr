@@ -69,7 +69,7 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
     }
     for rad in &rader {
         match rad {
-            Rad::Tom => ut.push('\n'),
+            Rad::Tom | Rad::Brettet(..) => ut.push('\n'),
             Rad::Overskrift(o) => ut += &format!("{}\n", o.tittel()),
             Rad::Pane(p, m) => {
                 let mappe = claude.get(&p.id).and_then(|c| c.mappe.as_deref());

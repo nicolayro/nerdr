@@ -216,16 +216,19 @@ ikke gjelder.
 | --- | --- |
 | **ramme** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
 | **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
+| **ulest** | Fargen til det som er ferdig og ikke sett. `oransje` er som det som spør, og `blå` skiller dem. Bare med farge. |
 | **kortdesign** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
 | **oppgave** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. Bare med `vanlig`. |
-| **sortering** | `prioritert` deler lista i aktive og ledige. `prosjekt` har en gruppe for hvert repo, i alfabetisk rekkefølge, og Claude-ene i hver står der de er i tmux. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. Et klikk på sorteringen øverst til høyre i lista bytter til neste. |
+| **sortering** | `prioritert` deler lista i aktive og ledige. `prosjekt` har en gruppe for hvert repo, og både repoene og Claude-ene i dem står i den rekkefølgen de ble startet. `←` og `→`, eller `h` og `l`, bretter repoet sammen og ut. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. Et klikk på sorteringen øverst til høyre i lista bytter til neste. |
+| **overskrift** | Repoet over Claude-ene: på en `rad` med bakgrunn, eller med en `strek` bort til skillelinja. Bare med `prosjekt`. |
 | **ledige** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. Bare med `prioritert`. |
 
-Standard er linjer mellom panene, farge på, vanlig kortdesign, én linje til
-oppgaven, og sortert prioritert med de ledige under. `nerdr liste` er alltid
-sortert prioritert. I `@nerdr-utseende` står valgene med navnene de hadde
-først: `paner`, `farge`, `plass`, `tittel`, `orden` med `nerdr`, `mappe` og
-`aktivitet`, og `ledig`.
+Standard er linjer mellom panene, farge på med ulest i oransje, vanlig
+kortdesign, én linje til oppgaven, og sortert prioritert med de ledige under.
+Sortert etter prosjekt har repoet en strek. `nerdr liste` er alltid sortert
+prioritert. I `@nerdr-utseende` står valgene med navnene de hadde først:
+`paner`, `farge`, `plass`, `tittel`, `orden` med `nerdr`, `mappe` og
+`aktivitet`, `ledig`, og `topp` for overskriften.
 
 ## Innstillinger
 

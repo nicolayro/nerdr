@@ -20,7 +20,7 @@ use crate::grupper::{Del, Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::tekst::varighet;
-use crate::utseende::{self, Ledig, Orden, Plass, Utseende};
+use crate::utseende::{self, Ledig, Orden, Plass, Topp, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
@@ -48,6 +48,9 @@ const ORANSJE: Color = Color::Rgb(ORANSJE_RGB.0, ORANSJE_RGB.1, ORANSJE_RGB.2);
 const GRØNN: Color = Color::Indexed(108);
 /// Fargen 108 i 256-paletten, til å blande toner av.
 const GRØNN_RGB: Rgb = (135, 175, 135);
+const BLÅ: Color = Color::Indexed(110);
+/// Fargen 110 i 256-paletten.
+const BLÅ_RGB: Rgb = (135, 175, 215);
 // Gråtonene i 256-paletten er faste og følger ikke fargetemaet, så teksten har
 // standardfargen til terminalen og skiller seg bare med fet og svak.
 const STERK: Style = Style::new().add_modifier(Modifier::BOLD);
@@ -58,6 +61,7 @@ const SVAK: Style = Style::new().add_modifier(Modifier::DIM);
 /// musen står.
 const MARKERT_ANDEL: f32 = 0.12;
 const UNDER_MUSEN_ANDEL: f32 = 0.06;
+const OVERSKRIFT_ANDEL: f32 = 0.08;
 
 /// Forgrunns- og bakgrunnsfargen til terminalen.
 static FARGER: OnceLock<Option<(Rgb, Rgb)>> = OnceLock::new();
@@ -83,6 +87,10 @@ fn tonet(farge: Option<Rgb>, andel: f32) -> Option<Color> {
 /// terminalen står de uten bakgrunn, med peker og fet tekst.
 fn markert() -> Style {
     tonet(None, MARKERT_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
+}
+
+fn overskrift_bakgrunn() -> Style {
+    tonet(None, OVERSKRIFT_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
 
 fn under_musen() -> Style {
@@ -142,15 +150,34 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let (rader, utsnitt) = liste(app);
     let vis = utsnitt.rader();
     let på_skjermen = |y: u16| u16::try_from(utsnitt.skjerm(y)).ok().filter(|y| vis.contains(y));
+    let rad_bakgrunn = (på_egen_rad(app) && app.utseende.topp == Topp::Rad).then(overskrift_bakgrunn);
+    let med_strek = på_egen_rad(app) && app.utseende.topp == Topp::Strek;
     for Plassert { y, rad, kort, .. } in &rader {
         match rad {
             Rad::Tom => {}
+            Rad::Overskrift(_) if kort.is_some() => {
+                let kort = kort.as_deref().unwrap_or_default();
+                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, rad_bakgrunn);
+                if med_strek && let Some(y) = på_skjermen(*y) {
+                    overskrifter.push(y);
+                }
+            }
             Rad::Overskrift(o) => {
                 if let Some(y) = på_skjermen(*y)
                     && kort::overskrift(app.utseende, buf, y, bredde, o, stripe(app))
                 {
                     overskrifter.push(y);
                 }
+            }
+            Rad::Brettet(_, paner) => {
+                let Some(kort) = kort else { continue };
+                let bakgrunn = match () {
+                    _ if app.fokus == Fokus::Liste && paner.iter().any(|(p, _)| app.peker.as_ref() == Some(&p.id)) => {
+                        Some(markert())
+                    }
+                    _ => rad_bakgrunn,
+                };
+                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, bakgrunn);
             }
             Rad::Pane(pane, _) => {
                 let Some(kort) = kort else { continue };
@@ -208,11 +235,15 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     // Overskriftene treffer skillestreken. Når lista ruller, står pilen i den
     // øverste raden, på høyde med fanene.
     if utsnitt.ruller {
-        let kort = |p: &&Plassert| matches!(p.rad, Rad::Pane(..));
+        let kort = |p: &&Plassert| matches!(p.rad, Rad::Pane(..) | Rad::Brettet(..));
         let mut over = rader.iter().filter(kort).filter(|p| p.y + p.høyde <= utsnitt.rull).peekable();
         let under = rader.iter().filter(kort).any(|p| p.y >= utsnitt.rull + utsnitt.rom);
         if over.peek().is_some() {
-            let venter = over.any(|p| matches!(p.rad, Rad::Pane(_, m) if m.gruppe() == Gruppe::Venter));
+            let venter = over.any(|p| match &p.rad {
+                Rad::Pane(_, m) => m.gruppe() == Gruppe::Venter,
+                Rad::Brettet(_, paner) => paner.iter().any(|(_, m)| m.gruppe() == Gruppe::Venter),
+                _ => false,
+            });
             let stil = match (venter, app.utseende.farge) {
                 (false, _) => SVAK,
                 (true, utseende::Farge::På) => Style::new().fg(ORANSJE),
@@ -271,6 +302,12 @@ fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     buf.set_stringn(0, y, format!("{hint} "), bredde as usize, VANLIG);
 }
 
+/// Prosjektet står på en rad for seg over kortene.
+fn på_egen_rad(app: &App) -> bool {
+    let u = app.utseende;
+    u.orden == Orden::Mappe && !stripe(app)
+}
+
 fn er_valgt(app: &App, pane: &Pane) -> bool {
     app.valgt.as_ref().is_some_and(|v| v.id == pane.id)
 }
@@ -290,6 +327,7 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
         tid,
         starter: app.nye.contains_key(&pane.id),
         sted_over: app.utseende.orden == Orden::Mappe,
+        undermappe: if app.utseende.orden == Orden::Mappe { app.undermappe(pane) } else { None },
     };
     kort::kort(app.utseende, &info, liste_bredde(app) - 1, er_valgt(app, pane), stripe(app))
 }
@@ -320,13 +358,28 @@ struct Plassert<'a> {
 fn plasser(app: &App) -> Vec<Plassert<'_>> {
     let mut y = 0;
     let midten = app.utseende.ledig == Ledig::Midten && app.utseende.orden == Orden::Nerdr;
+    let u = app.utseende;
+    let bredde = liste_bredde(app) - 1;
+    let på_rad = på_egen_rad(app);
     kort::ordne(app.rader())
         .into_iter()
         .map(|rad| {
             if midten && rad == Rad::Overskrift(Overskrift::Del(Del::Ledige)) {
                 y = y.max(plass(app) / 2);
             }
-            let kort = if let Rad::Pane(pane, merke) = rad { Some(kort(app, pane, merke)) } else { None };
+            let kort = match &rad {
+                Rad::Pane(pane, merke) => Some(kort(app, pane, *merke)),
+                Rad::Overskrift(Overskrift::Mappe(navn)) if på_rad => Some(vec![kort::prosjektrad(u, navn, &[], bredde, false, false)]),
+                Rad::Brettet(navn, paner) => {
+                    let merker: Vec<Merke> = paner.iter().map(|(_, m)| *m).collect();
+                    let valgt = paner.iter().any(|(p, _)| er_valgt(app, p));
+                    Some(vec![match på_rad {
+                        true => kort::prosjektrad(u, navn, &merker, bredde, true, valgt),
+                        false => kort::brettet_stripe(u, &merker, valgt),
+                    }])
+                }
+                _ => None,
+            };
             let høyde = kort.as_ref().map_or(1, |k| k.len() as u16);
             let plassert = Plassert { y, høyde, rad, kort };
             y += høyde;
@@ -398,7 +451,13 @@ impl Utsnitt {
 /// når den er den første i gruppen.
 pub fn utsnitt(app: &App) -> (Utsnitt, Option<Range<u16>>) {
     let (rader, utsnitt) = liste(app);
-    let i = app.markert().and_then(|id| rader.iter().position(|p| matches!(p.rad, Rad::Pane(pane, _) if pane.id == id)));
+    let i = app.markert().and_then(|id| {
+        rader.iter().position(|p| match &p.rad {
+            Rad::Pane(pane, _) => pane.id == id,
+            Rad::Brettet(_, paner) => paner.iter().any(|(pane, _)| pane.id == id),
+            _ => false,
+        })
+    });
     let valgt = i.map(|i| {
         let p = &rader[i];
         let topp = match i.checked_sub(1).map(|f| &rader[f]) {
@@ -416,6 +475,16 @@ pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
     let y = utsnitt.i_lista(y)?;
     rader.into_iter().find_map(|p| match p.rad {
         Rad::Pane(pane, _) if (p.y..p.y + p.høyde).contains(&y) => Some(pane.clone()),
+        _ => None,
+    })
+}
+
+/// Prosjektet med overskriften, eller som er brettet sammen, på rad `y`.
+pub fn prosjekt_på(app: &App, y: u16) -> Option<String> {
+    let (rader, utsnitt) = liste(app);
+    let y = utsnitt.i_lista(y)?;
+    rader.into_iter().find_map(|p| match p.rad {
+        Rad::Overskrift(Overskrift::Mappe(navn)) | Rad::Brettet(navn, _) if p.y == y => Some(navn),
         _ => None,
     })
 }

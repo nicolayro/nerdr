@@ -37,6 +37,24 @@ pub enum Ledig {
     Midten,
 }
 
+/// Fargen til det som er ferdig og ikke sett.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Ulestfarge {
+    /// Som det som spør.
+    Oransje,
+    Blå,
+}
+
+/// Hvordan prosjektet står over Claude-ene, når lista er sortert etter
+/// prosjekt.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Topp {
+    /// En rad med bakgrunn.
+    Rad,
+    /// En strek fra navnet til skillelinja.
+    Strek,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Utseende {
     pub paner: Rammer,
@@ -46,58 +64,79 @@ pub struct Utseende {
     pub ledig: Ledig,
     /// Linjer til tittelen i boksene.
     pub tittel: usize,
+    pub ulest: Ulestfarge,
+    pub topp: Topp,
 }
 
 /// Står i `OPTION` foran verdien, som `farge=på`, så en akse kan komme til
 /// eller forsvinne uten at de andre leses feil.
-pub const AKSER: [&str; 6] = ["paner", "farge", "plass", "orden", "ledig", "tittel"];
+pub const AKSER: [&str; 8] = ["paner", "farge", "plass", "orden", "ledig", "tittel", "ulest", "topp"];
 pub const ORDEN: usize = 3;
 const LEDIG: usize = 4;
+const ULEST: usize = 6;
+const TOPP: usize = 7;
 /// Aksene fra denne gjelder bare boksene.
 pub const BOKSAKSER: usize = 5;
 /// Står i `OPTION`, og endres ikke.
-const VERDIER: [&[&str]; 6] = [
+const VERDIER: [&[&str]; 8] = [
     &["bokser", "linjer"],
     &["av", "på"],
     &["vanlig", "minimal"],
     &["nerdr", "mappe", "aktivitet"],
     &["under", "midten"],
     &["1", "2", "3"],
+    &["oransje", "blå"],
+    &["rad", "strek"],
 ];
 /// Det sorteringen heter i menyen og på knappen, som `VERDIER` for orden.
 pub const SORTERINGER: [&str; 3] = ["prioritert", "prosjekt", "aktivitet"];
 /// Navnene i menyen, i samme rekkefølge som `AKSER`.
-const I_MENYEN: [&str; 6] = ["ramme", "farge", "kortdesign", "sortering", "ledige", "oppgave"];
+const I_MENYEN: [&str; 8] = ["ramme", "farge", "kortdesign", "sortering", "ledige", "oppgave", "ulest", "overskrift"];
 /// Rekkefølgen i menyen, under overskriften. Et valg som bare gjelder for
 /// valget over, står rett under det.
-pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Liste", &[1, 2, 5, 3, 4])];
+pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Liste", &[1, 6, 2, 5, 3, 7, 4])];
 /// Står nederst i menyen for valget du står på, i samme rekkefølge som `AKSER`.
-pub const FORKLARING: [&str; 6] = [
+pub const FORKLARING: [&str; 8] = [
     "Bokser gir hver pane en ramme med luft rundt. Linjer lar panene fylle visningen, med streker mellom.",
     "Tegnet og tiden får fargen til gruppen, og rammene en tone av den.",
     "Vanlig har en boks for hver sesjon. Minimal har én linje for hver.",
     "Prioritert har de aktive øverst. Prosjekt grupperer etter repo. Aktivitet har den som sist endret seg, øverst.",
     "Om de ledige står rett under de aktive, eller fra midten, så de ikke flytter seg.",
     "Hvor mange linjer oppgaven får i kortet.",
+    "Fargen til det som er ferdig og ikke sett. Oransje er som det som spør, og blå skiller dem.",
+    "Prosjektet over sesjonene, på en rad med bakgrunn eller med en strek bort til skillelinja.",
 ];
 /// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
-pub const NAVN: [&[&str]; 6] = [
+pub const NAVN: [&[&str]; 8] = [
     &["paner i bokser", "paner med linjer"],
     &["uten farge", "med farge"],
     &["vanlig liste", "minimal liste"],
     &["sorter prioritert", "sorter etter prosjekt", "sorter etter aktivitet"],
     &["ledige under de aktive", "ledige fra midten"],
     &["oppgaven på 1 linje", "oppgaven på 2 linjer", "oppgaven på 3 linjer"],
+    &["ulest i oransje", "ulest i blått"],
+    &["prosjektet på en rad", "prosjektet med strek"],
 ];
 const PANER: [Rammer; 2] = [Rammer::Bokser, Rammer::Linjer];
 const FARGER: [Farge; 2] = [Farge::Av, Farge::På];
 const PLASSER: [Plass; 2] = [Plass::Vanlig, Plass::Minimal];
 const ORDNER: [Orden; 3] = [Orden::Nerdr, Orden::Mappe, Orden::Aktivitet];
 const LEDIGE: [Ledig; 2] = [Ledig::Under, Ledig::Midten];
+const ULESTFARGER: [Ulestfarge; 2] = [Ulestfarge::Oransje, Ulestfarge::Blå];
+const TOPPER: [Topp; 2] = [Topp::Rad, Topp::Strek];
 
 impl Utseende {
     pub fn ny(paner: Rammer) -> Utseende {
-        Utseende { paner, farge: Farge::På, plass: Plass::Vanlig, orden: Orden::Nerdr, ledig: Ledig::Under, tittel: 1 }
+        Utseende {
+            paner,
+            farge: Farge::På,
+            plass: Plass::Vanlig,
+            orden: Orden::Nerdr,
+            ledig: Ledig::Under,
+            tittel: 1,
+            ulest: Ulestfarge::Oransje,
+            topp: Topp::Strek,
+        }
     }
 
     /// Navnet på aksen og verdiene i menyen.
@@ -125,7 +164,9 @@ impl Utseende {
             2 => PLASSER.iter().position(|p| *p == self.plass),
             3 => ORDNER.iter().position(|o| *o == self.orden),
             4 => LEDIGE.iter().position(|l| *l == self.ledig),
-            _ => Some(self.tittel - 1),
+            5 => Some(self.tittel - 1),
+            6 => ULESTFARGER.iter().position(|f| *f == self.ulest),
+            _ => TOPPER.iter().position(|t| *t == self.topp),
         };
         i.unwrap_or(0)
     }
@@ -137,7 +178,9 @@ impl Utseende {
             2 => self.plass = PLASSER[i],
             3 => self.orden = ORDNER[i],
             4 => self.ledig = LEDIGE[i],
-            _ => self.tittel = i + 1,
+            5 => self.tittel = i + 1,
+            6 => self.ulest = ULESTFARGER[i],
+            _ => self.topp = TOPPER[i],
         }
     }
 
@@ -147,10 +190,13 @@ impl Utseende {
         self.sett(akse, (self.indeks(akse) as i32 + steg).rem_euclid(antall) as usize);
     }
 
-    /// Minimal har ingen bokser å velge for, og bare prioritert har ledige.
+    /// Minimal har ingen bokser å velge for, bare prioritert har ledige, og
+    /// bare prosjekt har overskrifter for prosjektene.
     pub fn gjelder(&self, akse: usize) -> bool {
         match akse {
             LEDIG => self.orden == Orden::Nerdr,
+            ULEST => self.farge == Farge::På,
+            TOPP => self.orden == Orden::Mappe,
             _ => akse < BOKSAKSER || self.plass != Plass::Minimal,
         }
     }
@@ -181,7 +227,7 @@ mod tester {
         u.endre(1, 1);
         u.endre(2, 1);
         u.endre(3, -1);
-        assert_eq!(u.tekst(), "paner=bokser farge=av plass=minimal orden=aktivitet ledig=under tittel=1");
+        assert_eq!(u.tekst(), "paner=bokser farge=av plass=minimal orden=aktivitet ledig=under tittel=1 ulest=oransje topp=strek");
         let mut lest = Utseende::ny(Rammer::Linjer);
         lest.les(&u.tekst());
         assert_eq!(lest, u);
@@ -197,10 +243,10 @@ mod tester {
     #[test]
     fn menyen_viser_bare_valg_som_gjelder() {
         let mut u = Utseende::ny(Rammer::Linjer);
-        assert_eq!(u.synlige(), [0, 1, 2, 5, 3, 4]);
+        assert_eq!(u.synlige(), [0, 1, 6, 2, 5, 3, 4]);
         u.plass = Plass::Minimal;
         u.orden = Orden::Mappe;
-        assert_eq!(u.synlige(), [0, 1, 2, 3]);
+        assert_eq!(u.synlige(), [0, 1, 6, 2, 3, 7]);
         assert_eq!(u.nabo(2, 1), 3);
         assert_eq!(u.nabo(0, -1), 0);
     }

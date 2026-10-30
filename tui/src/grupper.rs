@@ -2,14 +2,19 @@
 //! under. Lista kan også grupperes etter mappe, eller stå etter når
 //! Claude-ene sist gjorde noe.
 
+use std::collections::HashSet;
+
 use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::paner::Pane;
+
 
 #[derive(Debug, PartialEq)]
 pub enum Rad<'a> {
     Tom,
     Overskrift(Overskrift),
     Pane(&'a Pane, Merke),
+    /// Et prosjekt brettet sammen til én rad.
+    Brettet(String, Vec<(&'a Pane, Merke)>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -91,12 +96,42 @@ pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> V
     med_overskrifter(plassert.into_iter().map(|(p, pl)| (p, pl.merke, Some(Overskrift::Del(pl.del)))))
 }
 
-/// En gruppe for hver mappe, i alfabetisk rekkefølge, og panene i hver i
-/// rekkefølgen fra tmux, så ingen flytter seg når tilstanden endres.
-pub fn etter_mappe<'a>(paner: &'a [Pane], mappe: impl Fn(&Pane) -> Option<(Merke, String)>) -> Vec<Rad<'a>> {
+/// En gruppe for hver mappe, og panene i hver i den rekkefølgen de ble laget,
+/// så ingen flytter seg når tilstanden endres. Et prosjekt i `brettet` er én
+/// rad.
+pub fn etter_mappe<'a>(
+    paner: &'a [Pane],
+    brettet: &HashSet<String>,
+    mappe: impl Fn(&Pane) -> Option<(Merke, String)>,
+) -> Vec<Rad<'a>> {
     let mut plassert: Vec<(&Pane, Merke, String)> = paner.iter().filter_map(|p| mappe(p).map(|(m, navn)| (p, m, navn))).collect();
-    plassert.sort_by_cached_key(|(_, _, navn)| navn.to_lowercase());
-    med_overskrifter(plassert.into_iter().map(|(p, m, navn)| (p, m, Some(Overskrift::Mappe(navn)))))
+    plassert.sort_by_key(|(p, _, _)| nummer(p));
+    let mut mapper: Vec<(String, Vec<(&Pane, Merke)>)> = Vec::new();
+    for (pane, merke, navn) in plassert {
+        match mapper.iter_mut().find(|(n, _)| *n == navn) {
+            Some((_, paner)) => paner.push((pane, merke)),
+            None => mapper.push((navn, vec![(pane, merke)])),
+        }
+    }
+    let mut rader = Vec::new();
+    for (i, (navn, paner)) in mapper.into_iter().enumerate() {
+        if i > 0 {
+            rader.push(Rad::Tom);
+        }
+        if brettet.contains(&navn) {
+            rader.push(Rad::Brettet(navn, paner));
+        } else {
+            rader.push(Rad::Overskrift(Overskrift::Mappe(navn)));
+            rader.extend(paner.into_iter().map(|(p, m)| Rad::Pane(p, m)));
+        }
+    }
+    rader
+}
+
+/// tmux teller opp pane-id-en for hver nye pane, så den sier hvilken som ble
+/// laget først.
+fn nummer(pane: &Pane) -> u64 {
+    pane.id.trim_start_matches('%').parse().unwrap_or(u64::MAX)
 }
 
 /// Én gruppe, med den som sist endret tilstand, øverst. En som ikke har
@@ -189,21 +224,51 @@ mod tester {
     }
 
     #[test]
-    fn mappene_i_alfabetisk_rekkefølge_og_panene_som_i_tmux() {
+    fn en_overskrift_for_hver_mappe() {
         let paner = [pane("%1"), pane("%2"), pane("%3")];
-        let rader = etter_mappe(&paner, |p| match p.id.as_str() {
+        let rader = etter_mappe(&paner, &HashSet::new(), |p| match p.id.as_str() {
             "%2" => Some((Merke::Spør, "dotfiles".into())),
             _ => Some((Merke::Sett, "Nerdr".into())),
         });
         assert_eq!(
             rader,
             [
-                Rad::Overskrift(Overskrift::Mappe("dotfiles".into())),
-                Rad::Pane(&paner[1], Merke::Spør),
-                Rad::Tom,
                 Rad::Overskrift(Overskrift::Mappe("Nerdr".into())),
                 Rad::Pane(&paner[0], Merke::Sett),
                 Rad::Pane(&paner[2], Merke::Sett),
+                Rad::Tom,
+                Rad::Overskrift(Overskrift::Mappe("dotfiles".into())),
+                Rad::Pane(&paner[1], Merke::Spør),
+            ]
+        );
+    }
+
+    #[test]
+    fn prosjektene_og_panene_i_den_rekkefølgen_de_ble_laget() {
+        let paner = [pane("%12"), pane("%3"), pane("%7")];
+        let rader = etter_mappe(&paner, &HashSet::new(), |p| match p.id.as_str() {
+            "%7" => Some((Merke::Spør, "nerdr".into())),
+            _ => Some((Merke::Sett, "awl".into())),
+        });
+        assert_eq!(rekkefølge(&rader), ["%3", "%12", "%7"]);
+    }
+
+    #[test]
+    fn et_brettet_prosjekt_er_én_rad() {
+        let paner = [pane("%1"), pane("%2"), pane("%3")];
+        let brettet = HashSet::from(["awl".to_string()]);
+        let rader = etter_mappe(&paner, &brettet, |p| match p.id.as_str() {
+            "%2" => Some((Merke::Spør, "nerdr".into())),
+            "%1" => Some((Merke::Jobber, "awl".into())),
+            _ => Some((Merke::Sett, "awl".into())),
+        });
+        assert_eq!(
+            rader,
+            [
+                Rad::Brettet("awl".into(), vec![(&paner[0], Merke::Jobber), (&paner[2], Merke::Sett)]),
+                Rad::Tom,
+                Rad::Overskrift(Overskrift::Mappe("nerdr".into())),
+                Rad::Pane(&paner[1], Merke::Spør),
             ]
         );
     }

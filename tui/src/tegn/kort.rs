@@ -6,9 +6,10 @@ use nerdr_kjerne::merke::{Gruppe, Merke};
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Style};
 
-use super::{GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVAK, VANLIG, bryt, kutt, tonet};
+use super::{BLÅ, BLÅ_RGB, GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVAK, VANLIG, bryt, kutt, kutt_foran, tonet};
+use crate::palett::Rgb;
 use crate::grupper::{Overskrift, Rad, glyf};
-use crate::utseende::{Farge, Plass, Utseende};
+use crate::utseende::{Farge, Plass, Topp, Ulestfarge, Utseende};
 
 /// Uten glyf foran starter teksten etter pekeren og et mellomrom.
 const INNRYKK: u16 = 2;
@@ -17,6 +18,9 @@ const INNRYKK: u16 = 2;
 const ETTER_GLYF: u16 = INNRYKK + 3;
 /// Tonen av køens farge i rammer og streker.
 const TONE: f32 = 0.5;
+/// Navnet etter trekanten, med to kolonner mellom, fordi mange fonter tegner
+/// trekanten over to.
+const ETTER_PIL: u16 = 4;
 
 pub struct Info {
     pub merke: Merke,
@@ -29,6 +33,8 @@ pub struct Info {
     pub starter: bool,
     /// Lista er gruppert etter mappe, så repoet står i overskriften.
     pub sted_over: bool,
+    /// Under branchen, når Claude-en ikke jobber i mappa til prosjektet.
+    pub undermappe: Option<String>,
 }
 
 pub struct Bit {
@@ -83,6 +89,39 @@ pub fn overskrift(u: Utseende, buf: &mut Buffer, y: u16, bredde: u16, o: &Oversk
     true
 }
 
+/// Prosjektet på en rad for seg. Tegnet til hver Claude i `merker` står til
+/// høyre, som når prosjektet er brettet sammen.
+pub fn prosjektrad(u: Utseende, navn: &str, merker: &[Merke], bredde: u16, brettet: bool, valgt: bool) -> Linje {
+    let slutt = bredde.saturating_sub(2);
+    let start = slutt.saturating_sub(merker.len() as u16 * 3);
+    let pil = if brettet { "▸" } else { "▾" };
+    let plass = start.saturating_sub(ETTER_PIL + 1) as usize;
+    // Stien til prosjektet, med navnet sist og fet.
+    let (foran, navn) = match navn.rsplit_once('/') {
+        Some((foran, navn)) => (format!("{foran}/"), kutt(navn, plass)),
+        None => (String::new(), kutt(navn, plass)),
+    };
+    let foran = kutt_foran(&foran, plass.saturating_sub(self::bredde(&navn) as usize));
+    let mut l = vec![peker(valgt), bit(1, pil, SVAK), bit(ETTER_PIL, foran.clone(), SVAK)];
+    let navn_x = ETTER_PIL + self::bredde(&foran);
+    let etter_navn = navn_x + self::bredde(&navn) + 1;
+    l.push(bit(navn_x, navn, STERK));
+    if u.topp == Topp::Strek {
+        let til = if merker.is_empty() { bredde } else { start };
+        l.push(bit(etter_navn, "─".repeat(til.saturating_sub(etter_navn) as usize), SVAK));
+    }
+    for (n, merke) in merker.iter().enumerate() {
+        l.push(bit(start + 1 + n as u16 * 3, glyf(*merke), glyfstil(u, *merke)));
+    }
+    l
+}
+
+/// Et brettet prosjekt på stripa: tegnet til den som haster mest.
+pub fn brettet_stripe(u: Utseende, merker: &[Merke], valgt: bool) -> Linje {
+    let haster = merker.iter().copied().min_by_key(|m| (m.gruppe(), *m != Merke::Spør)).unwrap_or(Merke::Sett);
+    vec![peker(valgt), bit(1, glyf(haster), stripestil(u, haster))]
+}
+
 /// Linjene i kortet, der `bredde` er lista uten skillelinja. Minimal er én
 /// linje uten boks.
 pub fn kort(u: Utseende, i: &Info, bredde: u16, valgt: bool, stripe: bool) -> Vec<Linje> {
@@ -97,27 +136,29 @@ pub fn kort(u: Utseende, i: &Info, bredde: u16, valgt: bool, stripe: bool) -> Ve
     }
 }
 
-fn farge(gruppe: Gruppe) -> Color {
-    match gruppe {
-        Gruppe::Venter => ORANSJE,
-        Gruppe::Jobber => GRØNN,
-        Gruppe::Ferdig => Color::Reset,
+/// Fargen til tilstanden, og den samme i RGB til tonene. De ledige har ingen.
+fn rgb(u: Utseende, merke: Merke) -> Option<(Color, Rgb)> {
+    match merke.gruppe() {
+        Gruppe::Venter if merke == Merke::Ulest && u.ulest == Ulestfarge::Blå => Some((BLÅ, BLÅ_RGB)),
+        Gruppe::Venter => Some((ORANSJE, ORANSJE_RGB)),
+        Gruppe::Jobber => Some((GRØNN, GRØNN_RGB)),
+        Gruppe::Ferdig => None,
     }
 }
 
-fn tone(gruppe: Gruppe) -> Option<Color> {
-    match gruppe {
-        Gruppe::Venter => tonet(Some(ORANSJE_RGB), TONE),
-        Gruppe::Jobber => tonet(Some(GRØNN_RGB), TONE),
-        Gruppe::Ferdig => None,
-    }
+fn farge(u: Utseende, merke: Merke) -> Color {
+    rgb(u, merke).map_or(Color::Reset, |(c, _)| c)
+}
+
+fn tone(u: Utseende, merke: Merke) -> Option<Color> {
+    rgb(u, merke).and_then(|(_, r)| tonet(Some(r), TONE))
 }
 
 fn glyfstil(u: Utseende, merke: Merke) -> Style {
     match (u.farge, merke.gruppe()) {
         (_, Gruppe::Ferdig) => SVAK,
         (Farge::Av, _) => VANLIG,
-        (Farge::På, g) => Style::new().fg(farge(g)),
+        (Farge::På, _) => Style::new().fg(farge(u, merke)),
     }
 }
 
@@ -125,14 +166,14 @@ fn glyfstil(u: Utseende, merke: Merke) -> Style {
 fn stripestil(u: Utseende, merke: Merke) -> Style {
     match u.farge {
         Farge::Av => VANLIG,
-        Farge::På => Style::new().fg(farge(merke.gruppe())),
+        Farge::På => Style::new().fg(farge(u, merke)),
     }
 }
 
 fn tidstil(u: Utseende, merke: Merke) -> Style {
     match (u.farge, merke.gruppe()) {
         (Farge::Av, _) | (_, Gruppe::Ferdig) => SVAK,
-        (Farge::På, g) => Style::new().fg(farge(g)),
+        (Farge::På, _) => Style::new().fg(farge(u, merke)),
     }
 }
 
@@ -161,9 +202,8 @@ fn linje(u: Utseende, i: &Info, slutt: u16, valgt: bool) -> Vec<Linje> {
 /// Med farge har rammen en tone av køens farge, og den valgte får hele
 /// fargen.
 fn rammestil(u: Utseende, merke: Merke, valgt: bool) -> Style {
-    let gruppe = merke.gruppe();
-    match (u.farge, valgt, tone(gruppe)) {
-        (Farge::På, true, Some(_)) => Style::new().fg(farge(gruppe)),
+    match (u.farge, valgt, tone(u, merke)) {
+        (Farge::På, true, Some(_)) => Style::new().fg(farge(u, merke)),
         (Farge::På, false, Some(tone)) => Style::new().fg(tone),
         (_, true, _) => VANLIG,
         _ => SVAK,
@@ -187,12 +227,15 @@ fn boks(u: Utseende, i: &Info, b: u16, valgt: bool) -> Vec<Linje> {
         n => bryt(tittel_på(i), indre, indre, n),
     }
     .into_iter()
-    .map(|l| (l, VANLIG))
+    .map(|l| (l, if valgt { STERK } else { VANLIG }))
     .collect();
     match (i.starter, &i.branch) {
         (true, _) => inni.push(("starter …".to_string(), SVAK)),
         (false, Some(b)) => inni.push((kutt(b, indre), SVAK)),
         (false, None) => {}
+    }
+    if let Some(mappe) = &i.undermappe {
+        inni.push((kutt_foran(mappe, indre), SVAK));
     }
     let mut ut = vec![kantlinje(b, ("╭", "╮"), venstre, høyre, ramme)];
     for (tekst, stil) in inni {
@@ -252,6 +295,7 @@ mod tester {
             tid: Some("3m".into()),
             starter: false,
             sted_over: false,
+            undermappe: None,
         }
     }
 

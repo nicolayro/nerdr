@@ -11,9 +11,10 @@ pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises
 og du kan gå inn i den og skrive.";
 
 /// I lista. Alt annet er etter prefikset, eller en knapp.
-pub const TASTER: [(&str, &str); 5] = [
+pub const TASTER: [(&str, &str); 6] = [
     ("↑↓  k j", "flytt i lista"),
     ("⏎", "vis sesjonen og gå inn i den"),
+    ("←→  h l", "brett prosjektet sammen og ut"),
     ("esc", "tilbake dit du var"),
     ("klikk", "flytt dit, dobbeltklikk går inn"),
     ("C-c", "avslutt"),
