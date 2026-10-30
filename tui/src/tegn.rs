@@ -253,14 +253,19 @@ pub fn sortering_på(app: &App, x: u16, y: u16) -> bool {
     y == 0 && sortering(app).is_some_and(|(r, _)| r.contains(&x))
 }
 
-/// Når du har trykket prefikset. Fra stripa går hintet inn over panen, og
-/// derfor tegnes det etter den.
-fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
-    let prefiks = app.prefiks.navn();
-    if !app.etter_prefiks {
-        return;
+/// Når du har trykket prefikset, eller er i kopimodus. Da står det i stedet
+/// for knappene.
+fn hint(app: &App) -> Option<String> {
+    match () {
+        _ if app.etter_prefiks => Some(format!(" {} … f ny · w lista · ? mer", app.prefiks.navn())),
+        _ if app.kopimodus.is_some() => Some(" v marker · y kopier · q ut".to_string()),
+        _ => None,
     }
-    let hint = format!(" {prefiks} … f ny · w lista · ? mer");
+}
+
+/// Fra stripa går hintet inn over panen, og derfor tegnes det etter den.
+fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
+    let Some(hint) = hint(app) else { return };
     let bredde = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
     let y = if alle_knapper(app) { plass(app) + 1 } else { område.height.saturating_sub(1) };
     buf.set_stringn(0, y, format!("{hint} "), bredde as usize, VANLIG);
@@ -565,7 +570,7 @@ fn knapperader(app: &App) -> u16 {
 
 /// Knappene og raden de står på. Når hintet står der, er de borte.
 fn knapper(app: &App) -> Vec<(Knapp, u16)> {
-    if app.etter_prefiks {
+    if hint(app).is_some() {
         return Vec::new();
     }
     let bunn = app.visning.bottom();
@@ -1080,17 +1085,29 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
         if let Some(bilde) = app.bilder.get(&boks.pane) {
             tegn_bilde(buf, boks.innhold, bilde);
         }
+        let i = boks.innhold;
+        let topp = app.historie as i64 - app.rull as i64;
         if let (Some(markering), Some(bilde)) =
-            (app.markering.as_ref().filter(|m| m.pane == boks.pane), app.bilder.get(&boks.pane))
+            (app.vist_markering().filter(|m| m.pane == boks.pane), app.bilder.get(&boks.pane))
         {
-            let i = boks.innhold;
-            let topp = app.historie as i64 - app.rull as i64;
             for (y, rad) in (0..i.height).zip(bilde) {
                 let innhold = markering::innhold(rad);
                 for x in markering.kolonner(topp + y as i64, i.width).into_iter().flatten().filter(|&x| x < innhold) {
                     // Snudd, så det som allerede er invertert, også synes markert.
                     buf[(i.x + x, i.y + y)].modifier.toggle(Modifier::REVERSED);
                 }
+            }
+        }
+        if let Some(kopi) = app.kopimodus.as_ref().filter(|k| k.pane == boks.pane) {
+            let (linje, x) = kopi.markør;
+            if let Ok(y) = u16::try_from(linje - topp)
+                && y < i.height
+                && x < i.width
+            {
+                // Oransje, så markøren synes også inni markeringen.
+                let rute = &mut buf[(i.x + x, i.y + y)];
+                rute.modifier.remove(Modifier::REVERSED);
+                rute.set_style(Style::new().fg(Color::Black).bg(ORANSJE));
             }
         }
         if let Some(ramme) = boks.ramme {
@@ -1103,6 +1120,8 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
     }
     let merkelapp = match () {
         _ if app.kopiert.is_some() => Some(" kopiert ".to_string()),
+        _ if app.kopimodus.is_some() && app.rull > 0 => Some(format!(" kopi {}/{} ", app.rull, app.historie)),
+        _ if app.kopimodus.is_some() => Some(" kopi ".to_string()),
         _ if app.rull > 0 => Some(format!(" {}/{} ", app.rull, app.historie)),
         _ => None,
     };

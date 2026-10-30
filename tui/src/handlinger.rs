@@ -22,7 +22,7 @@ pub struct Oppføring {
 }
 
 /// Rekkefølgen er den lista har uten søk, med det du oftest trenger først.
-const PREFIKSTASTER: [(KeyCode, bool, &str); 23] = [
+const PREFIKSTASTER: [(KeyCode, bool, &str); 24] = [
     (KeyCode::Char('f'), false, "ny sesjon"),
     (KeyCode::Char('r'), false, "hent samtale"),
     (KeyCode::Char('c'), false, "ny terminal"),
@@ -37,6 +37,7 @@ const PREFIKSTASTER: [(KeyCode, bool, &str); 23] = [
     (KeyCode::Char('o'), false, "neste pane"),
     (KeyCode::Char(';'), false, "siste pane"),
     (KeyCode::Char('z'), false, "zoom pane"),
+    (KeyCode::Char(']'), false, "kopimodus"),
     (KeyCode::Char('{'), false, "flytt pane bakover"),
     (KeyCode::Char('}'), false, "flytt pane framover"),
     (KeyCode::Char(' '), false, "neste oppsett"),

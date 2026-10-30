@@ -428,6 +428,21 @@ dra 85 4 100 6
 sjekk "å dra i en pane uten mus kopierer linjene" grep -q '^linje [0-9]*$' "$KONFIG/kopiert"
 sjekk "kopiert står på rammen" linje_har 2 ' kopiert '
 
+maal send-keys -t alfa:0.1 'kopier meg' Enter
+sjekk "cat ekkoer linja, så den står to ganger" er 2 tell 'kopier meg'
+tast C-b '['
+sjekk "C-b [ starter kopimodus, og det står på rammen" linje_har 2 ' kopi '
+sjekk "hintet står i stedet for knappene" har 'v marker · y kopier · q ut'
+tast k w v e y
+sjekk "k w v e y kopierer det siste ordet på linja over" er meg cat "$KONFIG/kopiert"
+sjekk "y går ut av kopimodus" mangler 'v marker'
+tast C-b ']' k V k y
+sjekk "C-b ] starter også kopimodus, og V og k kopierer begge linjene" er 2 grep -c '^kopier meg$' "$KONFIG/kopiert"
+tast C-b '[' g g
+sjekk "gg ruller til toppen av historikken" linje_har 2 ' kopi [0-9]+/[0-9]+ '
+tast q
+sjekk "q går ut og tilbake til bunnen" linje_mangler 2 'kopi|[0-9]+/[0-9]+'
+
 tast C-b C-b
 sjekk "C-b C-b sender ^B til panen" i_pane alfa:0.1 '^B'
 tast C-b o
