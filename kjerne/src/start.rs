@@ -1,5 +1,7 @@
-//! Å starte en Claude i tmux: i en sesjon med navnet til mappa, eller i et nytt
-//! vindu i den når sesjonen finnes.
+//! Å starte en Claude i tmux, i en ny sesjon med navnet til mappa. Finnes den,
+//! får den nye et nummer etter navnet, `nerdr-2`. Med en sesjon hver hører
+//! vinduene du lager ved siden av en Claude, til den, og ikke til alle som
+//! jobber i samme mappe.
 //!
 //! Vinduet starter med et skall, og `claude` skrives inn i det. Kjørt av tmux
 //! går den gjennom `sh -c` eller `zsh -c`, som ikke leser skallets
@@ -17,6 +19,15 @@ pub fn sesjonsnavn(mappe: &Path) -> String {
     navn.replace(['.', ':'], "-")
 }
 
+/// En feil som ikke er at navnet er tatt, kommer igjen for hvert navn, og
+/// skal ikke gi kommandoer til tmux i det uendelige.
+pub const MAKS_FORSØK: u32 = 100;
+
+/// Navnet i forsøk nummer `forsøk`, som starter på 1.
+pub fn nummerert(navn: &str, forsøk: u32) -> String {
+    if forsøk <= 1 { navn.into() } else { format!("{navn}-{forsøk}") }
+}
+
 /// Det som skrives inn: en ny samtale, eller en tidligere som fortsettes.
 pub fn claude(samtale: Option<&str>) -> String {
     match samtale {
@@ -31,12 +42,6 @@ pub fn ny_sesjon(navn: &str, mappe: &Path) -> Vec<String> {
     ["new-session", "-d", "-s", navn, "-c", &mappe, "-P", "-F", "#{pane_id}"].map(String::from).to_vec()
 }
 
-/// Svarer med pane-id-en.
-pub fn nytt_vindu(navn: &str, mappe: &Path) -> Vec<String> {
-    let (mål, mappe) = (format!("={navn}:"), mappe.to_string_lossy());
-    ["new-window", "-t", &mål, "-c", &mappe, "-P", "-F", "#{pane_id}"].map(String::from).to_vec()
-}
-
 pub fn skriv_inn(pane: &str, claude: &str) -> [Vec<String>; 2] {
     [
         ["send-keys", "-t", pane, "-l", claude].map(String::from).to_vec(),
@@ -47,11 +52,15 @@ pub fn skriv_inn(pane: &str, claude: &str) -> [Vec<String>; 2] {
 /// Starter Claude med enkeltstående tmux-kommandoer, og gir sesjonsnavnet og
 /// pane-id-en.
 pub fn start(socket: Option<&str>, mappe: &Path, samtale: Option<&str>) -> io::Result<(String, String)> {
-    let navn = sesjonsnavn(mappe);
-    let pane = match tmux::kjør(socket, &ny_sesjon(&navn, mappe)) {
-        Ok(pane) => pane,
-        Err(feil) if feil.kind() == io::ErrorKind::NotFound => return Err(feil),
-        Err(_) => tmux::kjør(socket, &nytt_vindu(&navn, mappe))?,
+    let mappenavn = sesjonsnavn(mappe);
+    let mut forsøk = 1;
+    let (navn, pane) = loop {
+        let navn = nummerert(&mappenavn, forsøk);
+        match tmux::kjør(socket, &ny_sesjon(&navn, mappe)) {
+            Ok(pane) => break (navn, pane),
+            Err(feil) if feil.kind() == io::ErrorKind::NotFound || forsøk >= MAKS_FORSØK => return Err(feil),
+            Err(_) => forsøk += 1,
+        }
     };
     for kommando in skriv_inn(&pane, &claude(samtale)) {
         tmux::kjør(socket, &kommando)?;
@@ -71,7 +80,8 @@ mod tester {
     }
 
     #[test]
-    fn nytt_vindu_treffer_bare_sesjonen_med_akkurat_det_navnet() {
-        assert_eq!(nytt_vindu("api", Path::new("/a"))[2], "=api:");
+    fn første_forsøk_er_navnet_til_mappa_og_de_neste_får_nummer() {
+        assert_eq!(nummerert("api", 1), "api");
+        assert_eq!(nummerert("api", 2), "api-2");
     }
 }

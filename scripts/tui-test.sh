@@ -352,8 +352,9 @@ sjekk "C-b f åpner popupen fra panen" har 'mappe ›'
 tast -l pny
 sjekk "«pny» igjen" linje_har 3 '1/5'
 tast Enter
-sjekk "samme mappe igjen gir et nytt vindu i prosjekt-ny" linjer 2 maal list-windows -t prosjekt-ny
-sjekk "nerdr er inne i det nye vinduet" i_panen
+sjekk "samme mappe igjen gir sesjonen prosjekt-ny-2 i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny-2
+sjekk "og prosjekt-ny har fortsatt ett vindu" linjer 1 maal list-windows -t prosjekt-ny
+sjekk "nerdr er inne i den nye sesjonen" i_panen
 
 tast C-b r
 sjekk "C-b r viser samtalene" linje_har 2 'hent samtale'
@@ -372,7 +373,7 @@ sjekk "popupen åpner" har 'mappe ›'
 tast Escape
 sjekk "Esc lukker popupen" mangler 'mappe ›'
 sjekk "Esc går tilbake til lista" i_lista
-sjekk "Esc lager ingen ny sesjon" linjer 5 maal list-sessions
+sjekk "Esc lager ingen ny sesjon" linjer 6 maal list-sessions
 
 # De to som starter, står øverst blant de aktive, over alfa.
 tast Up Up Up Up Up Up Up Up Down Down Enter
@@ -620,9 +621,8 @@ ut=$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje")
 sjekk "nerdr ny lager sesjonen tredje" inneholder "$ut" 'tmux-sesjonen tredje'
 sjekk "og skriver inn claude" i_pane tredje claude
 ut=$(nerdr -L "$MAAL" ny --fortsett abc-123 --json)
-sjekk "nerdr ny --fortsett finner mappa annet" inneholder "$ut" '"sesjon":"annet"'
-sjekk "og gir et nytt vindu der" linjer 2 maal list-windows -t annet
-sjekk "med claude --resume" i_pane annet:1 'claude --resume abc-123'
+sjekk "nerdr ny --fortsett finner mappa annet, og lager annet-2 når annet finnes" inneholder "$ut" '"sesjon":"annet-2"'
+sjekk "med claude --resume" i_pane annet-2 'claude --resume abc-123'
 
 registrer tredje tredje busy ',"sessionId":"abc-123"'
 sjekk "en samtale som kjører, startes ikke en gang til" inneholder "$(nerdr -L "$MAAL" ny --fortsett abc-123)" 'samtalen abc-123 kjører alt'

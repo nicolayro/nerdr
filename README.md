@@ -170,8 +170,9 @@ den starter.
 
 «+ ny sesjon» nederst i lista, eller prefikset og `f`, åpner en popup der du
 søker fram en mappe, og `⏎` starter `claude`
-der i en tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den et nytt
-vindu. Først står mappene du har brukt Claude i, sist brukt først, så du ikke
+der i en ny tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den nye
+et nummer etter navnet, som `nerdr-2`, så vinduene du lager ved siden av en
+Claude, hører til den. Først står mappene du har brukt Claude i, sist brukt først, så du ikke
 trenger å sette noe. Så kommer mappene rett under `NERDR_MAPPER` og prosjektene
 under dem, inntil fire nivåer ned, som appene i et monorepo. Et prosjekt er en mappe med
 `package.json`, `pom.xml`, `build.gradle`, `Cargo.toml`, `go.mod`,
