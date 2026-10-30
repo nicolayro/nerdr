@@ -267,10 +267,8 @@ sjekk "og går inn i den" i_panen
 sjekk "alfa venter igjen" linje_har 3 '^  ●  Fiks testene'
 
 klikk 5 3
-sjekk "klikk på alfa fra gamma går ut i lista uten å bytte, og musen over alfa viser ×" linje_har 3 '^  ●  Fiks testene +×  │'
-sjekk "og du er i lista" i_lista
-klikk 5 3
-sjekk "et klikk til på samme kort går inn i alfa" i_panen
+sjekk "klikk på alfa fra gamma går rett inn i alfa, og musen over alfa viser ×" linje_har 3 '^▎ .  Fiks testene +×  │'
+sjekk "og du er i panen" i_panen
 klikk 5 14
 sjekk "klikk i lista utenfor kortene går ut" i_lista
 klikk 60 8
@@ -296,13 +294,8 @@ sjekk "↑ opp til alfa bytter ikke" linje_har 6 '^▎ ○  gamma:0'
 tast Down q n
 sjekk "q og n gjør ingenting i lista" linje_har 6 '^▎ ○  gamma:0'
 klikk 5 6
-sleep 0.6
-klikk 5 6
-sjekk "to klikk med pause mellom går ikke inn" i_lista
-klikk 5 6
-sjekk "dobbeltklikk på gamma går inn i den" i_panen
-klikk 5 3
-sjekk "klikk på alfa fra panen går ut i lista uten å bytte" linje_har 6 '^▎ ○  gamma:0'
+sjekk "klikk på gamma går inn i den" i_panen
+tast C-b w
 sjekk "tilbake i lista" i_lista
 
 sjekk "nederst i lista er det en strek" linje_har 16 '^─+┤'

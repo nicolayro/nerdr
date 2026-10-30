@@ -71,8 +71,8 @@ inni og branchen under. Et worktree står med navnet til repoet det er laget fra
 | **aktive** | `●` spør om noe, `◆` er ferdig og venter på deg, `◐` jobber, `◌` starter |
 | **ledige** | `○` er ferdig, og du har gått ut av den uten å sette den i gang igjen |
 
-Den du er inne i, er aldri ledig. Kortet til den som vises, er markert, og i
-lista har kortet du står på, bakgrunn.
+Den du er inne i, er aldri ledig. Kortet til den som vises, har en svak
+bakgrunn, og i lista har kortet du står på, sterk bakgrunn og fet tekst.
 Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den som
 sist ble ferdig. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
 Får ikke lista plass, ruller den med musehjulet og følger kortet du står på.
@@ -99,8 +99,8 @@ er lukket, venter på deg neste gang.
 
 ### Musen
 
-Et klikk på en Claude i lista flytter dit, og et dobbeltklikk går inn i den. Et
-klikk i panen går også inn, og et klikk i lista tar deg ut igjen. Står musen
+Et klikk på en Claude i lista går inn i den. Et klikk i panen går også inn, og
+et klikk i lista utenfor kortene tar deg ut igjen. Står musen
 over et kort, kommer `×` der tiden står. Den lukker vinduet til Claude-en, med
 det du har åpnet ved siden av, etter at du har svart. Deler flere Claude-er
 vinduet, lukkes bare panen. Klikk og

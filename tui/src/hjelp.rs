@@ -16,7 +16,7 @@ pub const TASTER: [(&str, &str); 6] = [
     ("⏎", "vis sesjonen og gå inn i den"),
     ("←→  h l", "brett prosjektet sammen og ut"),
     ("esc", "tilbake dit du var"),
-    ("klikk", "flytt dit, dobbeltklikk går inn"),
+    ("klikk", "gå inn"),
     ("C-c", "avslutt"),
 ];
 

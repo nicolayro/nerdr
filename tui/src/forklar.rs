@@ -25,7 +25,7 @@ const OFTEST: [(&str, &str, &[Tast]); 17] = [
     ("Starte en ny Claude", "«+ ny sesjon» nederst i lista, søk fram mappa og trykk ⏎", &[P("f")]),
     ("Fortsette en tidligere samtale", "«handlinger», så «hent samtale»", &[P("r")]),
     ("Se på en Claude", "klikk på kortet i lista", &[Egen("↑"), Egen("↓")]),
-    ("Gå inn og skrive", "dobbeltklikk på kortet, eller klikk i Claude-en til høyre", &[Egen("⏎")]),
+    ("Gå inn og skrive", "klikk på kortet, eller i Claude-en til høyre", &[Egen("⏎")]),
     ("Tilbake til lista", "klikk i lista", &[P("w")]),
     ("Neste eller forrige Claude", "klikk på kortet i lista", &[P(")"), P("(")]),
     ("Lukke en Claude", "hold musen over kortet og klikk ×", &[P("&")]),

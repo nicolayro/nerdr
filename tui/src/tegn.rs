@@ -60,6 +60,8 @@ const SVAK: Style = Style::new().add_modifier(Modifier::DIM);
 /// Så mye av forgrunnen som blandes inn i bakgrunnen der noe er valgt, og der
 /// musen står.
 const MARKERT_ANDEL: f32 = 0.12;
+const PEKT_ANDEL: f32 = 0.25;
+const INNE_ANDEL: f32 = 0.05;
 const UNDER_MUSEN_ANDEL: f32 = 0.06;
 const OVERSKRIFT_ANDEL: f32 = 0.08;
 
@@ -87,6 +89,16 @@ fn tonet(farge: Option<Rgb>, andel: f32) -> Option<Color> {
 /// terminalen står de uten bakgrunn, med peker og fet tekst.
 fn markert() -> Style {
     tonet(None, MARKERT_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
+}
+
+/// Pekeren i lista skiller seg mye mer ut enn sesjonen du er inne i, så du
+/// ser hvor du står når du blar, og hvor du kom fra.
+fn pekt() -> Style {
+    tonet(None, PEKT_ANDEL).map_or(Style::new(), |c| Style::new().bg(c)).add_modifier(Modifier::BOLD)
+}
+
+fn inne() -> Style {
+    tonet(None, INNE_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
 
 fn overskrift_bakgrunn() -> Style {
@@ -173,8 +185,9 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                 let Some(kort) = kort else { continue };
                 let bakgrunn = match () {
                     _ if app.fokus == Fokus::Liste && paner.iter().any(|(p, _)| app.peker.as_ref() == Some(&p.id)) => {
-                        Some(markert())
+                        Some(pekt())
                     }
+                    _ if paner.iter().any(|(p, _)| er_valgt(app, p)) => Some(inne()),
                     _ => rad_bakgrunn,
                 };
                 tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, bakgrunn);
@@ -184,7 +197,8 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                 // Inne i en pane viser kortet til den valgte hvor du er.
                 let pekt = app.fokus == Fokus::Liste && app.peker.as_ref() == Some(&pane.id);
                 let bakgrunn = match () {
-                    _ if pekt => Some(markert()),
+                    _ if pekt => Some(self::pekt()),
+                    _ if er_valgt(app, pane) => Some(inne()),
                     _ if matches!(mus, Some(Mål::Kort(id) | Mål::Lukk(id)) if *id == pane.id) => Some(under_musen()),
                     _ => None,
                 };

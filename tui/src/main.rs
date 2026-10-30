@@ -1668,14 +1668,8 @@ impl App {
             // Via lista, så panen du forlater, merkes som sett før du går inn.
             self.bytt_fokus(Fokus::Liste);
             let Some(pane) = pane else { return ute };
-            let kort = Mål::Kort(pane.id.clone());
-            let dobbelt = self.sist_klikket.take().is_some_and(|(mål, t)| mål == kort && t.elapsed() < DOBBELTKLIKK);
             self.peker = Some(pane.id.clone());
-            if dobbelt {
-                self.gå_inn();
-            } else {
-                self.sist_klikket = Some((kort, Instant::now()));
-            }
+            self.gå_inn();
             return true;
         }
 
