@@ -80,9 +80,9 @@ enum Svar {
     Kopi { markering: Markering, fra: i64, bredde: u16 },
     /// Svaret er id-en til vinduet.
     NyttVindu,
-    /// Svaret er pane-id-en til den nye sesjonen, eller en feil når den finnes.
-    NySesjon { navn: String, mappe: PathBuf, claude_kommando: String },
-    NyPane { mappe: PathBuf, claude_kommando: String },
+    /// Svaret er pane-id-en til den nye sesjonen, eller en feil når navnet er
+    /// tatt. `navn` er navnet til mappa, uten nummeret fra `forsøk`.
+    NySesjon { navn: String, forsøk: u32, mappe: PathBuf, claude_kommando: String },
     Prefiks,
     /// Prefikstabellen fra `list-keys`.
     Bindinger,
@@ -743,11 +743,13 @@ impl App {
                 }
                 true
             }
-            Svar::NySesjon { navn, mappe, claude_kommando } if !ok => {
-                self.send(&tmux::linje(&start::nytt_vindu(&navn, &mappe)), Svar::NyPane { mappe, claude_kommando });
+            Svar::NySesjon { navn, forsøk, mappe, claude_kommando } if !ok && forsøk < start::MAKS_FORSØK => {
+                let forsøk = forsøk + 1;
+                let linje = tmux::linje(&start::ny_sesjon(&start::nummerert(&navn, forsøk), &mappe));
+                self.send(&linje, Svar::NySesjon { navn, forsøk, mappe, claude_kommando });
                 false
             }
-            Svar::NySesjon { mappe, claude_kommando, .. } | Svar::NyPane { mappe, claude_kommando } => {
+            Svar::NySesjon { mappe, claude_kommando, .. } => {
                 let Some(id) = linjer.into_iter().next().filter(|_| ok) else { return false };
                 // Før `claude` skrives inn, så den finner temaet når den starter.
                 self.gi_farger(&id);
@@ -981,7 +983,7 @@ impl App {
     fn start_claude(&mut self, mappe: PathBuf, samtale: Option<&str>) {
         let navn = start::sesjonsnavn(&mappe);
         let claude_kommando = start::claude(samtale);
-        self.send(&tmux::linje(&start::ny_sesjon(&navn, &mappe)), Svar::NySesjon { navn, mappe, claude_kommando });
+        self.send(&tmux::linje(&start::ny_sesjon(&navn, &mappe)), Svar::NySesjon { navn, forsøk: 1, mappe, claude_kommando });
     }
 
     /// Er en liste alt på vei, kan den være bestilt før endringen, så det
