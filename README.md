@@ -11,7 +11,7 @@ macOS og Linux.
 ## Forutsetninger
 
 - [Claude Code](https://claude.com/claude-code)
-- tmux (testet med 3.8)
+- tmux (testet med 3.8), som installeringen tilbyr å installere
 - macOS eller Linux
 
 ## Installere
@@ -24,6 +24,9 @@ curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/installer
   finnes, eller der den ligger fra før.
 - `NERDR_BIN=<mappe>` foran `sh` velger en annen mappe, og
   `NERDR_VERSJON=v0.1.0` en bestemt versjon.
+- Mangler tmux, spør scriptet om det skal installere den med `brew`, `dnf`,
+  `apt-get` eller `pacman`. `NERDR_TMUX=ja` eller `nei` svarer på
+  forhånd.
 - Kjør kommandoen på nytt for å oppdatere. nerdr oppdaterer seg ikke selv.
 
 Du kan også be Claude om å installere og sette opp nerdr etter
@@ -70,8 +73,8 @@ inni og branchen under. Et worktree står med navnet til repoet det er laget fra
 
 Den du er inne i, er aldri ledig. Kortet til den som vises, er markert, og i
 lista har kortet du står på, bakgrunn.
-Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den du
-sist gikk ut av. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
+Blant de aktive står den som sist ble aktiv, øverst, og blant de ledige den som
+sist ble ferdig. Det står hvor lenge den har ventet, jobbet eller vært ferdig.
 Får ikke lista plass, ruller den med musehjulet og følger kortet du står på.
 Pilene øverst og nederst sier at det er flere over og under, og pila øverst er
 oransje når noen over venter på deg. Et klikk på en pil ruller en side.
@@ -105,6 +108,8 @@ musehjul i sesjonen går videre når programmet der har slått på mus, som Clau
 Code i fullskjerm. Ellers ruller hjulet i historikken, og en tast tar deg
 tilbake til bunnen. Det du drar over, kopieres når du slipper, med `pbcopy`,
 `wl-copy`, `xclip` eller `xsel`. I `less` og `man` blir hjulet til piltaster.
+I handlingene, i popupen for ny sesjon og i konfigurasjonen kjører eller
+velger et klikk det du klikker på, hjulet blar, og et klikk utenfor lukker.
 
 ### Panen og vinduene
 
@@ -113,7 +118,7 @@ hver sin boks eller med streker mellom. Tastene går til den aktive panen, og et
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
 Øverst står vinduene i sesjonen som faner med bakgrunn, og vinduet som vises,
 har sterkere bakgrunn. Et klikk på en fane viser vinduet, og `×` i fanen
-lukker det etter at du har svart. Fra lista går du alltid inn i vinduet til Claude-en.
+lukker det. Fra lista går du alltid inn i vinduet til Claude-en.
 
 Med tmux 3.5 eller nyere får panene fargene terminalen hadde da nerdr startet,
 så Claude Code med «Auto (match terminal)» i `/theme` blir lys eller mørk som
@@ -134,24 +139,32 @@ virker både fra lista og fra panen:
 | `n` `p` | Neste og forrige vindu |
 | `0`–`9` | Vinduet med det nummeret |
 | `l` | Siste vindu, det du var i før |
-| `&` | Lukk vindu, etter at du har svart |
+| `&` | Lukk vindu |
 | `%` | Del side om side |
 | `"` | Del over og under |
 | `o` / `←` `↑` `↓` `→` | Neste pane, eller panen i den retningen |
 | `;` | Siste pane, den som var aktiv før |
 | `z` | Zoom pane, inn og ut |
-| `x` | Lukk pane, etter at du har svart |
+| `x` | Lukk pane |
 | `{` `}` | Flytt pane bakover og framover |
 | `Space` | Neste oppsett |
 | `C-o` | Roter paner |
 | `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
 | `PgUp` | Rull en side opp |
-| `(` `)` | Forrige og neste Claude |
+| `(` `)` | Forrige og neste sesjon |
 | `b` | Konfigurasjon |
 | `w` `s` | Tilbake til lista |
 | `d` | Avslutt |
 | `?` | Hjelp |
 | prefikset | Send prefikset til panen |
+
+Bindingene etter prefikset i `.tmux.conf` gjelder også i nerdr, som
+`bind | split-window -h`, og tastene med `-r` kan trykkes igjen uten
+prefikset. Kommandoer som trenger et skjermbilde fra tmux, som `display-popup`,
+`command-prompt` og `copy-mode`, virker ikke, og da gjør tasten det den gjør i
+nerdr. `f`, `r`, `w`, `s`, `b`, `d`, `?`, `:`, `(` og `)` er alltid nerdr sine.
+Hjelpen og handlingene viser tastene du har bundet. nerdr leser bindingene når
+den starter.
 
 ### Starte og fortsette
 
@@ -194,24 +207,28 @@ og `ferdig` for `sett`.
 
 ## Konfigurasjon
 
-Prefikset og `b` åpner konfigurasjonen. Valget gjelder med en gang, og tmux
-husker det i `@nerdr-utseende`.
+Prefikset og `b` åpner konfigurasjonen. Et klikk på en verdi velger den, og
+valget gjelder med en gang. tmux husker det i `@nerdr-utseende`. Et valg som
+bare gjelder for valget over, står rett under det, og er borte når det
+ikke gjelder.
 
 | | |
 | --- | --- |
-| **paner** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
+| **ramme** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
 | **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
-| **ulest** | Fargen til det som er ferdig og ikke sett. `oransje` er som det som spør, og `blå` skiller dem. |
-| **plass** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
-| **orden** | `nerdr` deler lista i aktive og ledige. `mappe` har en gruppe for hvert repo, og både repoene og Claude-ene i dem står i den rekkefølgen de ble startet. `←` og `→`, eller `h` og `l`, bretter repoet sammen og ut. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. |
-| **topp** | Repoet over Claude-ene, ordnet etter mappe: på en `rad` med bakgrunn, eller med en `strek` bort til skillelinja. |
-| **ledig** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. |
-| **tittel** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. |
+| **ulest** | Fargen til det som er ferdig og ikke sett. `oransje` er som det som spør, og `blå` skiller dem. Bare med farge. |
+| **kortdesign** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
+| **oppgave** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. Bare med `vanlig`. |
+| **sortering** | `prioritert` deler lista i aktive og ledige. `prosjekt` har en gruppe for hvert repo, og både repoene og Claude-ene i dem står i den rekkefølgen de ble startet. `←` og `→`, eller `h` og `l`, bretter repoet sammen og ut. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. Et klikk på sorteringen øverst til høyre i lista bytter til neste. |
+| **overskrift** | Repoet over Claude-ene: på en `rad` med bakgrunn, eller med en `strek` bort til skillelinja. Bare med `prosjekt`. |
+| **ledige** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av lista, så de ikke flytter seg når en blir aktiv. Bare med `prioritert`. |
 
-Standard er linjer mellom panene, farge på med ulest i oransje, vanlig plass,
-ordnet som nerdr med de ledige under, strek etter repoet, og én linje til
-oppgaven. `ulest` gjelder bare med farge, `topp` bare mappe, `ledig` bare nerdr,
-og `tittel` gjelder ikke minimal. `nerdr liste` er alltid ordnet som nerdr.
+Standard er linjer mellom panene, farge på med ulest i oransje, vanlig
+kortdesign, én linje til oppgaven, og sortert prioritert med de ledige under.
+Sortert etter prosjekt har repoet en strek. `nerdr liste` er alltid sortert
+prioritert. I `@nerdr-utseende` står valgene med navnene de hadde først:
+`paner`, `farge`, `plass`, `tittel`, `orden` med `nerdr`, `mappe` og
+`aktivitet`, `ledig`, og `topp` for overskriften.
 
 ## Innstillinger
 

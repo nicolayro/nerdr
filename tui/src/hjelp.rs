@@ -1,6 +1,7 @@
 //! Det nerdr kan, vist med `?` og `nerdr --help`.
 
 use nerdr_kjerne::merke::Merke;
+use ratatui::crossterm::event::KeyCode;
 
 use crate::grupper::glyf;
 use crate::ny;
@@ -12,7 +13,7 @@ og du kan gå inn i den og skrive.";
 /// I lista. Alt annet er etter prefikset, eller en knapp.
 pub const TASTER: [(&str, &str); 6] = [
     ("↑↓  k j", "flytt i lista"),
-    ("⏎", "vis Claude-en og gå inn i den"),
+    ("⏎", "vis sesjonen og gå inn i den"),
     ("←→  h l", "brett prosjektet sammen og ut"),
     ("esc", "tilbake dit du var"),
     ("klikk", "flytt dit, dobbeltklikk går inn"),
@@ -40,12 +41,45 @@ pub const PREFIKSTASTER: [(&str, &str); 25] = [
     ("C-o", "roter paner"),
     ("C-←↑↓→", "endre størrelse, med M- fem om gangen"),
     ("PgUp", "rull en side opp"),
-    ("( )", "forrige og neste Claude"),
+    ("( )", "forrige og neste sesjon"),
     ("b", "konfigurasjon"),
     ("w s", "tilbake til lista"),
     ("d", "avslutt"),
     ("?", "hjelp"),
     ("prefiks", "send prefikset til panen"),
+];
+
+/// Tastene etter prefikset, som de er i nerdr, og hva de gjør.
+pub type Tast = (&'static [KeyCode], &'static str);
+
+/// Det du trenger først, i `?`. Resten står i handlingene bak `:`.
+pub const OVERSIKT: [(&str, &[Tast]); 3] = [
+    (
+        "Sesjoner",
+        &[
+            (&[KeyCode::Char('f')], "ny sesjon"),
+            (&[KeyCode::Char('r')], "hent samtale"),
+            (&[KeyCode::Char('('), KeyCode::Char(')')], "forrige og neste"),
+            (&[KeyCode::Char('w')], "tilbake til lista"),
+        ],
+    ),
+    (
+        "Panes",
+        &[
+            (&[KeyCode::Char('%'), KeyCode::Char('"')], "del side om side, over og under"),
+            (&[KeyCode::Left, KeyCode::Up, KeyCode::Down, KeyCode::Right], "gå til panen i den retningen"),
+            (&[KeyCode::Char('z')], "zoom"),
+            (&[KeyCode::Char('x')], "lukk"),
+        ],
+    ),
+    (
+        "Windows",
+        &[
+            (&[KeyCode::Char('c')], "ny terminal"),
+            (&[KeyCode::Char('n'), KeyCode::Char('p')], "neste og forrige"),
+            (&[KeyCode::Char('&')], "lukk"),
+        ],
+    ),
 ];
 
 pub const MERKER: [(Merke, &str); 5] = [

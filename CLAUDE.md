@@ -9,10 +9,12 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
   tmux-kommandoer (`tmux`), panene (`paner`), hvordan et vindu er delt
   (`oppsett`), registeret (`register`), hva som venter på deg (`merke`),
   tidligere samtaler (`samtaler`), repoet og branchen (`git`), farger fra
-  `capture-pane -e` (`sgr`) og å starte en Claude (`start`).
+  `capture-pane -e` (`sgr`), prefikstabellen fra `list-keys` (`bindinger`)
+  og å starte en Claude (`start`).
 - `tui/` er binæren. `main.rs` har TUI-et og argumentene, `kommandoer.rs`
   `liste`, `samtaler` og `ny`, `ny.rs` mappevelgeren, `handlinger.rs`
-  handlingene bak `:`, `utseende.rs` valgene i konfigurasjonen, `tegn.rs`
+  handlingene bak `:`, `bindinger.rs` hva tastene fra tmux-oppsettet gjør i
+  nerdr, `utseende.rs` valgene i konfigurasjonen, `tegn.rs`
   tegningen, `tegn/kort.rs` kortene og overskriftene i lista, og `palett.rs`
   fargene til terminalen, som markeringen og tonene blandes av.
 

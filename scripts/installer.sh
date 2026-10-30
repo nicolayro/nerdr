@@ -4,6 +4,8 @@
 #   NERDR_VERSJON  en bestemt versjon, som v0.1.0, ellers den siste
 #   NERDR_BIN      mappa nerdr legges i, ellers der den ligger fra før, eller
 #                  den første som finnes av ~/opt/bin, ~/bin og ~/.local/bin
+#   NERDR_TMUX     ja eller nei til å installere tmux når den mangler, ellers
+#                  spør scriptet, eller skriver kommandoen uten en terminal
 set -eu
 
 REPO=nicolayro/nerdr
@@ -82,4 +84,24 @@ case ":$PATH:" in
   *":$bin:"*) ;;
   *) echo "$bin står ikke i PATH. Legg til i skallets oppstartsfil: export PATH=\"$bin:\$PATH\"" ;;
 esac
-command -v tmux >/dev/null || echo "nerdr trenger tmux, og den er ikke installert."
+
+command -v tmux >/dev/null && exit 0
+if command -v brew >/dev/null; then tmux="brew install tmux"
+elif command -v dnf >/dev/null; then tmux="sudo dnf install -y tmux"
+elif command -v apt-get >/dev/null; then tmux="sudo apt-get update && sudo apt-get install -y tmux"
+elif command -v pacman >/dev/null; then tmux="sudo pacman -S --noconfirm tmux"
+else
+  echo "nerdr trenger tmux, og den er ikke installert."
+  exit 0
+fi
+svar=${NERDR_TMUX:-}
+# Med curl | sh er stdin selve scriptet, så svaret må leses fra terminalen.
+if [ -z "$svar" ] && (exec </dev/tty) 2>/dev/null; then
+  printf "nerdr trenger tmux. Installere det med «%s»? [J/n] " "$tmux"
+  read -r svar </dev/tty || svar=nei
+  svar=${svar:-ja}
+fi
+case $svar in
+  [JjYy]*) sh -c "$tmux" || echo "nerdr: tmux ble ikke installert. Prøv selv: $tmux" >&2 ;;
+  *) echo "nerdr trenger tmux. Installer det med: $tmux" ;;
+esac

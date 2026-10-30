@@ -9,8 +9,10 @@ use std::sync::OnceLock;
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Rect, Size};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::bindinger::Bindinger;
 use crate::bokser::{Boks, Rammer};
 use crate::markering;
 use crate::palett::{Rgb, bland};
@@ -18,7 +20,7 @@ use crate::grupper::{Del, Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::tekst::varighet;
-use crate::utseende::{self, AKSER, BOKSAKSER, Ledig, Orden, Plass, Topp, Utseende};
+use crate::utseende::{self, Ledig, Orden, Plass, Topp, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
@@ -29,7 +31,17 @@ pub const LISTE: u16 = 36;
 pub const LISTE_MIN: u16 = 24;
 /// Stripa er peker, glyf, mellomrom og skillelinja.
 pub const STRIPE: u16 = 4;
-const VELGER_LINJER: u16 = 12;
+/// Treffene i handlingene og velgeren får to tredjedeler av skjermen, men
+/// aldri færre rader enn dette.
+const MENY_RADER: u16 = 13;
+const HANDLINGER_BREDDE: u16 = 56;
+const VELGER_BREDDE: u16 = 64;
+const UTSEENDE_BREDDE: u16 = 58;
+/// Forklaringen nederst i konfigurasjonen har alltid så mange linjer, så
+/// menyen ikke endrer høyde når du går opp og ned.
+const FORKLARING_LINJER: usize = 2;
+/// Nøklene i konfigurasjonen, med streken mot verdiene rett etter.
+const NØKKEL_BREDDE: u16 = 12;
 
 const ORANSJE_RGB: Rgb = (217, 119, 87);
 const ORANSJE: Color = Color::Rgb(ORANSJE_RGB.0, ORANSJE_RGB.1, ORANSJE_RGB.2);
@@ -112,16 +124,16 @@ pub fn alt(f: &mut Frame, app: &App) {
     tegn_hint(buf, område, app);
 
     if let Some(rull) = app.hjelp {
-        tegn_hjelp(buf, område, &app.prefiks.navn(), rull);
+        tegn_hjelp(buf, område, &app.prefiks.navn(), &app.bindinger, rull);
     } else if let Some(lukke) = &app.lukke {
         tegn_lukke(buf, område, app, lukke, mus.as_ref());
     } else if let Some(akse) = app.utseende_meny {
-        tegn_utseende(buf, område, &app.utseende, akse);
+        tegn_utseende(buf, område, &app.utseende, akse, mus.as_ref());
     } else if let Some(handlinger) = &app.handlinger {
-        let markør = tegn_handlinger(buf, område, handlinger);
+        let markør = tegn_handlinger(buf, område, handlinger, mus.as_ref());
         f.set_cursor_position(markør);
     } else if let Some(velger) = &app.velger {
-        let markør = tegn_velger(buf, område, velger);
+        let markør = tegn_velger(buf, område, velger, mus.as_ref());
         f.set_cursor_position(markør);
     } else if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app, &bokser)) {
         let i = boks.innhold;
@@ -215,6 +227,11 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         buf.set_string(tast_x, y, tast, SVAK.patch(stil));
     }
 
+    if let Some((x, tekst)) = sortering(app) {
+        let stil = if mus == Some(&Mål::Sortering) { under_musen().patch(VANLIG) } else { SVAK };
+        buf.set_string(x.start, 0, tekst, stil);
+    }
+
     // Overskriftene treffer skillestreken. Når lista ruller, står pilen i den
     // øverste raden, på høyde med fanene.
     if utsnitt.ruller {
@@ -247,6 +264,24 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         };
         buf.set_stringn(bredde, y, tegn, 1, skille);
     }
+}
+
+/// Knappen som bytter sortering, til høyre i den øverste raden, der pilen
+/// til venstre ikke kommer i veien. Den er like bred for alle sorteringene,
+/// så den ikke flytter seg når du klikker.
+fn sortering(app: &App) -> Option<(Range<u16>, String)> {
+    if stripe(app) {
+        return None;
+    }
+    let bredde = utseende::SORTERINGER.iter().map(|s| s.chars().count()).max().unwrap_or(0);
+    let tekst = format!(" {:<bredde$} ", utseende::SORTERINGER[app.utseende.indeks(utseende::ORDEN)]);
+    let slutt = liste_bredde(app) - 1;
+    let start = slutt.checked_sub(tekst.chars().count() as u16).filter(|&x| x >= 4)?;
+    Some((start..slutt, tekst))
+}
+
+pub fn sortering_på(app: &App, x: u16, y: u16) -> bool {
+    y == 0 && sortering(app).is_some_and(|(r, _)| r.contains(&x))
 }
 
 /// Når du har trykket prefikset. Fra stripa går hintet inn over panen, og
@@ -555,10 +590,10 @@ pub fn fane_på(app: &App, x: u16) -> Option<String> {
     faner(app).into_iter().find(|f| (f.fra..f.til).contains(&x)).map(|f| f.vindu)
 }
 
-/// Vinduet og navnet til fanen med `×` i kolonne `x`. Rutene på hver side
-/// treffer også, så den er lettere å treffe.
-pub fn lukk_fane_på(app: &App, x: u16) -> Option<(String, String)> {
-    faner(app).into_iter().find(|f| f.lukk().abs_diff(x) <= 1).map(|f| (f.vindu, f.navn))
+/// Vinduet til fanen med `×` i kolonne `x`. Rutene på hver side treffer
+/// også, så den er lettere å treffe.
+pub fn lukk_fane_på(app: &App, x: u16) -> Option<String> {
+    faner(app).into_iter().find(|f| f.lukk().abs_diff(x) <= 1).map(|f| f.vindu)
 }
 
 /// `+` etter fanene, når et vindu vises og det er plass til den.
@@ -706,27 +741,31 @@ fn boks(buf: &mut Buffer, område: Rect, bredde: u16, høyde: u16, tittel: &str,
     Some(boks)
 }
 
-const HJELP_BREDDE: u16 = 58;
+const HJELP_BREDDE: u16 = 52;
 
-fn hjelp_linjer(prefiks: &str) -> Vec<(String, Style)> {
-    let indre = (HJELP_BREDDE - 4) as usize;
-    let mut linjer: Vec<(String, Style)> = bryt(hjelp::OM, indre, indre, 3).into_iter().map(|l| (l, VANLIG)).collect();
-    linjer.push((String::new(), VANLIG));
-    for (tast, hva) in hjelp::TASTER {
-        linjer.push((format!("{tast:<9}{hva}"), VANLIG));
+fn hjelp_linjer(prefiks: &str, bindinger: &Bindinger) -> Vec<(String, Style)> {
+    let tast = |koder: &[KeyCode]| {
+        let taster: Vec<KeyEvent> = koder.iter().map(|&k| KeyEvent::new(k, KeyModifiers::NONE)).collect();
+        // Pilene står sammen, men en tast du har bundet, trenger luft rundt.
+        let piler = taster.iter().all(|k| !matches!(k.code, KeyCode::Char(_)) && !bindinger.er_din(k));
+        let navn: Vec<String> = taster.iter().map(|k| bindinger.vis(k)).collect();
+        format!("{prefiks} {}", navn.join(if piler { "" } else { " " }))
+    };
+    let alle = hjelp::OVERSIKT.iter().flat_map(|(_, taster)| taster.iter());
+    let bredde = alle.map(|(koder, _)| tast(koder).chars().count()).max().unwrap_or(0) + 3;
+    let mut linjer = Vec::new();
+    for (overskrift, taster) in hjelp::OVERSIKT {
+        linjer.push((overskrift.to_string(), STERK));
+        for (koder, hva) in taster {
+            linjer.push((format!("{:<bredde$}{hva}", tast(koder)), VANLIG));
+        }
+        linjer.push((String::new(), VANLIG));
     }
+    let merker: Vec<String> =
+        hjelp::MERKER.iter().map(|(m, hva)| format!("{} {}", glyf(*m), hva.split([' ', ',']).next().unwrap_or(hva))).collect();
+    linjer.push((merker.join("  "), VANLIG));
     linjer.push((String::new(), VANLIG));
-    for (tast, hva) in hjelp::PREFIKSTASTER {
-        let tast = if tast == "prefiks" { format!("{prefiks} {prefiks}") } else { format!("{prefiks} {tast}") };
-        linjer.push((format!("{tast:<13}{hva}"), VANLIG));
-    }
-    linjer.push((String::new(), VANLIG));
-    for (merke, hva) in hjelp::MERKER {
-        linjer.push((format!("{}  {hva}", glyf(merke)), VANLIG));
-    }
-    linjer.push((String::new(), VANLIG));
-    linjer.push((hjelp::BARE_TMUX.to_string(), SVAK));
-    linjer.push((hjelp::mapper(), SVAK));
+    linjer.push((format!("{:<bredde$}alt annet, søkbart", tast(&[KeyCode::Char(':')])), VANLIG));
     linjer
 }
 
@@ -737,12 +776,12 @@ fn hjelp_boks(område: Rect, linjer: usize) -> Option<(Rect, u16)> {
 }
 
 pub fn hjelp_rull_maks(app: &App) -> u16 {
-    let linjer = hjelp_linjer(&app.prefiks.navn()).len();
+    let linjer = hjelp_linjer(&app.prefiks.navn(), &app.bindinger).len();
     hjelp_boks(skjerm(app), linjer).map_or(0, |(_, maks)| maks)
 }
 
-fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, rull: u16) {
-    let linjer = hjelp_linjer(prefiks);
+fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, bindinger: &Bindinger, rull: u16) {
+    let linjer = hjelp_linjer(prefiks, bindinger);
     let Some((plass, maks)) = hjelp_boks(område, linjer.len()) else { return };
     let hint = if maks > 0 { "↑↓ rull · trykk en tast for å lukke" } else { "trykk en tast for å lukke" };
     let Some(boks) = boks(buf, område, plass.width, plass.height, "nerdr", hint) else { return };
@@ -762,32 +801,166 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, rull: u16) {
     }
 }
 
-/// Utseende-menyen midt på skjermen, med aksen `valgt` markert.
-fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize) {
-    let høyde = AKSER.len() as u16 + 4;
-    let Some(ramme) = boks(buf, område, 42, høyde, "konfigurasjon", "↑↓ velg · ←→ endre · esc lukk") else { return };
-    let x = ramme.x + 2;
-    for (akse, navn) in AKSER.iter().enumerate() {
-        // Luft mellom panene og lista.
-        let y = ramme.y + 1 + akse as u16 + (akse > 0) as u16 + (akse >= BOKSAKSER) as u16;
+/// Hvor overskriftene og valgene står i konfigurasjonen.
+struct Valgmeny {
+    boks: Rect,
+    overskrifter: Vec<(u16, &'static str)>,
+    /// Aksen, raden og kolonnene til verdiene.
+    rader: Vec<(usize, u16, Vec<Range<u16>>)>,
+    forklaring: u16,
+}
+
+fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
+    let (mut overskrifter, mut rader) = (Vec::new(), Vec::new());
+    let mut y = 0;
+    for (i, (tittel, akser)) in utseende::MENY.iter().enumerate() {
+        y += (i > 0) as u16;
+        overskrifter.push((y, *tittel));
+        y += 1;
+        for &akse in akser.iter().filter(|&&a| u.gjelder(a)) {
+            rader.push((akse, y));
+            y += 1;
+        }
+    }
+    let forklaring = y + 1;
+    let boks = midt_på(område, UTSEENDE_BREDDE, forklaring + FORKLARING_LINJER as u16 + 2)?;
+    let (x, topp) = (boks.x + 2, boks.y + 1);
+    let rader = rader
+        .into_iter()
+        .map(|(akse, y)| {
+            let mut vx = x + NØKKEL_BREDDE + 2;
+            let kolonner = Utseende::i_menyen(akse)
+                .1
+                .iter()
+                .map(|verdi| {
+                    let r = vx..vx + verdi.chars().count() as u16;
+                    vx = r.end + 2;
+                    r
+                })
+                .collect();
+            (akse, topp + y, kolonner)
+        })
+        .collect();
+    let overskrifter = overskrifter.into_iter().map(|(y, t)| (topp + y, t)).collect();
+    Some(Valgmeny { boks, overskrifter, rader, forklaring: topp + forklaring })
+}
+
+/// Verdien under musen i konfigurasjonen, som aksen og indeksen.
+pub fn verdi_på(app: &App, x: u16, y: u16) -> Option<(usize, usize)> {
+    let meny = valgmeny(skjerm(app), &app.utseende)?;
+    let (akse, _, kolonner) = meny.rader.into_iter().find(|r| r.1 == y)?;
+    kolonner.iter().position(|r| r.contains(&x)).map(|i| (akse, i))
+}
+
+pub fn i_valgmenyen(app: &App, x: u16, y: u16) -> bool {
+    valgmeny(skjerm(app), &app.utseende).is_some_and(|m| m.boks.contains((x, y).into()))
+}
+
+/// Konfigurasjonen midt på skjermen, med aksen `valgt` markert. Valgene som
+/// ikke gjelder, er borte.
+fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize, mus: Option<&Mål>) {
+    let Some(meny) = valgmeny(område, u) else { return };
+    let (b, h) = (meny.boks.width, meny.boks.height);
+    let Some(ramme) = boks(buf, område, b, h, "konfigurasjon", "↑↓ velg · ←→ endre · klikk · esc lukk") else { return };
+    let (x, bunn) = (ramme.x + 2, ramme.bottom() - 1);
+    let indre = (ramme.width - 4) as usize;
+    for (y, tittel) in meny.overskrifter.into_iter().filter(|(y, _)| *y < bunn) {
+        buf.set_string(x, y, tittel, STERK);
+    }
+    for (akse, y, kolonner) in meny.rader.into_iter().filter(|r| r.1 < bunn) {
+        let (navn, verdier) = Utseende::i_menyen(akse);
         if akse == valgt {
             buf.set_style(Rect::new(ramme.x + 1, y, ramme.width - 2, 1), markert());
             buf.set_string(ramme.x + 1, y, "▎", VANLIG);
         }
-        buf.set_string(x, y, *navn, if akse == valgt { STERK } else { SVAK });
-        let mut vx = x + 9;
-        for (i, verdi) in Utseende::verdier(akse).iter().enumerate() {
-            let på = u.gjelder(akse) && i == u.indeks(akse);
-            let stil = if på { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { SVAK };
-            vx = buf.set_stringn(vx, y, *verdi, ramme.right().saturating_sub(vx + 1) as usize, stil).0 + 2;
+        buf.set_string(x, y, navn, if akse == valgt { STERK } else { SVAK });
+        buf.set_string(x + NØKKEL_BREDDE, y, "│", SVAK);
+        for (i, (r, verdi)) in kolonner.into_iter().zip(verdier).enumerate() {
+            let stil = match () {
+                _ if i == u.indeks(akse) => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),
+                _ if mus == Some(&Mål::Verdi(akse, i)) => under_musen().patch(VANLIG),
+                _ => VANLIG,
+            };
+            buf.set_stringn(r.start, y, *verdi, ramme.right().saturating_sub(r.start + 1) as usize, stil);
         }
+    }
+    let forklaring = bryt(utseende::FORKLARING[valgt], indre, indre, FORKLARING_LINJER);
+    for (linje, y) in forklaring.into_iter().zip(meny.forklaring..bunn) {
+        buf.set_string(x, y, linje, SVAK);
+    }
+}
+
+/// Boksen til handlingene eller velgeren, og hvor mange treff den har plass til.
+fn menyboks(område: Rect, bredde: u16) -> Option<(Rect, usize)> {
+    let rader = (område.height * 2 / 3).saturating_sub(3).max(MENY_RADER);
+    let boks = midt_på(område, bredde, rader + 3)?;
+    Some((boks, boks.height.saturating_sub(3) as usize))
+}
+
+pub fn menyrader(app: &App) -> usize {
+    menyboks(skjerm(app), HANDLINGER_BREDDE).map_or(1, |(_, rader)| rader.max(1))
+}
+
+/// Rullet så `valgt` vises, og uten tomme rader nederst.
+pub fn følg(valgt: usize, rull: usize, rader: usize, antall: usize) -> usize {
+    let rull = if valgt < rull { valgt } else if valgt >= rull + rader { valgt + 1 - rader } else { rull };
+    rull.min(antall.saturating_sub(rader))
+}
+
+/// Boksen og treffene til handlingene eller velgeren, den som er åpen, med
+/// hvor langt de er rullet og hvor mange det er.
+fn åpen_meny(app: &App) -> Option<(Rect, usize, usize, usize)> {
+    let (bredde, rull, antall) = match (&app.handlinger, &app.velger) {
+        (Some(h), _) => (HANDLINGER_BREDDE, h.rull, h.treff().len()),
+        (None, Some(v)) => (VELGER_BREDDE, v.rull, v.treff().len()),
+        _ => return None,
+    };
+    let (boks, rader) = menyboks(skjerm(app), bredde)?;
+    Some((boks, rader, rull, antall))
+}
+
+/// Treffet under musen i handlingene eller velgeren.
+pub fn meny_rad_på(app: &App, x: u16, y: u16) -> Option<usize> {
+    let (boks, rader, rull, antall) = åpen_meny(app)?;
+    if !(boks.x + 1..boks.right() - 1).contains(&x) {
+        return None;
+    }
+    let rad = y.checked_sub(boks.y + 2)? as usize;
+    (rad < rader && rull + rad < antall).then_some(rull + rad)
+}
+
+pub fn i_menyboks(app: &App, x: u16, y: u16) -> bool {
+    åpen_meny(app).is_some_and(|(boks, ..)| boks.contains((x, y).into()))
+}
+
+/// Pilene i rammen når det er flere treff over eller under.
+fn menypiler(buf: &mut Buffer, boks: Rect, fra: usize, rader: usize, antall: usize) {
+    let pil = SVAK.fg(Color::Reset);
+    if fra > 0 {
+        buf.set_string(boks.right() - 5, boks.y, " ↑ ", pil);
+    }
+    if fra + rader < antall {
+        buf.set_string(boks.right() - 5, boks.bottom() - 1, " ↓ ", pil);
+    }
+}
+
+/// Bakgrunnen til treff nummer `i`: markert når den er valgt, og en tone
+/// når musen er over den.
+fn menyrad(buf: &mut Buffer, boks: Rect, y: u16, valgt: bool, pekt: bool) {
+    let rad = Rect::new(boks.x + 1, y, boks.width - 2, 1);
+    if valgt {
+        buf.set_style(rad, markert());
+        buf.set_string(boks.x + 1, y, "▎", VANLIG);
+    } else if pekt {
+        buf.set_style(rad, under_musen());
     }
 }
 
 /// Handlingene midt på skjermen, med tasten til høyre. Gir der markøren
 /// skal stå i søkefeltet.
-fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger) -> (u16, u16) {
-    let Some(boks) = boks(buf, område, 56, VELGER_LINJER + 4, "handlinger", "⏎ kjør · esc lukk") else {
+fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger, mus: Option<&Mål>) -> (u16, u16) {
+    let Some((plass, linjer)) = menyboks(område, HANDLINGER_BREDDE) else { return (0, 0) };
+    let Some(boks) = boks(buf, område, plass.width, plass.height, "handlinger", "⏎ kjør · klikk · esc lukk") else {
         return (0, 0);
     };
     let indre = (boks.width - 4) as usize;
@@ -798,15 +971,11 @@ fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger) -> 
     let antall = format!("{}/{}", treff.len(), handlinger.antall());
     buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
 
-    let linjer = (boks.height - 3) as usize;
-    let fra = handlinger.valgt.saturating_sub(linjer - 1);
+    let fra = handlinger.rull;
     for (i, (k, tegn)) in treff.iter().enumerate().skip(fra).take(linjer) {
         let y = boks.y + 2 + (i - fra) as u16;
         let valgt = i == handlinger.valgt;
-        if valgt {
-            buf.set_style(Rect::new(boks.x + 1, y, boks.width - 2, 1), markert());
-            buf.set_string(boks.x + 1, y, "▎", VANLIG);
-        }
+        menyrad(buf, boks, y, valgt, mus == Some(&Mål::Rad(i)));
         let bredde = k.tast.chars().count();
         buf.set_string(boks.right() - 2 - bredde as u16, y, &k.tast, SVAK);
         let stil = if valgt { STERK } else { VANLIG };
@@ -815,20 +984,21 @@ fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger) -> 
             buf.set_string(x + n as u16, y, c.encode_utf8(&mut [0; 4]), stil);
         }
     }
+    menypiler(buf, boks, fra, linjer, treff.len());
     (markør, y)
 }
 
 /// Mappevelgeren midt på skjermen. Gir der markøren skal stå i søkefeltet.
-fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
+fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger, mus: Option<&Mål>) -> (u16, u16) {
     let (tittel, hint) = match velger.fortsett {
         false => ("ny sesjon", "⏎ start · C-r hent samtale · esc avbryt"),
         true => ("hent samtale", "⏎ hent · C-r ny sesjon · esc avbryt"),
     };
-    let Some(boks) = boks(buf, område, 64, VELGER_LINJER + 4, tittel, hint) else {
+    let Some((plass, linjer)) = menyboks(område, VELGER_BREDDE) else { return (0, 0) };
+    let Some(boks) = boks(buf, område, plass.width, plass.height, tittel, hint) else {
         return (0, 0);
     };
     let bredde = boks.width;
-    let høyde = boks.height;
     let indre = (bredde - 4) as usize;
 
     let treff = velger.treff();
@@ -842,15 +1012,11 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
     let antall = format!("{}/{}{søker}", treff.len(), velger.antall());
     buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
 
-    let linjer = (høyde - 3) as usize;
-    let fra = velger.valgt.saturating_sub(linjer - 1);
+    let fra = velger.rull;
     for (i, t) in treff.iter().enumerate().skip(fra).take(linjer) {
         let y = boks.y + 2 + (i - fra) as u16;
         let valgt = i == velger.valgt;
-        if valgt {
-            buf.set_style(Rect::new(boks.x + 1, y, bredde - 2, 1), markert());
-            buf.set_string(boks.x + 1, y, "▎", VANLIG);
-        }
+        menyrad(buf, boks, y, valgt, mus == Some(&Mål::Rad(i)));
         let stil = if valgt { STERK } else { VANLIG };
         let k = t.kandidat;
         let mut plass = indre;
@@ -881,6 +1047,7 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger) -> (u16, u16) {
             buf.set_string(x + n as u16, y, c.encode_utf8(&mut [0; 4]), stil);
         }
     }
+    menypiler(buf, boks, fra, linjer, treff.len());
     (markør, y)
 }
 
@@ -1166,40 +1333,50 @@ mod tester {
     fn tegnet_hjelp(bredde: u16, høyde: u16, rull: u16) -> Vec<String> {
         let område = Rect::new(0, 0, bredde, høyde);
         let mut buf = Buffer::empty(område);
-        tegn_hjelp(&mut buf, område, "C-b", rull);
+        tegn_hjelp(&mut buf, område, "C-b", &Bindinger::default(), rull);
         (0..høyde).map(|y| (0..bredde).map(|x| buf[(x, y)].symbol()).collect()).collect()
     }
 
     #[test]
-    fn hele_hjelpen_kan_leses_i_80x24() {
-        let linjer = hjelp_linjer("C-b");
-        let (_, maks) = hjelp_boks(Rect::new(0, 0, 80, 24), linjer.len()).unwrap();
-        assert!(maks > 0);
-        let sett: Vec<String> = (0..=maks).flat_map(|rull| tegnet_hjelp(80, 24, rull)).collect();
+    fn hjelpen_får_plass_i_80x24() {
+        let linjer = hjelp_linjer("C-b", &Bindinger::default());
+        assert_eq!(hjelp_boks(Rect::new(0, 0, 80, 24), linjer.len()).unwrap().1, 0);
+        let rader = tegnet_hjelp(80, 24, 0);
         for (tekst, _) in linjer.iter().filter(|(t, _)| !t.is_empty()) {
-            let tekst: String = tekst.chars().take(54).collect();
-            assert!(sett.iter().any(|rad| rad.contains(&tekst)), "{tekst}");
+            assert!(rader.iter().any(|rad| rad.contains(tekst.as_str())), "{tekst}");
         }
-        assert!(sett.iter().any(|rad| rad.contains("C-b ?")));
     }
 
     #[test]
     fn pilene_i_rammen_viser_hva_som_er_over_og_under() {
-        let maks = hjelp_boks(Rect::new(0, 0, 80, 24), hjelp_linjer("C-b").len()).unwrap().1;
+        let maks = hjelp_boks(Rect::new(0, 0, 80, 16), hjelp_linjer("C-b", &Bindinger::default()).len()).unwrap().1;
         let pil = |rader: &[String], pil: &str| rader.iter().any(|r| r.contains(pil));
-        let toppen = tegnet_hjelp(80, 24, 0);
+        let toppen = tegnet_hjelp(80, 16, 0);
         assert!(!pil(&toppen, " ↑ ") && pil(&toppen, " ↓ ") && pil(&toppen, "↑↓ rull · trykk en tast for å lukke"));
-        let midten = tegnet_hjelp(80, 24, 1);
+        let midten = tegnet_hjelp(80, 16, 1);
         assert!(pil(&midten, " ↑ ") && pil(&midten, " ↓ "));
         // Lenger enn bunnen går den ikke.
-        let bunnen = tegnet_hjelp(80, 24, maks + 10);
+        let bunnen = tegnet_hjelp(80, 16, maks + 10);
         assert!(pil(&bunnen, " ↑ ") && !pil(&bunnen, " ↓ "));
-        assert_eq!(bunnen, tegnet_hjelp(80, 24, maks));
+        assert_eq!(bunnen, tegnet_hjelp(80, 16, maks));
+    }
+
+    #[test]
+    fn hjelpen_viser_tastene_fra_tmux_oppsettet() {
+        let linjer: Vec<String> = ["| split-window -h", "- split-window -v", "h select-pane -L", "j select-pane -D", "k select-pane -U", "l select-pane -R"]
+            .iter()
+            .map(|b| format!("bind-key -T prefix {b}"))
+            .collect();
+        let bindinger = Bindinger::ny(&nerdr_kjerne::bindinger::les(&linjer));
+        let tekst: Vec<String> = hjelp_linjer("C-a", &bindinger).into_iter().map(|(t, _)| t).collect();
+        assert!(tekst.iter().any(|t| t.starts_with("C-a | -  ") && t.ends_with("del side om side, over og under")));
+        assert!(tekst.iter().any(|t| t.starts_with("C-a h k j l ")));
+        assert!(hjelp_linjer("C-b", &Bindinger::default()).iter().any(|(t, _)| t.starts_with("C-b ←↑↓→ ")));
     }
 
     #[test]
     fn hjelpen_som_får_plass_ruller_ikke() {
-        let (_, maks) = hjelp_boks(Rect::new(0, 0, 120, 60), hjelp_linjer("C-b").len()).unwrap();
+        let (_, maks) = hjelp_boks(Rect::new(0, 0, 120, 60), hjelp_linjer("C-b", &Bindinger::default()).len()).unwrap();
         assert_eq!(maks, 0);
         let rader = tegnet_hjelp(120, 60, 0);
         assert!(rader.iter().any(|r| r.contains("trykk en tast")));
@@ -1213,6 +1390,16 @@ mod tester {
         assert_eq!(Utsnitt::ny(20, 12, 50), Utsnitt { rull: 10, rom: 10, ruller: true });
         let u = Utsnitt::ny(20, 12, 4);
         assert_eq!((u.skjerm(4), u.i_lista(1), u.i_lista(0), u.i_lista(11)), (1, Some(4), None, None));
+    }
+
+    #[test]
+    fn menyen_ruller_først_når_den_valgte_når_kanten() {
+        assert_eq!(følg(5, 0, 10, 30), 0);
+        assert_eq!(følg(10, 0, 10, 30), 1);
+        assert_eq!(følg(4, 6, 10, 30), 4);
+        // Færre treff etter et søk: ingen tomme rader nederst.
+        assert_eq!(følg(2, 20, 10, 12), 2);
+        assert_eq!(følg(11, 20, 10, 12), 2);
     }
 
     #[test]
