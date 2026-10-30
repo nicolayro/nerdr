@@ -118,9 +118,10 @@ Er vinduet lavt, står bare «+ ny sesjon» nederst. Resten finnes under
 
 - **En Claude vises ikke i lista:** den er startet i en vanlig terminalfane.
   Avslutt den der, og fortsett samtalen i nerdr med «hent samtale» ({p} r).
-- **Mappene i velgeren:** velgeren viser mappene brukeren har brukt Claude i,
-  og mappene under {mapper}. En mappe til legges til i skallets oppstartsfil,
-  kolonseparert: `export {mapper_variabel}={mapper}:~/kode`.
+- **Mappene i velgeren:** velgeren søker i mappene brukeren har brukt Claude
+  i, og i alle mappene under {mapper}, utenom skjulte mapper og det som er
+  bygget. Mappene settes i skallets oppstartsfil, kolonseparert:
+  `export {mapper_variabel}=~/git:~/kode`.
 - **En annen tast enn {p}:** `export {PREFIKS_VARIABEL}=<tast>`, som C-s eller
   C-Space, i skallets oppstartsfil. Uten den gjelder tasten fra tmux-oppsettet,
   ellers C-b.

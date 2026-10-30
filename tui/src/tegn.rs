@@ -19,7 +19,7 @@ use crate::palett::{Rgb, bland};
 use crate::grupper::{Del, Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
-use crate::tekst::varighet;
+use crate::tekst::{med_tilde, varighet};
 use crate::utseende::{self, Ledig, Orden, Plass, Sti, Topp, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
@@ -932,7 +932,7 @@ pub fn følg(valgt: usize, rull: usize, rader: usize, antall: usize) -> usize {
 fn åpen_meny(app: &App) -> Option<(Rect, usize, usize, usize)> {
     let (bredde, rull, antall) = match (&app.handlinger, &app.velger) {
         (Some(h), _) => (HANDLINGER_BREDDE, h.rull, h.treff().len()),
-        (None, Some(v)) => (VELGER_BREDDE, v.rull, v.treff().len()),
+        (None, Some(v)) => (VELGER_BREDDE, v.rull, v.antall_treff()),
         _ => return None,
     };
     let (boks, rader) = menyboks(skjerm(app), bredde)?;
@@ -1025,12 +1025,20 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger, mus: Option<&M�
     let x = boks.x + 2;
     let y = boks.y + 1;
     let prompt = if velger.fortsett { "samtale › " } else { "mappe › " };
-    let søk = kutt(&velger.søk, indre.saturating_sub(prompt.chars().count() + 8));
+    let søk = kutt(velger.søk(), indre.saturating_sub(prompt.chars().count() + 8));
     let etter = buf.set_stringn(x, y, prompt, indre, Style::new().fg(ORANSJE)).0;
     let markør = buf.set_stringn(etter, y, &søk, indre, VANLIG).0;
     let søker = if velger.søker && !velger.fortsett { " …" } else { "" };
-    let antall = format!("{}/{}{søker}", treff.len(), velger.antall());
+    let tomt = søk.is_empty() && !velger.fortsett;
+    let antall = match tomt {
+        true => format!("{}{søker}", velger.antall()),
+        false => format!("{}/{}{søker}", treff.len(), velger.antall()),
+    };
     buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
+    if tomt {
+        let under = velger.røtter().iter().map(|r| med_tilde(r)).collect::<Vec<_>>().join(", ");
+        buf.set_stringn(x, y + 1, format!("skriv for å søke i mappene under {under}"), indre, SVAK);
+    }
 
     let fra = velger.rull;
     for (i, t) in treff.iter().enumerate().skip(fra).take(linjer) {

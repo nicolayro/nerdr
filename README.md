@@ -173,13 +173,16 @@ den starter.
 søker fram en mappe, og `⏎` starter `claude`
 der i en ny tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den nye
 et nummer etter navnet, som `nerdr-2`, så vinduene du lager ved siden av en
-Claude, hører til den. Først står mappene du har brukt Claude i, sist brukt først, så du ikke
-trenger å sette noe. Så kommer mappene rett under `NERDR_MAPPER` og prosjektene
-under dem, inntil fire nivåer ned, som appene i et monorepo. Et prosjekt er en mappe med
+Claude, hører til den. Lista er tom til du skriver. Velgeren søker i mappene
+du har brukt Claude i, og i alle mappene under `NERDR_MAPPER`, som er `~` om
+du ikke har satt den. Ved like gode treff står mappene du har brukt, først. I
+et git-repo er bare repoet og prosjektene i det med, inntil fire nivåer ned,
+som appene i et monorepo. Et prosjekt er en mappe med
 `package.json`, `pom.xml`, `build.gradle`, `Cargo.toml`, `go.mod`,
-`pyproject.toml` eller `deno.json`, utenfor `node_modules`, `target`, `build`
-og testmapper. Prosjektene kommer i lista når de er lest, og til da står det
-`…` etter antallet.
+`pyproject.toml` eller `deno.json`. Skjulte mapper, `node_modules`, `target`,
+`build`, testmapper og `~/Library` er ikke med. Mappene leses på nytt hver gang
+velgeren åpnes, så en mappe du nettopp har laget, er med. Til alle er lest,
+står det `…` etter antallet.
 
 Avslutter Claude-en i en sesjon nerdr har laget, lukkes sesjonen etter ti
 sekunder når det bare står skall igjen i den. Kjører noe annet der, som `nvim`,
@@ -243,7 +246,7 @@ prioritert. I `@nerdr-utseende` står valgene med navnene de hadde først:
 
 | | |
 | --- | --- |
-| `NERDR_MAPPER` | Mappene mappevelgeren viser mappene under, i tillegg til dem du har brukt Claude i. Kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
+| `NERDR_MAPPER` | Mappene mappevelgeren søker under, i tillegg til dem du har brukt Claude i. Kolonseparert, som `~/git:~/kode`. Standard er `~`. |
 | `NERDR_PREFIKS` | Prefikset, skrevet som i tmux: `C-a`, `M-a` eller `C-Space`. Standard er prefikset i tmux-oppsettet ditt, ellers `C-b`. Det endrer ikke tmux, bare nerdr. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |
 | `nerdr -L <socket>` | tmux-serveren, som `tmux -L`. |

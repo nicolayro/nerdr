@@ -320,14 +320,15 @@ klikk 2 2
 sjekk "et klikk utenfor lukker dem også" mangler '⏎ kjør'
 
 klikk 3 17
-sjekk "klikk på «+ ny sesjon» åpner popupen med 4 mapper og 1 prosjekt" linje_har 3 'mappe › .*5/5'
-sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 4 '▎~/git/annet'
-sjekk "så ~/eget, som er brukt før" linje_har 5 '~/eget'
-sjekk "så ~/git/prosjekt.ny" linje_har 6 '~/git/prosjekt\.ny'
-sjekk "så mappa i kode" linje_har 7 '~/kode/tredje'
-sjekk "og prosjektet i annet, men ikke det i node_modules" linje_har 8 '~/git/annet/apps/web +│'
+sjekk "klikk på «+ ny sesjon» åpner popupen uten treff" linje_har 4 'skriv for å søke i mappene under ~/git, ~/kode'
+sjekk "og 6 mapper: de 2 du har brukt, og 4 under mappene, uten node_modules" linje_har 3 'mappe › +6 │'
+tast -l an
+sjekk "«an» treffer annet og de 2 under" linje_har 3 'mappe › an .*3/6'
+sjekk "~/git/annet står først og er valgt" linje_har 4 '▎~/git/annet +│'
+sjekk "og prosjektet i annet" linje_har 6 '~/git/annet/apps/web +│'
+tast C-u
 tast -l pny
-sjekk "«pny» treffer bare prosjekt.ny" linje_har 3 'mappe › pny .*1/5'
+sjekk "«pny» treffer bare prosjekt.ny" linje_har 3 'mappe › pny .*1/6'
 sjekk "prosjekt.ny er valgt" linje_har 4 '▎~/git/prosjekt\.ny'
 
 tast Enter
@@ -344,7 +345,7 @@ sjekk "i registeret får prosjekt.ny vanlig merke, og er fortsatt aktiv" linje_h
 tast C-b f
 sjekk "C-b f åpner popupen fra panen" har 'mappe ›'
 tast -l pny
-sjekk "«pny» igjen" linje_har 3 '1/5'
+sjekk "«pny» igjen" linje_har 3 '1/6'
 tast Enter
 sjekk "samme mappe igjen gir sesjonen prosjekt-ny-2 i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny-2
 sjekk "og prosjekt-ny har fortsatt ett vindu" linjer 1 maal list-windows -t prosjekt-ny
