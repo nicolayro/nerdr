@@ -107,7 +107,7 @@ const I_MENYEN: [&str; 9] =
 pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Liste", &[1, 6, 2, 5, 8, 3, 7, 4])];
 /// Står nederst i menyen for valget du står på, i samme rekkefølge som `AKSER`.
 pub const FORKLARING: [&str; 9] = [
-    "Bokser gir hver pane en ramme med luft rundt. Linjer lar panene fylle visningen, med streker mellom.",
+    "Bokser gir hver pane en ramme, og naboer deler kanten. Linjer lar panene fylle visningen, med streker mellom.",
     "Tegnet og tiden får fargen til gruppen, og rammene en tone av den.",
     "Vanlig har en boks for hver sesjon. Minimal har én linje for hver.",
     "Prioritert har de aktive øverst. Prosjekt grupperer etter repo. Aktivitet har den som sist endret seg, øverst.",

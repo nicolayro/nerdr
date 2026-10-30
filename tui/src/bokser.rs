@@ -1,7 +1,7 @@
 //! Hvor panene i vinduet tegnes, med bokser eller med linjer.
 //!
-//! Med bokser står hver pane i en boks med avrundede hjørner, med luft inni og
-//! mellom boksene. tmux lar én kolonne eller rad stå tom mellom panene og
+//! Med bokser står hver pane i en boks med avrundede hjørner og luft inni, og
+//! naboer deler kanten. tmux lar én kolonne eller rad stå tom mellom panene og
 //! ingenting ytterst, så vinduet må være så mye mindre enn visningen som
 //! `ekstra` sier. Det avhenger bare av hvordan vinduet er delt, ikke av
 //! størrelsen, så tmux får ny størrelse bare når panene deles eller lukkes.
@@ -20,12 +20,8 @@ pub enum Rammer {
 
 /// Kolonner mellom rammen og innholdet, til venstre og høyre.
 const LUFT_INNI: u16 = 1;
-/// Kolonner og rader mellom to bokser. tmux lar én stå tom, så med 0 står
-/// boksene tettere enn panene i tmux.
-const MELLOM_X: u16 = 1;
-const MELLOM_Y: u16 = 0;
 /// Kolonner mellom boksene og kantene av visningen.
-const KANT: u16 = 1;
+const KANT: u16 = 0;
 const BOKS_X: u16 = 2 + 2 * LUFT_INNI;
 const BOKS_Y: u16 = 2;
 
@@ -50,21 +46,22 @@ pub fn ekstra(oppsett: &Celle, rammer: Rammer) -> (u16, u16) {
 
 fn ekstra_i(c: &Celle) -> (u16, u16) {
     let barn = |celler: &[Celle]| celler.iter().map(ekstra_i).collect::<Vec<_>>();
-    // Boksene trenger `luft` mellom seg der tmux har én tom.
-    let rekke = |sum: u16, celler: &[Celle], luft: u16| {
+    // Naboer deler kanten, og tmux har én tom mellom dem, så hvert skille
+    // trenger to mindre enn boksene hver for seg.
+    let rekke = |sum: u16, celler: &[Celle]| {
         let mellomrom = (celler.len() as u16).saturating_sub(1);
-        (sum + mellomrom * luft).saturating_sub(mellomrom)
+        sum.saturating_sub(2 * mellomrom)
     };
     match &c.innhold {
         Innhold::Pane(_) => (BOKS_X, BOKS_Y),
         Innhold::SideOmSide(celler) => {
             let e = barn(celler);
-            let x = rekke(e.iter().map(|e| e.0).sum(), celler, MELLOM_X);
+            let x = rekke(e.iter().map(|e| e.0).sum(), celler);
             (x, e.iter().map(|e| e.1).max().unwrap_or(0))
         }
         Innhold::OverHverandre(celler) => {
             let e = barn(celler);
-            let y = rekke(e.iter().map(|e| e.1).sum(), celler, MELLOM_Y);
+            let y = rekke(e.iter().map(|e| e.1).sum(), celler);
             (e.iter().map(|e| e.0).max().unwrap_or(0), y)
         }
     }
@@ -98,7 +95,7 @@ fn plasser_linjer(c: &Celle, område: Rect, ut: &mut Vec<Boks>) {
 
 /// En celle får plassen tmux har gitt den, pluss det boksene i den trenger.
 /// Den siste cellen i en rekke får resten, så kantene står likt der en
-/// nabo har flere bokser i seg.
+/// nabo har flere bokser i seg. Neste boks starter på kanten til den forrige.
 fn plasser_bokser(c: &Celle, r: Rect, ut: &mut Vec<Boks>) {
     match &c.innhold {
         Innhold::Pane(pane) => {
@@ -115,7 +112,7 @@ fn plasser_bokser(c: &Celle, r: Rect, ut: &mut Vec<Boks>) {
                     false => (b.bredde + ekstra_i(b).0).min(r.right().saturating_sub(x)),
                 };
                 plasser_bokser(b, Rect::new(x, r.y, bredde, r.height), ut);
-                x = (x + bredde + MELLOM_X).min(r.right());
+                x = (x + bredde).saturating_sub(1).min(r.right());
             }
         }
         Innhold::OverHverandre(celler) => {
@@ -126,7 +123,7 @@ fn plasser_bokser(c: &Celle, r: Rect, ut: &mut Vec<Boks>) {
                     false => (b.høyde + ekstra_i(b).1).min(r.bottom().saturating_sub(y)),
                 };
                 plasser_bokser(b, Rect::new(r.x, y, r.width, høyde), ut);
-                y = (y + høyde + MELLOM_Y).min(r.bottom());
+                y = (y + høyde).saturating_sub(1).min(r.bottom());
             }
         }
     }
@@ -142,12 +139,12 @@ mod tester {
 
     #[test]
     fn én_pane_får_boks_med_luft() {
-        // Visningen er 80x20, og tmux har fått 74x18.
-        let p = pane("%1", 74, 18, 0, 0);
-        assert_eq!(ekstra(&p, Rammer::Bokser), (6, 2));
+        // Visningen er 80x20, og tmux har fått 76x18.
+        let p = pane("%1", 76, 18, 0, 0);
+        assert_eq!(ekstra(&p, Rammer::Bokser), (4, 2));
         let bokser = plasser(&p, Rect::new(36, 0, 80, 20), Rammer::Bokser);
-        assert_eq!(bokser[0].ramme, Some(Rect::new(37, 0, 78, 20)));
-        assert_eq!(bokser[0].innhold, Rect::new(39, 1, 74, 18));
+        assert_eq!(bokser[0].ramme, Some(Rect::new(36, 0, 80, 20)));
+        assert_eq!(bokser[0].innhold, Rect::new(38, 1, 76, 18));
     }
 
     #[test]
@@ -165,27 +162,25 @@ mod tester {
     }
 
     #[test]
-    fn side_om_side_med_luft_mellom() {
-        // Visningen er 80x20, og tmux har fått 70x18: 34 + 1 + 35.
+    fn side_om_side_deler_kanten() {
+        // Visningen er 80x20, og tmux har fått 74x18: 36 + 1 + 37.
         let c = Celle {
-            bredde: 70,
+            bredde: 74,
             høyde: 18,
             x: 0,
             y: 0,
-            innhold: Innhold::SideOmSide(vec![pane("%1", 34, 18, 0, 0), pane("%2", 35, 18, 35, 0)]),
+            innhold: Innhold::SideOmSide(vec![pane("%1", 36, 18, 0, 0), pane("%2", 37, 18, 37, 0)]),
         };
-        assert_eq!(ekstra(&c, Rammer::Bokser), (10, 2));
+        assert_eq!(ekstra(&c, Rammer::Bokser), (6, 2));
         let bokser = plasser(&c, Rect::new(0, 0, 80, 20), Rammer::Bokser);
-        assert_eq!(bokser[0].ramme, Some(Rect::new(1, 0, 38, 20)));
-        assert_eq!(bokser[0].innhold, Rect::new(3, 1, 34, 18));
-        assert_eq!(bokser[1].ramme, Some(Rect::new(40, 0, 39, 20)));
-        assert_eq!(bokser[1].innhold, Rect::new(42, 1, 35, 18));
+        assert_eq!(bokser[0].ramme, Some(Rect::new(0, 0, 40, 20)));
+        assert_eq!(bokser[0].innhold, Rect::new(2, 1, 36, 18));
+        assert_eq!(bokser[1].ramme, Some(Rect::new(39, 0, 41, 20)));
+        assert_eq!(bokser[1].innhold, Rect::new(41, 1, 37, 18));
     }
 
     #[test]
-    fn nabo_med_færre_bokser_fyller_ut_til_samme_kant() {
-        // Venstre har to bokser rett over hverandre og trenger én rad mer enn
-        // høyre.
+    fn over_hverandre_deler_kanten_også_ved_siden_av_en_nabo() {
         let venstre = Celle {
             bredde: 30,
             høyde: 16,
@@ -200,11 +195,11 @@ mod tester {
             y: 0,
             innhold: Innhold::SideOmSide(vec![venstre, pane("%3", 30, 16, 31, 0)]),
         };
-        assert_eq!(ekstra(&c, Rammer::Bokser), (10, 3));
-        let bokser = plasser(&c, Rect::new(0, 0, 71, 19), Rammer::Bokser);
-        assert_eq!(bokser[1].ramme, Some(Rect::new(1, 10, 34, 9)));
-        assert_eq!(bokser[1].innhold, Rect::new(3, 11, 30, 7));
-        assert_eq!(bokser[2].ramme, Some(Rect::new(36, 0, 34, 19)));
-        assert_eq!(bokser[2].innhold, Rect::new(38, 1, 30, 16));
+        assert_eq!(ekstra(&c, Rammer::Bokser), (6, 2));
+        let bokser = plasser(&c, Rect::new(0, 0, 67, 18), Rammer::Bokser);
+        assert_eq!(bokser[1].ramme, Some(Rect::new(0, 9, 34, 9)));
+        assert_eq!(bokser[1].innhold, Rect::new(2, 10, 30, 7));
+        assert_eq!(bokser[2].ramme, Some(Rect::new(33, 0, 34, 18)));
+        assert_eq!(bokser[2].innhold, Rect::new(35, 1, 30, 16));
     }
 }

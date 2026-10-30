@@ -1548,6 +1548,9 @@ impl App {
             return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
         }
         if y < v.y {
+            if y != tegn::fanerad(self) {
+                return None;
+            }
             if let Some(vindu) = tegn::lukk_fane_på(self, x) {
                 return Some(Mål::LukkFane(vindu));
             }
@@ -1660,7 +1663,14 @@ impl App {
             return true;
         }
         if m.row < v.y && m.column >= v.x {
-            if m.row != 0 || m.kind != MouseEventKind::Down(MouseButton::Left) {
+            if m.row == tegn::fanerad(self)
+                && m.kind == MouseEventKind::Down(MouseButton::Middle)
+                && let Some(vindu) = tegn::fane_på(self, m.column)
+            {
+                self.send(&format!("kill-window -t {}", sitat(&vindu)), Svar::Ingenting);
+                return true;
+            }
+            if m.row != tegn::fanerad(self) || m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
             if let Some(vindu) = tegn::lukk_fane_på(self, m.column) {
