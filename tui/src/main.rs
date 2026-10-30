@@ -1258,7 +1258,7 @@ impl App {
     /// Prosjektet til kortet som er markert, når lista er ordnet etter mappe.
     fn valgt_prosjekt(&self) -> Option<String> {
         let id = self.markert().filter(|_| self.utseende.orden == Orden::Mappe)?;
-        self.claude_paner.iter().find(|p| p.id == id).map(|p| self.sted(p))
+        self.claude_paner.iter().find(|p| p.id == id).map(|p| self.prosjekt(p))
     }
 
     fn brett(&mut self, sammen: bool) -> bool {
@@ -1835,7 +1835,7 @@ impl App {
         match self.utseende.orden {
             Orden::Nerdr => grupper::rader(paner, |p| self.plass(p)),
             Orden::Mappe => {
-                grupper::etter_mappe(paner, &self.brettet, |p| Some((self.plass(p)?.merke, self.sted(p))))
+                grupper::etter_mappe(paner, &self.brettet, |p| Some((self.plass(p)?.merke, self.prosjekt(p))))
             }
             Orden::Aktivitet => grupper::etter_aktivitet(paner, |p| self.plass(p)),
         }
@@ -1843,9 +1843,32 @@ impl App {
 
     /// Repoet panen jobber i, eller mappa når den ikke er i et repo.
     fn sted(&self, pane: &Pane) -> String {
+        tekst::sted(pane, self.mappe(pane), self.repoer.get(&pane.id))
+    }
+
+    fn mappe(&self, pane: &Pane) -> Option<&std::path::Path> {
         let ny = self.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
-        let mappe = self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny);
-        tekst::sted(pane, mappe, self.repoer.get(&pane.id))
+        self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny)
+    }
+
+    /// Stien til repoet panen jobber i, så et worktree hører til repoet det
+    /// er laget fra, og to repoer med samme navn er to prosjekter.
+    fn prosjekt(&self, pane: &Pane) -> String {
+        match (self.repoer.get(&pane.id), self.mappe(pane)) {
+            (Some(repo), _) => tekst::med_tilde(&repo.rot),
+            (None, Some(mappe)) => tekst::med_tilde(mappe),
+            (None, None) => self.sted(pane),
+        }
+    }
+
+    /// Hvor panen jobber, når det ikke er i mappa til prosjektet: stien inne
+    /// i repoet, eller hele stien til et worktree.
+    fn undermappe(&self, pane: &Pane) -> Option<String> {
+        let (repo, mappe) = (self.repoer.get(&pane.id)?, self.mappe(pane)?);
+        if mappe == repo.rot {
+            return None;
+        }
+        Some(mappe.strip_prefix(&repo.rot).map_or_else(|_| tekst::med_tilde(mappe), |inne| inne.display().to_string()))
     }
 
     fn i_rekkefølge(&self) -> Vec<Pane> {

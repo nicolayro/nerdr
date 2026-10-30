@@ -6,7 +6,7 @@ use nerdr_kjerne::merke::{Gruppe, Merke};
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Style};
 
-use super::{BLÅ, BLÅ_RGB, GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVAK, VANLIG, bryt, kutt, tonet};
+use super::{BLÅ, BLÅ_RGB, GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVAK, VANLIG, bryt, kutt, kutt_foran, tonet};
 use crate::palett::Rgb;
 use crate::grupper::{Overskrift, Rad, glyf};
 use crate::utseende::{Farge, Plass, Topp, Ulestfarge, Utseende};
@@ -33,6 +33,8 @@ pub struct Info {
     pub starter: bool,
     /// Lista er gruppert etter mappe, så repoet står i overskriften.
     pub sted_over: bool,
+    /// Under branchen, når Claude-en ikke jobber i mappa til prosjektet.
+    pub undermappe: Option<String>,
 }
 
 pub struct Bit {
@@ -93,9 +95,17 @@ pub fn prosjektrad(u: Utseende, navn: &str, merker: &[Merke], bredde: u16, brett
     let slutt = bredde.saturating_sub(2);
     let start = slutt.saturating_sub(merker.len() as u16 * 3);
     let pil = if brettet { "▸" } else { "▾" };
-    let navn = kutt(navn, start.saturating_sub(ETTER_PIL + 1) as usize);
-    let etter_navn = ETTER_PIL + self::bredde(&navn) + 1;
-    let mut l = vec![peker(valgt), bit(1, pil, SVAK), bit(ETTER_PIL, navn, STERK)];
+    let plass = start.saturating_sub(ETTER_PIL + 1) as usize;
+    // Stien til prosjektet, med navnet sist og fet.
+    let (foran, navn) = match navn.rsplit_once('/') {
+        Some((foran, navn)) => (format!("{foran}/"), kutt(navn, plass)),
+        None => (String::new(), kutt(navn, plass)),
+    };
+    let foran = kutt_foran(&foran, plass.saturating_sub(self::bredde(&navn) as usize));
+    let mut l = vec![peker(valgt), bit(1, pil, SVAK), bit(ETTER_PIL, foran.clone(), SVAK)];
+    let navn_x = ETTER_PIL + self::bredde(&foran);
+    let etter_navn = navn_x + self::bredde(&navn) + 1;
+    l.push(bit(navn_x, navn, STERK));
     if u.topp == Topp::Strek {
         let til = if merker.is_empty() { bredde } else { start };
         l.push(bit(etter_navn, "─".repeat(til.saturating_sub(etter_navn) as usize), SVAK));
@@ -224,6 +234,9 @@ fn boks(u: Utseende, i: &Info, b: u16, valgt: bool) -> Vec<Linje> {
         (false, Some(b)) => inni.push((kutt(b, indre), SVAK)),
         (false, None) => {}
     }
+    if let Some(mappe) = &i.undermappe {
+        inni.push((kutt_foran(mappe, indre), SVAK));
+    }
     let mut ut = vec![kantlinje(b, ("╭", "╮"), venstre, høyre, ramme)];
     for (tekst, stil) in inni {
         ut.push(vec![bit(0, "│", ramme), bit(INNRYKK, tekst, stil), bit(b.saturating_sub(1), "│", ramme)]);
@@ -282,6 +295,7 @@ mod tester {
             tid: Some("3m".into()),
             starter: false,
             sted_over: false,
+            undermappe: None,
         }
     }
 
