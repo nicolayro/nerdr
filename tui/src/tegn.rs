@@ -37,10 +37,10 @@ const MENY_RADER: u16 = 13;
 const HANDLINGER_BREDDE: u16 = 56;
 const VELGER_BREDDE: u16 = 100;
 const UTSEENDE_BREDDE: u16 = 58;
-/// Forklaringen nederst i konfigurasjonen har alltid så mange linjer, så
+/// Forklaringen nederst i innstillingene har alltid så mange linjer, så
 /// menyen ikke endrer høyde når du går opp og ned.
 const FORKLARING_LINJER: usize = 2;
-/// Nøklene i konfigurasjonen, med streken mot verdiene rett etter.
+/// Nøklene i innstillingene, med streken mot verdiene rett etter.
 const NØKKEL_BREDDE: u16 = 12;
 
 const ORANSJE_RGB: Rgb = (217, 119, 87);
@@ -133,6 +133,11 @@ pub fn fanerad(app: &App) -> u16 {
     (app.utseende.paner == Rammer::Bokser) as u16
 }
 
+/// Radene øverst i agentlista: versjonen og hjelp, og ny sesjon og
+/// sorteringen, med streken under.
+const TOPPEN: u16 = 2;
+const NY_RAD: u16 = 1;
+
 /// Kolonnene fanene har plass i, innenfor rammen med bokser.
 fn fanerom(app: &App) -> Range<u16> {
     let v = app.visning;
@@ -196,7 +201,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let vis = utsnitt.rader();
     let på_skjermen = |y: u16| u16::try_from(utsnitt.skjerm(y)).ok().filter(|y| vis.contains(y));
     let rad_bakgrunn = (på_egen_rad(app) && app.utseende.topp == Topp::Rad).then(overskrift_bakgrunn);
-    let med_strek = på_egen_rad(app) && app.utseende.topp == Topp::Strek;
+    let med_strek = på_egen_rad(app) && app.utseende.topp != Topp::Rad;
     for Plassert { y, rad, kort, .. } in &rader {
         match rad {
             Rad::Tom => {}
@@ -208,9 +213,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                 }
             }
             Rad::Overskrift(o) => {
-                if let Some(y) = på_skjermen(*y)
-                    && kort::overskrift(app.utseende, buf, y, bredde, o, stripe(app))
-                {
+                if let Some(y) = kort::overskrift(buf, utsnitt.skjerm(*y), &vis, bredde, o, *y == 0, stripe(app)) {
                     overskrifter.push(y);
                 }
             }
@@ -245,40 +248,40 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         }
     }
 
-    // Nederst står knappene, og hintet i stedet når du har trykket prefikset
-    // eller nerdr spør.
-    if alle_knapper(app) {
-        let y = plass(app);
-        buf.set_string(0, y, "─".repeat(bredde as usize), SVAK);
-        overskrifter.push(y);
-        let versjon = format!(" nerdr {}", hjelp::versjon());
-        buf.set_stringn(0, app.visning.bottom() - 1, versjon, bredde as usize, SVAK);
-    }
-    let prefiks = app.prefiks.navn();
+    // Øverst er streken lik i alle sorteringene.
+    buf.set_string(0, TOPPEN, "─".repeat(bredde as usize), SVAK);
+    overskrifter.push(TOPPEN);
     let (pluss, tekststil) = match app.fokus {
         Fokus::Liste => (Style::new().fg(ORANSJE), VANLIG),
         Fokus::Pane => (SVAK, SVAK),
     };
-    for (knapp, y) in knapper(app) {
+    for (knapp, x, y) in knapper(app) {
         let stil = if mus == Some(&Mål::Knapp(knapp)) { under_musen() } else { Style::new() };
         if stripe(app) {
             buf.set_string(0, y, " + ", pluss.patch(stil));
             continue;
         }
-        let Some(&(_, navn, tast)) = KNAPPER.iter().find(|k| k.0 == knapp) else { continue };
-        buf.set_style(Rect::new(0, y, bredde, 1), stil);
-        let tast = format!("{prefiks} {tast}");
-        let tast_x = bredde.saturating_sub(tast.chars().count() as u16 + 1);
+        let Some(&(_, navn, _)) = KNAPPER.iter().find(|k| k.0 == knapp) else { continue };
+        buf.set_style(Rect::new(x.start, y, x.end - x.start, 1), stil);
         if knapp == Knapp::Ny {
             buf.set_string(1, y, "+", pluss.patch(stil));
+            buf.set_stringn(3, y, navn, x.end.saturating_sub(4) as usize, tekststil.patch(stil));
+            continue;
         }
-        buf.set_stringn(3, y, navn, tast_x.saturating_sub(4) as usize, tekststil.patch(stil));
-        buf.set_string(tast_x, y, tast, SVAK.patch(stil));
+        let fra = x.end.saturating_sub(navn.chars().count() as u16 + 1);
+        buf.set_string(fra, y, navn, tekststil.patch(stil));
+        if knapp == Knapp::Hjelp {
+            buf.set_string(fra, y, "?", SVAK.patch(stil));
+        }
+    }
+    if !stripe(app) {
+        let versjon = format!(" nerdr {}", hjelp::versjon());
+        buf.set_stringn(0, 0, versjon, høyre_kolonne(app).saturating_sub(1) as usize, SVAK);
     }
 
     if let Some((x, tekst)) = sortering(app) {
         let stil = if mus == Some(&Mål::Sortering) { under_musen().patch(VANLIG) } else { SVAK };
-        buf.set_string(x.start, 0, tekst, stil);
+        buf.set_string(x.start, NY_RAD, tekst, stil);
     }
 
     // Overskriftene treffer skillestreken. Når lista ruller, står pilen i den
@@ -298,7 +301,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                 (true, utseende::Farge::På) => Style::new().fg(ORANSJE),
                 (true, utseende::Farge::Av) => STERK,
             };
-            buf.set_stringn(1, 0, " ↑ ", bredde as usize, stil);
+            buf.set_stringn(1, vis.start - 1, " ↑ ", bredde as usize, stil);
         }
         if under {
             buf.set_stringn(1, vis.end, " ↓ ", bredde as usize, SVAK);
@@ -315,29 +318,28 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     }
 }
 
-/// Knappen som bytter sortering, til høyre i den øverste raden, der pilen
-/// til venstre ikke kommer i veien. Den er like bred for alle sorteringene,
-/// så den ikke flytter seg når du klikker.
+/// Knappen som bytter sortering, høyrestilt ved siden av ny sesjon. Den er
+/// like bred for alle sorteringene, så den ikke flytter seg når du klikker.
 fn sortering(app: &App) -> Option<(Range<u16>, String)> {
     if stripe(app) {
         return None;
     }
     let bredde = utseende::SORTERINGER.iter().map(|s| s.chars().count()).max().unwrap_or(0);
-    let tekst = format!(" {:<bredde$} ", utseende::SORTERINGER[app.utseende.indeks(utseende::ORDEN)]);
+    let tekst = format!(" {:>bredde$} ", utseende::SORTERINGER[app.utseende.indeks(utseende::ORDEN)]);
     let slutt = liste_bredde(app) - 1;
-    let start = slutt.checked_sub(tekst.chars().count() as u16).filter(|&x| x >= 4)?;
+    let start = slutt.checked_sub(tekst.chars().count() as u16).filter(|&x| x >= NY_BREDDE)?;
     Some((start..slutt, tekst))
 }
 
 pub fn sortering_på(app: &App, x: u16, y: u16) -> bool {
-    y == 0 && sortering(app).is_some_and(|(r, _)| r.contains(&x))
+    y == NY_RAD && sortering(app).is_some_and(|(r, _)| r.contains(&x))
 }
 
-/// Når du har trykket prefikset, eller er i kopimodus. Da står det i stedet
-/// for knappene.
+/// Når du har trykket prefikset, eller er i kopimodus. Det står nederst, så
+/// toppen ikke endrer seg.
 fn hint(app: &App) -> Option<String> {
     match () {
-        _ if app.etter_prefiks => Some(format!(" {} … f ny · w lista · ? mer", app.prefiks.navn())),
+        _ if app.etter_prefiks => Some(format!(" {} … f ny · w agentlista · ? mer", app.prefiks.navn())),
         _ if app.kopimodus.is_some() => Some(" v marker · y kopier · q ut".to_string()),
         _ => None,
     }
@@ -347,8 +349,8 @@ fn hint(app: &App) -> Option<String> {
 fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     let Some(hint) = hint(app) else { return };
     let bredde = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
-    let y = if alle_knapper(app) { plass(app) + 1 } else { område.height.saturating_sub(1) };
-    buf.set_stringn(0, y, format!("{hint} "), bredde as usize, VANLIG);
+    let b = bredde as usize;
+    buf.set_stringn(0, område.height.saturating_sub(1), format!("{hint:<b$}"), b, VANLIG);
 }
 
 /// Prosjektet står på en rad for seg over kortene.
@@ -416,6 +418,7 @@ fn plasser(app: &App) -> Vec<Plassert<'_>> {
             if midten && rad == Rad::Overskrift(Overskrift::Del(Del::Ledige)) {
                 y = y.max(plass(app) / 2);
             }
+            let overskrift = matches!(rad, Rad::Overskrift(Overskrift::Del(_)));
             let kort = match &rad {
                 Rad::Pane(pane, merke) => Some(kort(app, pane, *merke)),
                 Rad::Overskrift(Overskrift::Mappe(navn)) if på_rad => Some(vec![kort::prosjektrad(u, navn, &[], bredde, false, false)]),
@@ -429,7 +432,11 @@ fn plasser(app: &App) -> Vec<Plassert<'_>> {
                 }
                 _ => None,
             };
-            let høyde = kort.as_ref().map_or(1, |k| k.len() as u16);
+            let høyde = match kort.as_ref() {
+                Some(k) => k.len() as u16,
+                None if overskrift => kort::overskrift_høyde(y == 0, stripe(app)),
+                None => 1,
+            };
             let plassert = Plassert { y, høyde, rad, kort };
             y += høyde;
             plassert
@@ -437,14 +444,15 @@ fn plasser(app: &App) -> Vec<Plassert<'_>> {
         .collect()
 }
 
+/// Rader til kortene, under streken øverst.
 fn plass(app: &App) -> u16 {
-    app.visning.bottom().saturating_sub(knapperader(app))
+    app.visning.bottom().saturating_sub(TOPPEN + 1)
 }
 
 fn liste(app: &App) -> (Vec<Plassert<'_>>, Utsnitt) {
     let rader = plasser(app);
     let total = rader.last().map_or(0, |p| p.y + p.høyde);
-    let utsnitt = Utsnitt::ny(total, plass(app), app.liste_rull);
+    let utsnitt = Utsnitt { topp: TOPPEN + 1, ..Utsnitt::ny(total, plass(app), app.liste_rull) };
     (rader, utsnitt)
 }
 
@@ -457,30 +465,32 @@ pub struct Utsnitt {
     /// Rader til kortene.
     pub rom: u16,
     pub ruller: bool,
+    /// Rader på skjermen over lista.
+    pub topp: u16,
 }
 
 impl Utsnitt {
     pub fn ny(total: u16, plass: u16, rull: u16) -> Utsnitt {
         if total <= plass {
-            return Utsnitt { rull: 0, rom: plass, ruller: false };
+            return Utsnitt { rull: 0, rom: plass, ruller: false, topp: 0 };
         }
         let rom = plass.saturating_sub(2);
-        Utsnitt { rull: rull.min(total - rom), rom, ruller: true }
+        Utsnitt { rull: rull.min(total - rom), rom, ruller: true, topp: 0 }
     }
 
     /// Raden på skjermen der rad `y` i lista står, også når den er utenfor.
     fn skjerm(&self, y: u16) -> i32 {
-        y as i32 - self.rull as i32 + self.ruller as i32
+        y as i32 - self.rull as i32 + self.ruller as i32 + self.topp as i32
     }
 
     /// Radene på skjermen kortene står på.
     fn rader(&self) -> Range<u16> {
-        let topp = self.ruller as u16;
+        let topp = self.topp + self.ruller as u16;
         topp..topp + self.rom
     }
 
     fn i_lista(&self, y: u16) -> Option<u16> {
-        self.rader().contains(&y).then(|| y - self.ruller as u16 + self.rull)
+        self.rader().contains(&y).then(|| y - self.rader().start + self.rull)
     }
 
     /// Rullet så radene i `valgt` vises. Er de flere enn utsnittet, vises toppen.
@@ -592,10 +602,36 @@ struct Fane {
     navn: String,
     vindu: String,
     vist: bool,
+    ikon: Ikon,
+}
+
+/// Tegnet foran navnet på fanen, og kolonnene til navnet.
+struct Ikon {
+    tegn: String,
+    stil: Style,
+    bredde: u16,
 }
 
 /// Luft til høyre for navnet, med `×` i.
 const FANELUFT: u16 = 3;
+/// Tegnet foran navnet: merket til Claude-en, eller den som haster mest når
+/// det er flere i vinduet, og ellers nummeret på vinduet. Glyfene har
+/// tvetydig bredde i Unicode, og mange fonter tegner dem bredere enn
+/// sifrene, så de får et mellomrom ekstra.
+fn ikon(app: &App, p: &Pane) -> Ikon {
+    let haster = app
+        .alle
+        .iter()
+        .filter(|q| q.vindu_id == p.vindu_id)
+        .filter_map(|q| app.merke(q))
+        .min_by_key(|m| (m.gruppe(), *m != Merke::Spør));
+    let (tegn, stil) = match haster {
+        Some(m) => (glyf(m).to_string(), kort::glyfstil(app.utseende, m)),
+        None => (p.vindu.clone(), SVAK),
+    };
+    let bredde = tegn.chars().count() as u16 + 1 + haster.is_some() as u16;
+    Ikon { tegn, stil, bredde }
+}
 
 impl Fane {
     /// Kolonnen til `×`. Plassen står i fanen også når `×` ikke vises, så
@@ -610,10 +646,11 @@ fn faner(app: &App) -> Vec<Fane> {
     let mut ut = Vec::new();
     for p in app.faner() {
         let navn = kutt(&p.vindunavn, 20);
-        let til = x + 1 + navn.chars().count() as u16 + FANELUFT;
+        let ikon = ikon(app, p);
+        let til = x + 1 + ikon.bredde + navn.chars().count() as u16 + FANELUFT;
         let vist = app.vist.as_ref() == Some(&p.vindu_id);
-        ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist });
-        x = til + 1;
+        ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist, ikon });
+        x = til;
     }
     ut
 }
@@ -624,7 +661,7 @@ fn faner(app: &App) -> Vec<Fane> {
 /// panene, fordi streken går inn i toppkanten på boksene.
 fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
     let v = app.visning;
-    let (rom, rad) = (fanerom(app), fanerad(app));
+    let (rom, rad) = (fanerom_til_fanene(app), fanerad(app));
     let boks = app.utseende.paner == Rammer::Bokser;
     let faner: Vec<Fane> = faner(app).into_iter().take_while(|f| f.til < rom.end).collect();
     let y = v.y - 1 + boks as u16;
@@ -678,7 +715,8 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
             _ => (SVAK, Style::new()),
         };
         buf.set_style(Rect::new(f.fra, rad, f.til - f.fra, 1), lapp);
-        buf.set_string(f.fra + 1, rad, &f.navn, lapp.patch(tekst));
+        buf.set_string(f.fra + 1, rad, &f.ikon.tegn, lapp.patch(f.ikon.stil));
+        buf.set_string(f.fra + 1 + f.ikon.bredde, rad, &f.navn, lapp.patch(tekst));
         if pekt || f.vist {
             let kryss = match på_kryss {
                 true => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),
@@ -691,6 +729,9 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
         let stil = if mus == Some(&Mål::NyFane) { VANLIG } else { SVAK };
         buf.set_string(pluss.start, rad, " + ", stil);
     }
+    let lukk = lukk_nerdr(app);
+    let stil = if mus == Some(&Mål::Knapp(Knapp::Avslutt)) { under_musen().patch(VANLIG) } else { SVAK };
+    buf.set_string(lukk.start, rad, LUKK_NERDR, stil);
 }
 
 /// Vinduet til fanen i kolonne `x`, med luften etter den.
@@ -704,11 +745,28 @@ pub fn lukk_fane_på(app: &App, x: u16) -> Option<String> {
     faner(app).into_iter().find(|f| f.lukk().abs_diff(x) <= 1).map(|f| f.vindu)
 }
 
+const LUKK_NERDR: &str = "lukk nerdr";
+
+/// Høyrestilt på faneraden.
+fn lukk_nerdr(app: &App) -> Range<u16> {
+    let slutt = fanerom(app).end.saturating_sub(1);
+    slutt.saturating_sub(LUKK_NERDR.len() as u16)..slutt
+}
+
+pub fn lukk_nerdr_på(app: &App, x: u16) -> bool {
+    lukk_nerdr(app).contains(&x)
+}
+
+/// Fanene, og `+` etter dem, står fram til lukk nerdr.
+fn fanerom_til_fanene(app: &App) -> Range<u16> {
+    fanerom(app).start..lukk_nerdr(app).start.saturating_sub(1)
+}
+
 /// `+` etter fanene, når et vindu vises og det er plass til den.
 fn ny_fane(app: &App) -> Option<Range<u16>> {
     app.valgt.as_ref()?;
-    let rom = fanerom(app);
-    let fra = faner(app).last().map_or(rom.start, |f| f.til + 1);
+    let rom = fanerom_til_fanene(app);
+    let fra = faner(app).last().map_or(rom.start, |f| f.til);
     (fra + 3 <= rom.end).then_some(fra..fra + 3)
 }
 
@@ -716,46 +774,41 @@ pub fn ny_fane_på(app: &App, x: u16) -> bool {
     ny_fane(app).is_some_and(|r| r.contains(&x))
 }
 
-/// Knappene nederst i lista, med tasten etter prefikset som gjør det samme.
-const KNAPPER: [(Knapp, &str, char); 4] = [
+/// Knappene øverst i agentlista, med tasten etter prefikset som gjør det
+/// samme.
+const KNAPPER: [(Knapp, &str, char); 3] = [
     (Knapp::Ny, "ny sesjon", 'f'),
-    (Knapp::Handlinger, "handlinger", ':'),
-    (Knapp::Hjelp, "hjelp", '?'),
-    (Knapp::Avslutt, "avslutt", 'd'),
+    (Knapp::Hjelp, "? hjelp", '?'),
+    (Knapp::Avslutt, LUKK_NERDR, 'd'),
 ];
 
 /// Et klikk på knappen er det samme som prefikset og denne tasten.
 pub fn tasten_til(knapp: Knapp) -> char {
     KNAPPER.iter().find(|k| k.0 == knapp).map_or('?', |k| k.2)
 }
-/// Lavere enn dette står bare «+ ny sesjon» nederst, så kortene får plass.
-const HØYDE_TIL_KNAPPENE: u16 = 14;
+/// Plussen og «ny sesjon», med luft til sorteringen.
+const NY_BREDDE: u16 = 14;
 
-fn alle_knapper(app: &App) -> bool {
-    !stripe(app) && app.visning.bottom() >= HØYDE_TIL_KNAPPENE
+/// Der sorteringen og hjelp står, høyrestilt.
+fn høyre_kolonne(app: &App) -> u16 {
+    sortering(app).map_or(liste_bredde(app) - 1, |(x, _)| x.start)
 }
 
-/// Streken, én rad per knapp og versjonen, eller bare raden med `+`.
-fn knapperader(app: &App) -> u16 {
-    if alle_knapper(app) { KNAPPER.len() as u16 + 2 } else { 1 }
-}
-
-/// Knappene og raden de står på. Når hintet står der, er de borte.
-fn knapper(app: &App) -> Vec<(Knapp, u16)> {
-    if hint(app).is_some() {
-        return Vec::new();
+/// Knappene i agentlista, med kolonnene og raden de står på.
+fn knapper(app: &App) -> Vec<(Knapp, Range<u16>, u16)> {
+    if stripe(app) {
+        return vec![(Knapp::Ny, 0..3, NY_RAD)];
     }
-    let bunn = app.visning.bottom();
-    if !alle_knapper(app) {
-        return vec![(Knapp::Ny, bunn.saturating_sub(1))];
+    let (midt, slutt) = (høyre_kolonne(app), liste_bredde(app) - 1);
+    let mut ut = vec![(Knapp::Ny, 0..midt, NY_RAD)];
+    if midt < slutt {
+        ut.push((Knapp::Hjelp, midt..slutt, 0));
     }
-    let første = bunn - KNAPPER.len() as u16 - 1;
-    KNAPPER.iter().zip(første..).map(|(k, y)| (k.0, y)).collect()
+    ut
 }
 
 pub fn knapp_på(app: &App, x: u16, y: u16) -> Option<Knapp> {
-    let bredde = if stripe(app) { 3 } else { liste_bredde(app) - 1 };
-    knapper(app).into_iter().find(|&(_, rad)| rad == y && x < bredde).map(|(k, _)| k)
+    knapper(app).into_iter().find(|(_, r, rad)| *rad == y && r.contains(&x)).map(|(k, ..)| k)
 }
 
 const LUKKE_BREDDE: u16 = 46;
@@ -910,7 +963,7 @@ fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, bindinger: &Bindin
     }
 }
 
-/// Hvor overskriftene og valgene står i konfigurasjonen.
+/// Hvor overskriftene og valgene står i innstillingene.
 struct Valgmeny {
     boks: Rect,
     overskrifter: Vec<(u16, &'static str)>,
@@ -954,7 +1007,7 @@ fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
     Some(Valgmeny { boks, overskrifter, rader, forklaring: topp + forklaring })
 }
 
-/// Verdien under musen i konfigurasjonen, som aksen og indeksen.
+/// Verdien under musen i innstillingene, som aksen og indeksen.
 pub fn verdi_på(app: &App, x: u16, y: u16) -> Option<(usize, usize)> {
     let meny = valgmeny(skjerm(app), &app.utseende)?;
     let (akse, _, kolonner) = meny.rader.into_iter().find(|r| r.1 == y)?;
@@ -970,7 +1023,7 @@ pub fn i_valgmenyen(app: &App, x: u16, y: u16) -> bool {
 fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize, mus: Option<&Mål>) {
     let Some(meny) = valgmeny(område, u) else { return };
     let (b, h) = (meny.boks.width, meny.boks.height);
-    let Some(ramme) = boks(buf, område, b, h, "konfigurasjon", "↑↓ velg · ←→ endre · klikk · esc lukk") else { return };
+    let Some(ramme) = boks(buf, område, b, h, "innstillinger", "↑↓ velg · ←→ endre · klikk · esc lukk") else { return };
     let (x, bunn) = (ramme.x + 2, ramme.bottom() - 1);
     let indre = (ramme.width - 4) as usize;
     for (y, tittel) in meny.overskrifter.into_iter().filter(|(y, _)| *y < bunn) {
@@ -1223,7 +1276,7 @@ fn tom_liste(utenfor_tmux: usize, prefiks: &str) -> Vec<String> {
         "Her er det tomt foreløpig.".to_string(),
         format!(
             "nerdr viser Claude-ene dine som kjører i tmux, og lar deg bytte mellom dem. Klikk på «+ ny sesjon» \
-             nederst, eller trykk {prefiks} f, for å starte en ny Claude i en av mappene dine, og {prefiks} r \
+             øverst, eller trykk {prefiks} f, for å starte en ny Claude i en av mappene dine, og {prefiks} r \
              for å fortsette en samtale du har hatt før."
         ),
     ];
@@ -1538,9 +1591,9 @@ mod tester {
 
     #[test]
     fn utsnittet_ruller_bare_når_lista_ikke_får_plass() {
-        assert_eq!(Utsnitt::ny(10, 12, 5), Utsnitt { rull: 0, rom: 12, ruller: false });
+        assert_eq!(Utsnitt::ny(10, 12, 5), Utsnitt { rull: 0, rom: 12, ruller: false, topp: 0 });
         // To rader går til pilene.
-        assert_eq!(Utsnitt::ny(20, 12, 50), Utsnitt { rull: 10, rom: 10, ruller: true });
+        assert_eq!(Utsnitt::ny(20, 12, 50), Utsnitt { rull: 10, rom: 10, ruller: true, topp: 0 });
         let u = Utsnitt::ny(20, 12, 4);
         assert_eq!((u.skjerm(4), u.i_lista(1), u.i_lista(0), u.i_lista(11)), (1, Some(4), None, None));
     }

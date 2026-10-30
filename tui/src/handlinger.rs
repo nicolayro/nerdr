@@ -28,7 +28,7 @@ const PREFIKSTASTER: [(KeyCode, bool, &str); 24] = [
     (KeyCode::Char('c'), false, "ny terminal"),
     (KeyCode::Char('%'), false, "del side om side"),
     (KeyCode::Char('"'), false, "del over og under"),
-    (KeyCode::Char('w'), false, "tilbake til lista"),
+    (KeyCode::Char('w'), false, "tilbake til agentlista"),
     (KeyCode::Char(')'), false, "neste sesjon"),
     (KeyCode::Char('('), false, "forrige sesjon"),
     (KeyCode::Char('n'), false, "neste vindu"),
@@ -44,7 +44,7 @@ const PREFIKSTASTER: [(KeyCode, bool, &str); 24] = [
     (KeyCode::Char('o'), true, "roter paner"),
     (KeyCode::Char('x'), false, "lukk pane"),
     (KeyCode::Char('&'), false, "lukk vindu"),
-    (KeyCode::Char('b'), false, "konfigurasjon"),
+    (KeyCode::Char('b'), false, "innstillinger"),
     (KeyCode::Char('?'), false, "hjelp"),
     (KeyCode::Char('d'), false, "avslutt"),
 ];

@@ -14,8 +14,8 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
 - `tui/` er binæren. `main.rs` har TUI-et og argumentene, `kommandoer.rs`
   `liste`, `samtaler` og `ny`, `ny.rs` mappevelgeren, `handlinger.rs`
   handlingene bak `:`, `bindinger.rs` hva tastene fra tmux-oppsettet gjør i
-  nerdr, `utseende.rs` valgene i konfigurasjonen, `tegn.rs`
-  tegningen, `tegn/kort.rs` kortene og overskriftene i lista, og `palett.rs`
+  nerdr, `utseende.rs` valgene i innstillingene, `tegn.rs`
+  tegningen, `tegn/kort.rs` kortene og overskriftene i agentlista, og `palett.rs`
   fargene til terminalen, som markeringen og tonene blandes av.
 
 ## Begreper

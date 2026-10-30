@@ -10,6 +10,7 @@ use super::{BLÅ, BLÅ_RGB, GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVA
 use crate::palett::Rgb;
 use crate::grupper::{self, Overskrift, Rad, glyf};
 use crate::utseende::{Farge, Plass, Topp, Ulestfarge, Utseende};
+use std::ops::Range;
 
 /// Uten glyf foran starter teksten etter pekeren og et mellomrom.
 const INNRYKK: u16 = 2;
@@ -60,33 +61,30 @@ fn peker(valgt: bool) -> Bit {
     bit(0, if valgt { "▎" } else { " " }, VANLIG)
 }
 
-/// Lista starter under den øverste raden, der fanene står.
+/// Med aktivitet er streken under toppen av lista skillet.
 pub fn ordne(rader: Vec<Rad<'_>>) -> Vec<Rad<'_>> {
-    let mut ut = vec![Rad::Tom];
-    ut.extend(rader);
-    ut
+    rader.into_iter().filter(|r| *r != Rad::Overskrift(Overskrift::Alle)).collect()
 }
 
-/// Overskriften over en gruppe, der `bredde` er lista uten skillelinja. Gir
-/// om streken går til skillelinja.
-pub fn overskrift(u: Utseende, buf: &mut Buffer, y: u16, bredde: u16, o: &Overskrift, stripe: bool) -> bool {
+/// Den første overskriften har streken under toppen av agentlista over seg,
+/// og trenger ingen egen. De andre har navnet under streken.
+pub fn overskrift_høyde(først: bool, stripe: bool) -> u16 {
+    1 + (!først && !stripe) as u16
+}
+
+/// Overskriften over en gruppe, med første rad på `topp`, der `bredde` er
+/// agentlista uten skillelinja. Gir raden der streken går til skillelinja.
+pub fn overskrift(buf: &mut Buffer, topp: i32, vis: &Range<u16>, bredde: u16, o: &Overskrift, først: bool, stripe: bool) -> Option<u16> {
     let b = bredde as usize;
-    let strek = |buf: &mut Buffer, x: u16, stil: Style| {
-        buf.set_stringn(x, y, "─".repeat(bredde.saturating_sub(x) as usize), b, stil);
-    };
-    if stripe || *o == Overskrift::Alle {
-        strek(buf, 0, SVAK);
-        return true;
+    let rad = |i: i32| u16::try_from(topp + i).ok().filter(|y| vis.contains(y));
+    let strek = rad(0).filter(|_| !først);
+    if let Some(y) = strek {
+        buf.set_stringn(0, y, "─".repeat(b), b, SVAK);
     }
-    // Uten farge, for i en gruppe er det Claude-er i flere tilstander.
-    let x = buf.set_stringn(1, y, o.tittel(), b, STERK).0 + 1;
-    // Boksene har kanter nok, så mappene har bare en strek uten dem. Aktive og
-    // ledige har alltid strek, så skillet mellom dem synes.
-    if u.plass != Plass::Minimal && matches!(o, Overskrift::Mappe(..)) {
-        return false;
+    if let Some(y) = rad(!først as i32).filter(|_| !stripe) {
+        buf.set_stringn(1, y, o.tittel().to_lowercase(), b, SVAK);
     }
-    strek(buf, x, SVAK);
-    true
+    strek
 }
 
 /// Prosjektet på en rad for seg. Tegnet til hver Claude i `merker` står til
@@ -95,12 +93,16 @@ pub fn prosjektrad(u: Utseende, navn: &str, merker: &[Merke], bredde: u16, brett
     let slutt = bredde.saturating_sub(2);
     let start = slutt.saturating_sub(merker.len() as u16 * 3);
     let pil = if brettet { "▸" } else { "▾" };
-    let plass = start.saturating_sub(ETTER_PIL + 1) as usize;
+    let venstre = u.topp == Topp::Venstre;
+    let pil_x = 1 + venstre as u16;
+    let navn_x = ETTER_PIL + venstre as u16;
+    let plass = start.saturating_sub(navn_x + 1) as usize;
     let navn = kutt(grupper::navn(navn), plass);
-    let etter_navn = ETTER_PIL + self::bredde(&navn) + 1;
-    let mut l = vec![peker(valgt), bit(1, pil, SVAK), bit(ETTER_PIL, navn, STERK)];
-    if u.topp == Topp::Strek {
-        let til = if merker.is_empty() { bredde } else { start };
+    let etter_navn = navn_x + self::bredde(&navn) + 1;
+    let til = if merker.is_empty() { bredde } else { start };
+    let foran = if venstre && !valgt { bit(0, "─", SVAK) } else { peker(valgt) };
+    let mut l = vec![foran, bit(pil_x, pil, SVAK), bit(navn_x, navn, STERK)];
+    if u.topp != Topp::Rad {
         l.push(bit(etter_navn, "─".repeat(til.saturating_sub(etter_navn) as usize), SVAK));
     }
     for (n, merke) in merker.iter().enumerate() {
@@ -147,7 +149,7 @@ fn tone(u: Utseende, merke: Merke) -> Option<Color> {
     rgb(u, merke).and_then(|(_, r)| tonet(Some(r), TONE))
 }
 
-fn glyfstil(u: Utseende, merke: Merke) -> Style {
+pub fn glyfstil(u: Utseende, merke: Merke) -> Style {
     match (u.farge, merke.gruppe()) {
         (_, Gruppe::Ferdig) => SVAK,
         (Farge::Av, _) => VANLIG,

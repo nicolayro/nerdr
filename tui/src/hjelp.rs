@@ -7,12 +7,12 @@ use crate::grupper::glyf;
 use crate::ny;
 use crate::taster::{PREFIKS_VARIABEL, Prefiks};
 
-pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i lista, vises til høyre, \
+pub const OM: &str = "Claude-sesjonene dine i tmux. Den du velger i agentlista, vises til høyre, \
 og du kan gå inn i den og skrive.";
 
-/// I lista. Alt annet er etter prefikset, eller en knapp.
+/// I agentlista. Alt annet er etter prefikset, eller en knapp.
 pub const TASTER: [(&str, &str); 6] = [
-    ("↑↓  k j", "flytt i lista"),
+    ("↑↓  k j", "flytt i agentlista"),
     ("⏎", "vis sesjonen og gå inn i den"),
     ("←→  h l", "brett prosjektet sammen og ut"),
     ("esc", "tilbake dit du var"),
@@ -43,8 +43,8 @@ pub const PREFIKSTASTER: [(&str, &str); 26] = [
     ("PgUp", "rull en side opp"),
     ("[", "kopimodus: hjkl w b e, v og V marker, y kopier"),
     ("( )", "forrige og neste sesjon"),
-    ("b", "konfigurasjon"),
-    ("w s", "tilbake til lista"),
+    ("b", "innstillinger"),
+    ("w s", "tilbake til agentlista"),
     ("d", "avslutt"),
     ("?", "hjelp"),
     ("prefiks", "send prefikset til panen"),
@@ -61,7 +61,7 @@ pub const OVERSIKT: [(&str, &[Tast]); 3] = [
             (&[KeyCode::Char('f')], "ny sesjon"),
             (&[KeyCode::Char('r')], "hent samtale"),
             (&[KeyCode::Char('('), KeyCode::Char(')')], "forrige og neste"),
-            (&[KeyCode::Char('w')], "tilbake til lista"),
+            (&[KeyCode::Char('w')], "tilbake til agentlista"),
         ],
     ),
     (
@@ -124,7 +124,7 @@ pub fn tekst() -> String {
          --json         JSON i stedet for tekst, med et versjonsfelt\n  \
          -h, --help     denne hjelpen\n  \
          -v, --version  versjonen\n\n\
-         I lista:\n",
+         I agentlista:\n",
         versjon()
     );
     for (tast, hva) in TASTER {

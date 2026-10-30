@@ -125,7 +125,7 @@ enum Mål {
     Svar(bool),
     /// Et treff i handlingene eller velgeren.
     Rad(usize),
-    /// En verdi i konfigurasjonen, som aksen og indeksen.
+    /// En verdi i innstillingene, som aksen og indeksen.
     Verdi(usize, usize),
     /// Id-en til vinduet.
     Fane(String),
@@ -146,7 +146,6 @@ enum Mål {
 #[derive(Clone, Copy, PartialEq)]
 enum Knapp {
     Ny,
-    Handlinger,
     Hjelp,
     Avslutt,
 }
@@ -474,6 +473,7 @@ impl App {
         let mut tegne = true;
         while self.ferdig.is_none() {
             if tegne {
+                self.utseende.bredde = utseende::Bredde::nærmest(self.liste_bredde);
                 let liste = if self.liste_stripe { tegn::STRIPE } else { self.liste_bredde };
                 self.visning = tegn::visning(terminal.size()?, liste);
                 let rader = tegn::menyrader(self);
@@ -1219,7 +1219,7 @@ impl App {
                 _ => return false,
             };
             self.utseende.endre(akse, steg);
-            self.lagre_utseende();
+            self.lagre_utseende(akse);
             return true;
         }
         let side = tegn::menyrader(self) as isize;
@@ -1359,12 +1359,19 @@ impl App {
             }
             Handling::Utseende(akse, i) => {
                 self.utseende.sett(akse, i);
-                self.lagre_utseende();
+                self.lagre_utseende(akse);
             }
         }
     }
 
-    fn lagre_utseende(&mut self) {
+    /// Bredden står i en egen option, sammen med stripa, og overstyrer den
+    /// du har dratt til.
+    fn lagre_utseende(&mut self, akse: usize) {
+        if akse == utseende::BREDDE {
+            self.liste_bredde = self.utseende.bredde.kolonner();
+            self.liste_stripe = false;
+            self.lagre_liste();
+        }
         // Rammene endrer hvor mye plass tmux får.
         self.utdatert = true;
         self.send(&format!("set-option -g {} {}", utseende::OPTION, sitat(&self.utseende.tekst())), Svar::Ingenting);
@@ -1575,6 +1582,9 @@ impl App {
             if y != tegn::fanerad(self) {
                 return None;
             }
+            if tegn::lukk_nerdr_på(self, x) {
+                return Some(Mål::Knapp(Knapp::Avslutt));
+            }
             if let Some(vindu) = tegn::lukk_fane_på(self, x) {
                 return Some(Mål::LukkFane(vindu));
             }
@@ -1646,7 +1656,7 @@ impl App {
                 Some((akse, i)) => {
                     self.utseende_meny = Some(akse);
                     self.utseende.sett(akse, i);
-                    self.lagre_utseende();
+                    self.lagre_utseende(akse);
                 }
                 None if tegn::i_valgmenyen(self, m.column, m.row) => {}
                 None => self.utseende_meny = None,
@@ -1697,7 +1707,9 @@ impl App {
             if m.row != tegn::fanerad(self) || m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
-            if let Some(vindu) = tegn::lukk_fane_på(self, m.column) {
+            if tegn::lukk_nerdr_på(self, m.column) {
+                self.prefikstast(KeyEvent::new(KeyCode::Char(tegn::tasten_til(Knapp::Avslutt)), KeyModifiers::NONE));
+            } else if let Some(vindu) = tegn::lukk_fane_på(self, m.column) {
                 self.send(&format!("kill-window -t {}", sitat(&vindu)), Svar::Ingenting);
             } else if let Some(vindu) = tegn::fane_på(self, m.column) {
                 self.vis_vindu(vindu);
@@ -1720,7 +1732,7 @@ impl App {
                 return false;
             }
             self.utseende.endre(utseende::ORDEN, 1);
-            self.lagre_utseende();
+            self.lagre_utseende(utseende::ORDEN);
             return true;
         }
         if m.column < v.x {

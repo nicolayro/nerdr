@@ -35,7 +35,7 @@ cargo install --locked --git https://github.com/nicolayro/nerdr nerdr
 
 ## 3. Mappene for nye Claude-sesjoner
 
-«+ ny sesjon» nederst i lista i nerdr starter en Claude i en mappe brukeren
+«+ ny sesjon» øverst i agentlista i nerdr starter en Claude i en mappe brukeren
 velger. Velgeren søker i mappene brukeren har brukt Claude i, og i mappene
 under `~`, så det trengs ikke noe oppsett. Vil brukeren bare søke noen steder,
 sett `NERDR_MAPPER` i skallets oppstartsfil, kolonseparert:
@@ -48,15 +48,15 @@ export NERDR_MAPPER=~/git:~/kode
 
 - nerdr kjøres i en vanlig terminalfane, utenfor tmux.
 - Tastene går til Claude-en brukeren er inne i. nerdr styres med knappene
-  nederst i lista, eller med prefikset fra tmux (`C-b` hvis ikke noe annet er
+  øverst i agentlista, eller med prefikset fra tmux (`C-b` hvis ikke noe annet er
   satt) og en tast.
 - Bare Claude som kjører i tmux, vises. Startes Claude i en vanlig fane, ser
   ikke nerdr den. «+ ny sesjon», eller prefikset og `f`, starter en Claude i
   tmux, og prefikset og `r` fortsetter en tidligere samtale.
-- «hjelp» nederst i lista, eller prefikset og `?`, viser tastene.
+- «? hjelp» øverst i agentlista, eller prefikset og `?`, viser tastene.
   `nerdr --help` viser det samme i terminalen.
-- nerdr avsluttes med `C-c` fra lista, med prefikset og `d`, eller med
-  «avslutt» nederst i lista. Claude-ene kjører videre i tmux.
+- nerdr avsluttes med `C-c` fra agentlista, med prefikset og `d`, eller med
+  «lukk nerdr» til høyre over panen. Claude-ene kjører videre i tmux.
 - Spør brukeren senere hvordan noe gjøres i nerdr, kjør `nerdr forklar`. Den
   sier hvordan det gjøres med knappene og med tastene.
 - Du kan selv bruke `nerdr liste`, `nerdr samtaler` og `nerdr ny` med
@@ -73,7 +73,7 @@ tastene og hvilket prefiks og hvilke mapper som gjelder.
 | Brukeren vil | Svar |
 | --- | --- |
 | stoppe alt | `tmux kill-server`. Spør først, for det stopper alle Claude-er og terminaler i tmux. |
-| se en Claude som mangler i lista | Den kjører ikke i tmux. Avslutt den, og fortsett samtalen med prefikset og `r` i nerdr. |
+| se en Claude som mangler i agentlista | Den kjører ikke i tmux. Avslutt den, og fortsett samtalen med prefikset og `r` i nerdr. |
 | ha en mappe i velgeren | Mapper under `~` er med, utenom skjulte mapper og det som er bygget. Står `NERDR_MAPPER` satt, sett mappa over den der. Eller start en Claude der med `nerdr ny <mappe>` og skriv noe til den, så står mappa i velgeren etter det. |
 | et annet prefiks | nerdr bruker prefikset fra `~/.tmux.conf`, ellers `C-b`. `NERDR_PREFIKS=C-a` endrer bare nerdr. |
 | endre utseendet | Prefikset og `b`. |
