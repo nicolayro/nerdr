@@ -242,6 +242,26 @@ sjekk "gamma står under alfa med ◐, og uten oppgave er repoet tittelen" linje
 sjekk "beta har ingen Claude og vises ikke" mangler beta
 sjekk "alfa får størrelsen til boksen" er 70x16 dimensjon alfa
 
+# Ramme står to over farge, der innstillingene åpner.
+tast C-b b Up Up Right Right Escape
+sjekk "paner i et vindu har agentlista og panen i hver sin ramme, inntil hverandre" linje_har 1 '^╭─+╮╭─+╮$'
+sjekk "med versjonen og hjelp inne i rammen" linje_har 2 '^│  nerdr [0-9].* \? hjelp ││'
+sjekk "streken under fanene treffer kantene" linje_har 3 '│├─+┤$'
+sjekk "streken under toppen går fra kant til kant" linje_har 4 '^├─+┤│'
+sjekk "alfa med luft mot rammen" linje_har 6 '^│ ▎ ●  Fiks testene +<1m ││'
+klikk "$(kolonne 3 'prioritert')" 3
+sjekk "et klikk på sorteringen treffer inne i rammen" linje_har 3 'prosjekt │'
+klikk "$(kolonne 3 'prosjekt')" 3
+klikk "$(kolonne 3 'aktivitet')" 3
+sjekk "og tilbake til prioritert" linje_har 3 'prioritert │'
+klikk_paa 'hjelp'
+sjekk "klikk på hjelp viser hjelpen" har 'trykk en tast for å lukke'
+tast q
+sjekk "og en tast lukker den" mangler 'trykk en tast for å lukke'
+tast C-b b Up Up Right Escape
+sjekk "og tilbake til bokser" linje_har 3 '^─+┤├'
+sjekk "der alfa har samme størrelse som før" er 70x16 dimensjon alfa
+
 tast Enter
 tast -l 'hei æ'
 tast Enter

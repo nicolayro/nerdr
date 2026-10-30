@@ -16,6 +16,8 @@ use ratatui::layout::Rect;
 pub enum Rammer {
     Bokser,
     Linjer,
+    /// Linjer mellom panene, og én ramme rundt vinduet og én rundt lista.
+    Vindu,
 }
 
 /// Kolonner mellom rammen og innholdet, til venstre og høyre.
@@ -36,7 +38,7 @@ pub struct Boks {
 /// Kolonnene og radene rammene trenger i tillegg til vinduet.
 pub fn ekstra(oppsett: &Celle, rammer: Rammer) -> (u16, u16) {
     match rammer {
-        Rammer::Linjer => (0, 0),
+        Rammer::Linjer | Rammer::Vindu => (0, 0),
         Rammer::Bokser => {
             let (x, y) = ekstra_i(oppsett);
             (x + 2 * KANT, y)
@@ -70,7 +72,7 @@ fn ekstra_i(c: &Celle) -> (u16, u16) {
 pub fn plasser(oppsett: &Celle, område: Rect, rammer: Rammer) -> Vec<Boks> {
     let mut ut = Vec::new();
     match rammer {
-        Rammer::Linjer => plasser_linjer(oppsett, område, &mut ut),
+        Rammer::Linjer | Rammer::Vindu => plasser_linjer(oppsett, område, &mut ut),
         Rammer::Bokser => {
             let r = Rect::new(område.x + KANT, område.y, område.width.saturating_sub(2 * KANT), område.height);
             plasser_bokser(oppsett, r, &mut ut);

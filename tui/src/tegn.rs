@@ -130,7 +130,7 @@ const FANERADER: u16 = 2;
 
 /// Raden fanene står på.
 pub fn fanerad(app: &App) -> u16 {
-    (app.utseende.paner == Rammer::Bokser) as u16
+    (app.utseende.paner != Rammer::Linjer) as u16
 }
 
 /// Radene øverst i agentlista: versjonen og hjelp, og ny sesjon og
@@ -143,20 +143,45 @@ fn fanerom(app: &App) -> Range<u16> {
     let v = app.visning;
     match app.utseende.paner {
         Rammer::Bokser => v.x + 2..v.right().saturating_sub(1),
-        Rammer::Linjer => v.x + 1..v.right(),
+        Rammer::Linjer | Rammer::Vindu => v.x + 1..v.right(),
     }
 }
 
-/// Til høyre for lista, under fanene. Lista er `liste` bred, men aldri mer
-/// enn halve skjermen.
-pub fn visning(størrelse: Size, liste: u16) -> Rect {
-    let liste = liste.min(størrelse.width / 2).max(STRIPE.min(størrelse.width));
-    Rect::new(liste, FANERADER, størrelse.width.saturating_sub(liste), størrelse.height.saturating_sub(FANERADER))
+/// I et vindu er stripa i en ramme, med luft til venstre.
+pub fn stripebredde(paner: Rammer) -> u16 {
+    if paner == Rammer::Vindu { STRIPE + 3 } else { STRIPE }
 }
 
-/// Bredden på lista er der visningen starter.
+/// Til høyre for lista, under fanene. Lista er `liste` bred, men aldri mer
+/// enn halve skjermen. I et vindu er `liste` begge rammene med, og visningen
+/// er inne i den rundt panen, under fanene og streken.
+pub fn visning(størrelse: Size, liste: u16, paner: Rammer) -> Rect {
+    let (b, h) = (størrelse.width, størrelse.height);
+    let liste = liste.min(b / 2).max(stripebredde(paner).min(b));
+    match paner {
+        Rammer::Vindu => Rect::new(liste, FANERADER + 1, b.saturating_sub(liste + 1), h.saturating_sub(FANERADER + 2)),
+        _ => Rect::new(liste, FANERADER, b.saturating_sub(liste), h.saturating_sub(FANERADER)),
+    }
+}
+
+/// Der agentlista tegnes, med skillelinja lengst til høyre. I et vindu er
+/// skillelinja høyrekanten på rammen rundt lista, og det er luft til venstre.
+fn listeflate(app: &App) -> Rect {
+    let (x, h) = (app.visning.x, app.skjerm.height);
+    match app.utseende.paner {
+        Rammer::Vindu => Rect::new(2, 1, x.saturating_sub(3), h.saturating_sub(2)),
+        _ => Rect::new(0, 0, x, h),
+    }
+}
+
+/// Kolonnen og raden i lista, når `x` og `y` er inni den.
+pub fn i_lista(app: &App, x: u16, y: u16) -> Option<(u16, u16)> {
+    let f = listeflate(app);
+    (f.contains((x, y).into())).then(|| (x - f.x, y - f.y))
+}
+
 fn liste_bredde(app: &App) -> u16 {
-    app.visning.x
+    listeflate(app).width
 }
 
 fn stripe(app: &App) -> bool {
@@ -168,9 +193,30 @@ pub fn alt(f: &mut Frame, app: &App) {
     let buf = f.buffer_mut();
     let bokser = app.bokser();
     let mus = app.under_musen();
-    tegn_liste(buf, område, app, mus.as_ref());
+    let flate = listeflate(app).intersection(område);
+    // Uten plass til toppen og en rad kort tegnes ingenting.
+    if flate.height > TOPPEN && flate.width > 1 {
+        if flate.x == 0 && flate.y == 0 {
+            tegn_liste(buf, flate, app, mus.as_ref());
+        } else {
+            // Treffene i lista regner fra øverst til venstre i den, så tegningen
+            // gjør det samme og flyttes inn i rammen.
+            let lokal = Rect::new(0, 0, flate.width, flate.height);
+            let mut lerret = Buffer::empty(lokal);
+            tegn_liste(&mut lerret, lokal, app, mus.as_ref());
+            lerret.area = flate;
+            buf.merge(&lerret);
+        }
+    }
+    let vindu = app.utseende.paner == Rammer::Vindu;
+    if vindu {
+        tegn_vinduet(buf, app, mus.as_ref());
+    }
     tegn_pane(buf, app, &bokser, mus.as_ref());
     tegn_faner(buf, app, mus.as_ref());
+    if vindu {
+        skjøt_strekene(buf, app, &bokser);
+    }
     tegn_hint(buf, område, app);
 
     if let Some(rull) = app.hjelp {
@@ -348,9 +394,84 @@ fn hint(app: &App) -> Option<String> {
 /// Fra stripa går hintet inn over panen, og derfor tegnes det etter den.
 fn tegn_hint(buf: &mut Buffer, område: Rect, app: &App) {
     let Some(hint) = hint(app) else { return };
-    let bredde = if stripe(app) { område.width } else { liste_bredde(app) - 1 };
+    let f = listeflate(app);
+    let ramme = (app.utseende.paner == Rammer::Vindu) as u16;
+    let bredde = if stripe(app) { område.width.saturating_sub(f.x + ramme) } else { liste_bredde(app) - 1 };
     let b = bredde as usize;
-    buf.set_stringn(0, område.height.saturating_sub(1), format!("{hint:<b$}"), b, VANLIG);
+    buf.set_stringn(f.x, f.bottom().saturating_sub(1), format!("{hint:<b$}"), b, VANLIG);
+}
+
+/// Rammen rundt lista, der skillelinja er høyrekanten, og rammen rundt panen,
+/// der streken under fanene treffer kantene. Kanten panen starter ved, er den
+/// du drar i.
+fn tegn_vinduet(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
+    let (liste, pane) = rammene(app);
+    let h = app.skjerm.height;
+    if liste.width < 2 || pane.width < 2 || h < FANERADER + 2 {
+        return;
+    }
+    let høyre = liste.right() - 1;
+    let strek = |b: u16| "─".repeat(b as usize - 2);
+    buf.set_string(0, 0, format!("╭{}╮", strek(liste.width)), SVAK);
+    buf.set_string(0, h - 1, format!("╰{}╯", strek(liste.width)), SVAK);
+    for y in 1..h - 1 {
+        // Strekene går gjennom luften og ut i begge kantene.
+        match buf[(høyre, y)].symbol() {
+            "┤" => buf.set_string(0, y, "├─", SVAK),
+            // Er lista for lav til å tegnes, har den ingen skillelinje.
+            " " => {
+                buf.set_string(0, y, "│", SVAK);
+                buf.set_string(høyre, y, "│", SVAK);
+            }
+            _ => buf.set_string(0, y, "│", SVAK),
+        }
+    }
+    let skille = if matches!(mus, Some(Mål::Skille)) || app.drar_skille { VANLIG } else { SVAK };
+    buf.set_string(pane.x, 0, format!("╭{}╮", strek(pane.width)), SVAK);
+    buf.set_string(pane.x, h - 1, format!("╰{}╯", strek(pane.width)), SVAK);
+    for y in 1..h - 1 {
+        buf.set_string(pane.x, y, "│", skille);
+        buf.set_string(pane.right() - 1, y, if y == FANERADER { "┤" } else { "│" }, SVAK);
+    }
+}
+
+/// Rammen rundt lista, med skillelinja som høyrekant, og rammen rundt panen,
+/// én rute utenfor visningen.
+fn rammene(app: &App) -> (Rect, Rect) {
+    let (f, v, h) = (listeflate(app), app.visning, app.skjerm.height);
+    (Rect::new(0, 0, f.right(), h), Rect::new(v.x.saturating_sub(1), 0, v.width + 2, h))
+}
+
+/// Strekene tmux legger mellom panene, møter rammen og streken under fanene.
+/// Bare rutene ingen pane dekker, er strek, så innholdet i panene ikke gir
+/// skjøter.
+fn skjøt_strekene(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
+    let (_, r) = rammene(app);
+    let v = app.visning;
+    if v.width == 0 || v.height == 0 || r.height < 2 || v.y == 0 {
+        return;
+    }
+    let strek = |buf: &Buffer, x: u16, y: u16, tegn: &[&str]| {
+        !bokser.iter().any(|b| b.innhold.contains((x, y).into())) && tegn.contains(&buf[(x, y)].symbol())
+    };
+    let loddrett = ["│", "├", "┤", "┼", "┬", "┴"];
+    let vannrett = ["─", "├", "┤", "┼", "┬", "┴"];
+    for x in v.left()..v.right() {
+        if strek(buf, x, v.y, &loddrett) {
+            buf[(x, v.y - 1)].set_symbol("┬");
+        }
+        if strek(buf, x, v.bottom() - 1, &loddrett) {
+            buf[(x, r.bottom() - 1)].set_symbol("┴");
+        }
+    }
+    for y in v.top()..v.bottom() {
+        if strek(buf, v.x, y, &vannrett) {
+            buf[(r.x, y)].set_symbol("├");
+        }
+        if strek(buf, v.right() - 1, y, &vannrett) {
+            buf[(r.right() - 1, y)].set_symbol("┤");
+        }
+    }
 }
 
 /// Prosjektet står på en rad for seg over kortene.
@@ -446,7 +567,7 @@ fn plasser(app: &App) -> Vec<Plassert<'_>> {
 
 /// Rader til kortene, under streken øverst.
 fn plass(app: &App) -> u16 {
-    app.visning.bottom().saturating_sub(TOPPEN + 1)
+    listeflate(app).height.saturating_sub(TOPPEN + 1)
 }
 
 fn liste(app: &App) -> (Vec<Plassert<'_>>, Utsnitt) {
@@ -813,11 +934,6 @@ pub fn knapp_på(app: &App, x: u16, y: u16) -> Option<Knapp> {
 
 const LUKKE_BREDDE: u16 = 46;
 
-fn skjerm(app: &App) -> Rect {
-    let v = app.visning;
-    Rect::new(0, 0, v.right(), v.bottom())
-}
-
 /// Linjene i popupen som spør, over knappene.
 fn lukke_tekst(lukke: &crate::Lukke) -> Vec<String> {
     let indre = (LUKKE_BREDDE - 4) as usize;
@@ -834,7 +950,7 @@ fn lukke_boks(app: &App, område: Rect) -> Option<Rect> {
 const SVAR: [(bool, &str, &str); 2] = [(true, " lukk", "y "), (false, " avbryt", "n ")];
 
 fn svar(app: &App) -> Vec<(bool, Range<u16>, u16)> {
-    let Some(boks) = lukke_boks(app, skjerm(app)) else { return Vec::new() };
+    let Some(boks) = lukke_boks(app, app.skjerm) else { return Vec::new() };
     let (mut x, y) = (boks.x + 2, boks.bottom() - 2);
     let mut ut = Vec::new();
     for (lukk, navn, tast) in SVAR {
@@ -850,7 +966,7 @@ pub fn svar_på(app: &App, x: u16, y: u16) -> Option<bool> {
 }
 
 pub fn i_popupen(app: &App, x: u16, y: u16) -> bool {
-    lukke_boks(app, skjerm(app)).is_some_and(|r| r.contains((x, y).into()))
+    lukke_boks(app, app.skjerm).is_some_and(|r| r.contains((x, y).into()))
 }
 
 fn tegn_lukke(buf: &mut Buffer, område: Rect, app: &App, lukke: &crate::Lukke, mus: Option<&Mål>) {
@@ -939,7 +1055,7 @@ fn hjelp_boks(område: Rect, linjer: usize) -> Option<(Rect, u16)> {
 
 pub fn hjelp_rull_maks(app: &App) -> u16 {
     let linjer = hjelp_linjer(&app.prefiks.navn(), &app.bindinger).len();
-    hjelp_boks(skjerm(app), linjer).map_or(0, |(_, maks)| maks)
+    hjelp_boks(app.skjerm, linjer).map_or(0, |(_, maks)| maks)
 }
 
 fn tegn_hjelp(buf: &mut Buffer, område: Rect, prefiks: &str, bindinger: &Bindinger, rull: u16) {
@@ -1009,13 +1125,13 @@ fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
 
 /// Verdien under musen i innstillingene, som aksen og indeksen.
 pub fn verdi_på(app: &App, x: u16, y: u16) -> Option<(usize, usize)> {
-    let meny = valgmeny(skjerm(app), &app.utseende)?;
+    let meny = valgmeny(app.skjerm, &app.utseende)?;
     let (akse, _, kolonner) = meny.rader.into_iter().find(|r| r.1 == y)?;
     kolonner.iter().position(|r| r.contains(&x)).map(|i| (akse, i))
 }
 
 pub fn i_valgmenyen(app: &App, x: u16, y: u16) -> bool {
-    valgmeny(skjerm(app), &app.utseende).is_some_and(|m| m.boks.contains((x, y).into()))
+    valgmeny(app.skjerm, &app.utseende).is_some_and(|m| m.boks.contains((x, y).into()))
 }
 
 /// Konfigurasjonen midt på skjermen, med aksen `valgt` markert. Valgene som
@@ -1068,7 +1184,7 @@ fn søkestrek(buf: &mut Buffer, boks: Rect) {
 }
 
 pub fn menyrader(app: &App) -> usize {
-    menyboks(skjerm(app), HANDLINGER_BREDDE).map_or(1, |(_, rader)| rader.max(1))
+    menyboks(app.skjerm, HANDLINGER_BREDDE).map_or(1, |(_, rader)| rader.max(1))
 }
 
 /// Rullet så `valgt` vises, og uten tomme rader nederst.
@@ -1085,7 +1201,7 @@ fn åpen_meny(app: &App) -> Option<(Rect, usize, usize, usize)> {
         (None, Some(v)) => (VELGER_BREDDE, v.rull, v.antall_treff()),
         _ => return None,
     };
-    let (boks, rader) = menyboks(skjerm(app), bredde)?;
+    let (boks, rader) = menyboks(app.skjerm, bredde)?;
     Some((boks, rader, rull, antall))
 }
 
@@ -1350,7 +1466,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
         }
     }
     tegn_rammer(buf, bokser, &lyse);
-    if app.utseende.paner == Rammer::Linjer && bokser.len() > 1 {
+    if app.utseende.paner != Rammer::Bokser && bokser.len() > 1 {
         tegn_linjer(buf, app, bokser, &lyse);
     }
     let merkelapp = match () {
@@ -1530,10 +1646,10 @@ mod tester {
 
     #[test]
     fn lista_får_aldri_mer_enn_halve_skjermen() {
-        assert_eq!(visning(Size::new(120, 40), 50).x, 50);
-        assert_eq!(visning(Size::new(80, 40), 50).x, 40);
-        assert_eq!(visning(Size::new(80, 40), STRIPE).x, STRIPE);
-        assert_eq!(visning(Size::new(6, 40), LISTE).x, 4);
+        assert_eq!(visning(Size::new(120, 40), 50, Rammer::Linjer).x, 50);
+        assert_eq!(visning(Size::new(80, 40), 50, Rammer::Linjer).x, 40);
+        assert_eq!(visning(Size::new(80, 40), STRIPE, Rammer::Linjer).x, STRIPE);
+        assert_eq!(visning(Size::new(6, 40), LISTE, Rammer::Linjer).x, 4);
     }
 
     fn tegnet_hjelp(bredde: u16, høyde: u16, rull: u16) -> Vec<String> {

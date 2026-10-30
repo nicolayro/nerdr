@@ -231,7 +231,7 @@ ikke gjelder.
 
 | | |
 | --- | --- |
-| **ramme** | `bokser` gir hver pane en boks med avrundede hjørner, også når vinduet har én pane, og boksene ved siden av hverandre deler kanten. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
+| **ramme** | `bokser` gir hver pane en boks med avrundede hjørner, også når vinduet har én pane, og boksene ved siden av hverandre deler kanten. `linjer` lar panene fylle visningen med streker mellom, som i tmux. `vindu` har streker mellom panene, og agentlista og vinduet i hver sin ramme inntil hverandre. |
 | **bredde** | Hvor bred agentlista er: `smal`, `vanlig` eller `bred`. Har du dratt i streken, står nivået som er nærmest. |
 | **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
 | **ulest** | Fargen til det som er ferdig og ikke sett. `oransje` er som det som spør, og `blå` skiller dem. Bare med farge. |

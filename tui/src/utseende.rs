@@ -114,7 +114,7 @@ pub const BREDDE: usize = 9;
 pub const BOKSAKSER: usize = 5;
 /// Står i `OPTION`, og endres ikke.
 const VERDIER: [&[&str]; 10] = [
-    &["bokser", "linjer"],
+    &["bokser", "linjer", "vindu"],
     &["av", "på"],
     &["vanlig", "minimal"],
     &["nerdr", "mappe", "aktivitet"],
@@ -135,7 +135,7 @@ const I_MENYEN: [&str; 10] =
 pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Agentliste", &[9, 1, 6, 2, 5, 8, 3, 7, 4])];
 /// Står nederst i menyen for valget du står på, i samme rekkefølge som `AKSER`.
 pub const FORKLARING: [&str; 10] = [
-    "Bokser gir hver pane en ramme, og naboer deler kanten. Linjer lar panene fylle visningen, med streker mellom.",
+    "Bokser rammer inn hver pane, og linjer har streker mellom. Vindu har også ramme rundt agentlista.",
     "Tegnet og tiden får fargen til gruppen, og rammene en tone av den.",
     "Vanlig har en boks for hver sesjon. Minimal har én linje for hver.",
     "Prioritert har de aktive øverst. Prosjekt grupperer etter repo. Aktivitet har den som sist endret seg, øverst.",
@@ -148,7 +148,7 @@ pub const FORKLARING: [&str; 10] = [
 ];
 /// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
 pub const NAVN: [&[&str]; 10] = [
-    &["paner i bokser", "paner med linjer"],
+    &["paner i bokser", "paner med linjer", "paner i et vindu"],
     &["uten farge", "med farge"],
     &["vanlig liste", "minimal liste"],
     &["sorter prioritert", "sorter etter prosjekt", "sorter etter aktivitet"],
@@ -159,7 +159,7 @@ pub const NAVN: [&[&str]; 10] = [
     &["uten mappe i kortet", "med mappe i kortet"],
     &["smal agentliste", "vanlig agentliste", "bred agentliste"],
 ];
-const PANER: [Rammer; 2] = [Rammer::Bokser, Rammer::Linjer];
+const PANER: [Rammer; 3] = [Rammer::Bokser, Rammer::Linjer, Rammer::Vindu];
 const FARGER: [Farge; 2] = [Farge::Av, Farge::På];
 const PLASSER: [Plass; 2] = [Plass::Vanlig, Plass::Minimal];
 const ORDNER: [Orden; 3] = [Orden::Nerdr, Orden::Mappe, Orden::Aktivitet];
@@ -305,6 +305,8 @@ mod tester {
     #[test]
     fn endre_går_rundt() {
         let mut u = Utseende::ny(Rammer::Linjer);
+        u.endre(0, 1);
+        assert_eq!(u.paner, Rammer::Vindu);
         u.endre(0, 1);
         assert_eq!(u.paner, Rammer::Bokser);
         u.endre(3, 4);

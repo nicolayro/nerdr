@@ -251,6 +251,7 @@ struct App {
     /// Det som lukkes hvis du svarer `y`.
     lukke: Option<Lukke>,
     visning: Rect,
+    skjerm: Rect,
     /// Kolonne og rad, til terminalen mister fokus. Terminalen sier ikke fra
     /// når musen forlater vinduet.
     musen: Option<(u16, u16)>,
@@ -445,6 +446,7 @@ impl App {
             gjentar: None,
             lukke: None,
             visning: Rect::default(),
+            skjerm: Rect::default(),
             musen: None,
             sist_klikket: None,
             svelg_slipp: false,
@@ -474,8 +476,10 @@ impl App {
         while self.ferdig.is_none() {
             if tegne {
                 self.utseende.bredde = utseende::Bredde::nærmest(self.liste_bredde);
-                let liste = if self.liste_stripe { tegn::STRIPE } else { self.liste_bredde };
-                self.visning = tegn::visning(terminal.size()?, liste);
+                let liste = if self.liste_stripe { tegn::stripebredde(self.utseende.paner) } else { self.liste_bredde };
+                let størrelse = terminal.size()?;
+                self.skjerm = Rect::new(0, 0, størrelse.width, størrelse.height);
+                self.visning = tegn::visning(størrelse, liste, self.utseende.paner);
                 let rader = tegn::menyrader(self);
                 if let Some(h) = &mut self.handlinger {
                     h.rull = tegn::følg(h.valgt, h.rull, rader, h.treff().len());
@@ -1566,6 +1570,7 @@ impl App {
         if x + 1 == v.x {
             return Some(Mål::Skille);
         }
+        let (x, y) = if x < v.x { tegn::i_lista(self, x, y)? } else { (x, y) };
         if x < v.x && let Some(knapp) = tegn::knapp_på(self, x, y) {
             return Some(Mål::Knapp(knapp));
         }
@@ -1718,6 +1723,12 @@ impl App {
             }
             return true;
         }
+        // Med paner i et vindu står lista inne i en ramme.
+        let m = match tegn::i_lista(self, m.column, m.row) {
+            Some((column, row)) if m.column < v.x => MouseEvent { column, row, ..m },
+            None if m.column < v.x => return false,
+            _ => m,
+        };
         if m.column < v.x
             && let Some(knapp) = tegn::knapp_på(self, m.column, m.row)
         {
@@ -1867,9 +1878,9 @@ impl App {
             // Et klikk på streken etter å ha dratt den, er ikke et dobbeltklikk.
             self.sist_klikket = None;
         }
-        self.liste_stripe = bredde < (tegn::STRIPE + tegn::LISTE_MIN) / 2;
+        self.liste_stripe = bredde < (tegn::stripebredde(self.utseende.paner) + tegn::LISTE_MIN) / 2;
         if !self.liste_stripe {
-            self.liste_bredde = bredde.max(tegn::LISTE_MIN).min(self.visning.right() / 2);
+            self.liste_bredde = bredde.max(tegn::LISTE_MIN).min(self.skjerm.width / 2);
         }
     }
 
