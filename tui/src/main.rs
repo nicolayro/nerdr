@@ -857,9 +857,7 @@ impl App {
             KeyCode::Char('?') => return self.hjelp = Some(0),
             KeyCode::Char(c @ ('f' | 'r')) if !ctrl => return self.ny_sesjon(c == 'r'),
             KeyCode::Char(':') => return self.åpne_handlinger(),
-            // `[` som i tmux. Der limer `]` inn bufferen, men nerdr kopierer til
-            // utklippstavla og har ingen buffer.
-            KeyCode::Char('[' | ']') => return self.start_kopimodus(),
+            KeyCode::Char('[') => return self.start_kopimodus(),
             _ => {}
         }
         let (Some(aktiv), Some(vindu)) = (self.aktiv().cloned(), self.vist.as_ref().map(|v| sitat(v))) else {
