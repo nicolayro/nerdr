@@ -89,7 +89,7 @@ kjører i det.
 
 Prefikset og `:` viser handlingene: alt nerdr kan gjøre, med tasten ved siden av,
 og du søker fram det du vil og trykker `⏎`. Valgene i innstillingene står der
-også, som «mye farge» og «skjul tiden».
+også, som «minimal liste» og «bred agentliste».
 
 Dra i streken mellom agentlista og panen for å gjøre agentlista bredere eller
 smalere, eller velg bredden i innstillingene. Drar du den helt inn, blir
@@ -112,7 +112,10 @@ vinduet, og deler flere Claude-er vinduet, bare panen. Klikk og
 musehjul i sesjonen går videre når programmet der har slått på mus, som Claude
 Code i fullskjerm. Ellers ruller hjulet i historikken, og en tast tar deg
 tilbake til bunnen. Det du drar over, kopieres når du slipper, med `pbcopy`,
-`wl-copy`, `xclip` eller `xsel`. I `less` og `man` blir hjulet til piltaster.
+`wl-copy`, `xclip` eller `xsel`. Prefikset og `[` gir kopimodus, med en markør
+og tastene fra copy-mode-vi i tmux: `hjkl`, `w b e`, `0 ^ $`, `gg G`, `H M L` og
+`C-u C-d`. `v` og `V` markerer, `o` bytter ende og `y` kopierer, og markeringen
+kan være lengre enn skjermen. I `less` og `man` blir hjulet til piltaster.
 I handlingene, i popupen for ny sesjon og i innstillingene kjører eller
 velger et klikk det du klikker på, hjulet blar, og et klikk utenfor lukker.
 
@@ -159,6 +162,7 @@ virker både fra agentlista og fra panen:
 | `C-o` | Roter paner |
 | `C-←` `C-↑` `C-↓` `C-→` | Endre størrelsen, med `M-` fem om gangen |
 | `PgUp` | Rull en side opp |
+| `[` | Kopimodus |
 | `(` `)` | Forrige og neste sesjon |
 | `b` | Innstillinger |
 | `w` `s` | Tilbake til agentlista |

@@ -32,7 +32,7 @@ const OFTEST: [(&str, &str, &[Tast]); 17] = [
     ("Ny terminal ved siden av Claude-en", "+ etter fanene øverst", &[P("c")]),
     ("Dele skjermen", "", &[P("%"), P("\"")]),
     ("Bytte mellom fanene øverst", "klikk på fanen", &[P("n"), P("p")]),
-    ("Kopiere tekst", "dra over teksten, den kopieres når du slipper", &[]),
+    ("Kopiere tekst", "dra over teksten, den kopieres når du slipper", &[P("[")]),
     ("Rulle tilbake", "musehjulet", &[P("PgUp")]),
     ("Bredere eller smalere agentliste", "dra i streken mellom agentlista og Claude-en", &[]),
     ("Endre utseendet", "", &[P("b")]),
