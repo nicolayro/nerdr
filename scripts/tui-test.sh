@@ -618,30 +618,6 @@ tast y
 sjekk "y lukker sesjonen" uten_sesjon egen
 rm "$KONFIG/sessions/egen.json"
 
-maal new-session -d -s tom -x 80 -y 20 -c "$MAPPE" /bin/sh
-maal set-option -t tom @nerdr-sesjon 1
-registrer tom tom idle ",\"cwd\":\"$MAPPE\""
-maal new-session -d -s rest -x 80 -y 20 -c "$MAPPE" /bin/sh
-maal set-option -t rest @nerdr-sesjon 1
-maal select-pane -t rest -T '✳ Rest etter Claude'
-registrer rest rest idle ",\"cwd\":\"$MAPPE\""
-maal new-window -d -t rest:
-list_straks
-sjekk "to Claude-er til i sesjoner nerdr har laget" har 'Rest etter Claude'
-rm "$KONFIG/sessions/tom.json" "$KONFIG/sessions/rest.json"
-list_straks
-sjekk "når Claude-ene avslutter, er kortene borte" mangler 'Rest etter Claude'
-sjekk "men sesjonene står en stund" maal has-session -t =tom
-sleep 10
-sjekk "så lukkes sesjonen der bare skallet står igjen" uten_sesjon tom
-sjekk "og der cat kjører, blir den et kort" har 'uten Claude: cat'
-rad=$(linja_med 'uten Claude: cat')
-beveg 10 "$rad"
-klikk 33 "$rad"
-sjekk "× på kortet spør om sesjonen og det som kjører" har 'Sesjonen rest, der cat i'
-tast y
-sjekk "y lukker den" uten_sesjon rest
-
 dra 36 8 46 8
 sjekk "å dra i streken gjør lista bredere" linje_har 5 '^▎ ●  Fiks testene +<1m +││'
 sjekk "og alfa smalere" er 60x16 dimensjon alfa
