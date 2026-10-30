@@ -20,7 +20,7 @@ use crate::grupper::{Del, Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::tekst::varighet;
-use crate::utseende::{self, Ledig, Orden, Plass, Topp, Utseende};
+use crate::utseende::{self, Ledig, Orden, Plass, Sti, Topp, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
@@ -341,7 +341,7 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
         tid,
         starter: app.nye.contains_key(&pane.id),
         sted_over: app.utseende.orden == Orden::Mappe,
-        undermappe: if app.utseende.orden == Orden::Mappe { app.undermappe(pane) } else { None },
+        undermappe: if app.utseende.sti == Sti::På { app.undermappe(pane) } else { None },
     };
     kort::kort(app.utseende, &info, liste_bredde(app) - 1, er_valgt(app, pane), stripe(app))
 }

@@ -205,14 +205,14 @@ tast C-b b
 sjekk "C-b b åpner utseende-menyen" har 'farge +│ av  på'
 tast Left
 sjekk "farge av tar fargen bort" uten_gronn_glyf 7
-tast Right Down Down Down Down Right
-sjekk "orden mappe gir stien til repoet som overskrift" linje_har 2 '^ ▾  ~/nerdr ─+'
+tast Right Down Down Down Down Down Right
+sjekk "orden mappe gir navnet på repoet som overskrift" linje_har 2 '^ ▾  nerdr ─+'
 sjekk "og bare branchen under oppgaven" linje_har 5 '^│ main +│'
 tast Right
 sjekk "orden aktivitet har ingen overskrifter" mangler 'AKTIVE|LEDIGE'
-tast Right Up Up Right Escape
+tast Right Up Up Up Right Escape
 sjekk "Esc lukker menyen" mangler 'farge +│ av'
-sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1 ulest=oransje topp=strek' maal show-options -gqv @nerdr-utseende
+sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1 ulest=oransje topp=strek sti=på' maal show-options -gqv @nerdr-utseende
 tast C-b b
 sjekk "med minimal er oppgave borte fra konfigurasjonen" mangler 'oppgave +│ 1'
 klikk_paa 'vanlig'
@@ -224,7 +224,7 @@ sjekk "et klikk utenfor lukker konfigurasjonen" mangler 'konfigurasjon'
 
 venstre=$(kolonne 1 'prioritert')
 klikk "$venstre" 1
-sjekk "et klikk på sorteringen øverst sorterer etter prosjekt" linje_har 2 '^ ▾  ~/nerdr ─+┤'
+sjekk "et klikk på sorteringen øverst sorterer etter prosjekt" linje_har 2 '^ ▾  nerdr ─+┤'
 sjekk "og knappen sier det, like langt til venstre" er "$venstre" kolonne 1 'prosjekt'
 klikk "$(kolonne 1 'prosjekt')" 1
 sjekk "så etter aktivitet, med bare en strek øverst" linje_har 2 '^─+┤'

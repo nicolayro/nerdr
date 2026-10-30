@@ -20,7 +20,7 @@ pub enum Rad<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Overskrift {
     Del(Del),
-    /// Repoet, eller mappa når den ikke er i et repo.
+    /// Stien til repoet, eller mappa når den ikke er i et repo.
     Mappe(String),
     /// Over lista sortert etter aktivitet. Den har bare streken, så kortene
     /// starter på samme rad som i de andre sorteringene.
@@ -31,10 +31,16 @@ impl Overskrift {
     pub fn tittel(&self) -> &str {
         match self {
             Overskrift::Del(d) => tittel(*d),
-            Overskrift::Mappe(navn) => navn,
+            Overskrift::Mappe(sti) => navn(sti),
             Overskrift::Alle => "",
         }
     }
+}
+
+/// Bare navnet, fordi stien til repoet er en annen enn den et worktree av det
+/// ligger i, og da ville overskriften vært feil for Claude-ene der.
+pub fn navn(sti: &str) -> &str {
+    sti.rsplit('/').next().unwrap_or(sti)
 }
 
 pub fn glyf(merke: Merke) -> &'static str {

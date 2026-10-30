@@ -55,6 +55,13 @@ pub enum Topp {
     Strek,
 }
 
+/// Mappa Claude-en jobber i, under branchen, når den ikke er mappa til repoet.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Sti {
+    Av,
+    På,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Utseende {
     pub paner: Rammer,
@@ -66,11 +73,12 @@ pub struct Utseende {
     pub tittel: usize,
     pub ulest: Ulestfarge,
     pub topp: Topp,
+    pub sti: Sti,
 }
 
 /// Står i `OPTION` foran verdien, som `farge=på`, så en akse kan komme til
 /// eller forsvinne uten at de andre leses feil.
-pub const AKSER: [&str; 8] = ["paner", "farge", "plass", "orden", "ledig", "tittel", "ulest", "topp"];
+pub const AKSER: [&str; 9] = ["paner", "farge", "plass", "orden", "ledig", "tittel", "ulest", "topp", "sti"];
 pub const ORDEN: usize = 3;
 const LEDIG: usize = 4;
 const ULEST: usize = 6;
@@ -78,7 +86,7 @@ const TOPP: usize = 7;
 /// Aksene fra denne gjelder bare boksene.
 pub const BOKSAKSER: usize = 5;
 /// Står i `OPTION`, og endres ikke.
-const VERDIER: [&[&str]; 8] = [
+const VERDIER: [&[&str]; 9] = [
     &["bokser", "linjer"],
     &["av", "på"],
     &["vanlig", "minimal"],
@@ -87,16 +95,18 @@ const VERDIER: [&[&str]; 8] = [
     &["1", "2", "3"],
     &["oransje", "blå"],
     &["rad", "strek"],
+    &["av", "på"],
 ];
 /// Det sorteringen heter i menyen og på knappen, som `VERDIER` for orden.
 pub const SORTERINGER: [&str; 3] = ["prioritert", "prosjekt", "aktivitet"];
 /// Navnene i menyen, i samme rekkefølge som `AKSER`.
-const I_MENYEN: [&str; 8] = ["ramme", "farge", "kortdesign", "sortering", "ledige", "oppgave", "ulest", "overskrift"];
+const I_MENYEN: [&str; 9] =
+    ["ramme", "farge", "kortdesign", "sortering", "ledige", "oppgave", "ulest", "overskrift", "mappe"];
 /// Rekkefølgen i menyen, under overskriften. Et valg som bare gjelder for
 /// valget over, står rett under det.
-pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Liste", &[1, 6, 2, 5, 3, 7, 4])];
+pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Liste", &[1, 6, 2, 5, 8, 3, 7, 4])];
 /// Står nederst i menyen for valget du står på, i samme rekkefølge som `AKSER`.
-pub const FORKLARING: [&str; 8] = [
+pub const FORKLARING: [&str; 9] = [
     "Bokser gir hver pane en ramme med luft rundt. Linjer lar panene fylle visningen, med streker mellom.",
     "Tegnet og tiden får fargen til gruppen, og rammene en tone av den.",
     "Vanlig har en boks for hver sesjon. Minimal har én linje for hver.",
@@ -105,9 +115,10 @@ pub const FORKLARING: [&str; 8] = [
     "Hvor mange linjer oppgaven får i kortet.",
     "Fargen til det som er ferdig og ikke sett. Oransje er som det som spør, og blå skiller dem.",
     "Prosjektet over sesjonene, på en rad med bakgrunn eller med en strek bort til skillelinja.",
+    "Mappa under branchen når Claude-en ikke jobber i mappa til repoet: stien til et worktree, eller en undermappe i repoet.",
 ];
 /// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
-pub const NAVN: [&[&str]; 8] = [
+pub const NAVN: [&[&str]; 9] = [
     &["paner i bokser", "paner med linjer"],
     &["uten farge", "med farge"],
     &["vanlig liste", "minimal liste"],
@@ -116,6 +127,7 @@ pub const NAVN: [&[&str]; 8] = [
     &["oppgaven på 1 linje", "oppgaven på 2 linjer", "oppgaven på 3 linjer"],
     &["ulest i oransje", "ulest i blått"],
     &["prosjektet på en rad", "prosjektet med strek"],
+    &["uten mappe i kortet", "med mappe i kortet"],
 ];
 const PANER: [Rammer; 2] = [Rammer::Bokser, Rammer::Linjer];
 const FARGER: [Farge; 2] = [Farge::Av, Farge::På];
@@ -124,6 +136,7 @@ const ORDNER: [Orden; 3] = [Orden::Nerdr, Orden::Mappe, Orden::Aktivitet];
 const LEDIGE: [Ledig; 2] = [Ledig::Under, Ledig::Midten];
 const ULESTFARGER: [Ulestfarge; 2] = [Ulestfarge::Oransje, Ulestfarge::Blå];
 const TOPPER: [Topp; 2] = [Topp::Rad, Topp::Strek];
+const STIER: [Sti; 2] = [Sti::Av, Sti::På];
 
 impl Utseende {
     pub fn ny(paner: Rammer) -> Utseende {
@@ -136,6 +149,7 @@ impl Utseende {
             tittel: 1,
             ulest: Ulestfarge::Oransje,
             topp: Topp::Strek,
+            sti: Sti::På,
         }
     }
 
@@ -166,7 +180,8 @@ impl Utseende {
             4 => LEDIGE.iter().position(|l| *l == self.ledig),
             5 => Some(self.tittel - 1),
             6 => ULESTFARGER.iter().position(|f| *f == self.ulest),
-            _ => TOPPER.iter().position(|t| *t == self.topp),
+            7 => TOPPER.iter().position(|t| *t == self.topp),
+            _ => STIER.iter().position(|s| *s == self.sti),
         };
         i.unwrap_or(0)
     }
@@ -180,7 +195,8 @@ impl Utseende {
             4 => self.ledig = LEDIGE[i],
             5 => self.tittel = i + 1,
             6 => self.ulest = ULESTFARGER[i],
-            _ => self.topp = TOPPER[i],
+            7 => self.topp = TOPPER[i],
+            _ => self.sti = STIER[i],
         }
     }
 
@@ -227,7 +243,7 @@ mod tester {
         u.endre(1, 1);
         u.endre(2, 1);
         u.endre(3, -1);
-        assert_eq!(u.tekst(), "paner=bokser farge=av plass=minimal orden=aktivitet ledig=under tittel=1 ulest=oransje topp=strek");
+        assert_eq!(u.tekst(), "paner=bokser farge=av plass=minimal orden=aktivitet ledig=under tittel=1 ulest=oransje topp=strek sti=på");
         let mut lest = Utseende::ny(Rammer::Linjer);
         lest.les(&u.tekst());
         assert_eq!(lest, u);
@@ -243,7 +259,7 @@ mod tester {
     #[test]
     fn menyen_viser_bare_valg_som_gjelder() {
         let mut u = Utseende::ny(Rammer::Linjer);
-        assert_eq!(u.synlige(), [0, 1, 6, 2, 5, 3, 4]);
+        assert_eq!(u.synlige(), [0, 1, 6, 2, 5, 8, 3, 4]);
         u.plass = Plass::Minimal;
         u.orden = Orden::Mappe;
         assert_eq!(u.synlige(), [0, 1, 6, 2, 3, 7]);

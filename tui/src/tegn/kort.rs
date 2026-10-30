@@ -8,7 +8,7 @@ use ratatui::style::{Color, Style};
 
 use super::{BLÅ, BLÅ_RGB, GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVAK, VANLIG, bryt, kutt, kutt_foran, tonet};
 use crate::palett::Rgb;
-use crate::grupper::{Overskrift, Rad, glyf};
+use crate::grupper::{self, Overskrift, Rad, glyf};
 use crate::utseende::{Farge, Plass, Topp, Ulestfarge, Utseende};
 
 /// Uten glyf foran starter teksten etter pekeren og et mellomrom.
@@ -96,16 +96,9 @@ pub fn prosjektrad(u: Utseende, navn: &str, merker: &[Merke], bredde: u16, brett
     let start = slutt.saturating_sub(merker.len() as u16 * 3);
     let pil = if brettet { "▸" } else { "▾" };
     let plass = start.saturating_sub(ETTER_PIL + 1) as usize;
-    // Stien til prosjektet, med navnet sist og fet.
-    let (foran, navn) = match navn.rsplit_once('/') {
-        Some((foran, navn)) => (format!("{foran}/"), kutt(navn, plass)),
-        None => (String::new(), kutt(navn, plass)),
-    };
-    let foran = kutt_foran(&foran, plass.saturating_sub(self::bredde(&navn) as usize));
-    let mut l = vec![peker(valgt), bit(1, pil, SVAK), bit(ETTER_PIL, foran.clone(), SVAK)];
-    let navn_x = ETTER_PIL + self::bredde(&foran);
-    let etter_navn = navn_x + self::bredde(&navn) + 1;
-    l.push(bit(navn_x, navn, STERK));
+    let navn = kutt(grupper::navn(navn), plass);
+    let etter_navn = ETTER_PIL + self::bredde(&navn) + 1;
+    let mut l = vec![peker(valgt), bit(1, pil, SVAK), bit(ETTER_PIL, navn, STERK)];
     if u.topp == Topp::Strek {
         let til = if merker.is_empty() { bredde } else { start };
         l.push(bit(etter_navn, "─".repeat(til.saturating_sub(etter_navn) as usize), SVAK));
