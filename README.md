@@ -117,9 +117,10 @@ velger et klikk det du klikker på, hjulet blar, og et klikk utenfor lukker.
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
 hver sin boks eller med streker mellom. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
-Øverst står vinduene i sesjonen som faner med bakgrunn, og vinduet som vises,
-har sterkere bakgrunn. Et klikk på en fane viser vinduet, og `×` i fanen
-lukker det. Fra lista går du alltid inn i vinduet til Claude-en.
+Øverst står vinduene i sesjonen som faner, med bokser i en ramme over panene.
+Vinduet som vises, har bakgrunn, og den og fanen under musen har `×`, som lukker
+vinduet. Et klikk på en fane viser vinduet, og et midtklikk lukker det. Fra
+lista går du alltid inn i vinduet til Claude-en.
 
 Med tmux 3.5 eller nyere får panene fargene terminalen hadde da nerdr startet,
 så Claude Code med «Auto (match terminal)» i `/theme` blir lys eller mørk som
@@ -224,7 +225,7 @@ ikke gjelder.
 
 | | |
 | --- | --- |
-| **ramme** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
+| **ramme** | `bokser` gir hver pane en boks med avrundede hjørner, også når vinduet har én pane, og boksene ved siden av hverandre deler kanten. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
 | **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
 | **ulest** | Fargen til det som er ferdig og ikke sett. `oransje` er som det som spør, og `blå` skiller dem. Bare med farge. |
 | **kortdesign** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |

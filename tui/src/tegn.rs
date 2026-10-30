@@ -60,7 +60,12 @@ const SVAK: Style = Style::new().add_modifier(Modifier::DIM);
 /// Så mye av forgrunnen som blandes inn i bakgrunnen der noe er valgt, og der
 /// musen står.
 const MARKERT_ANDEL: f32 = 0.12;
-const PEKT_ANDEL: f32 = 0.25;
+const PEKT_ANDEL: f32 = 0.18;
+/// Rammene rundt panene, og streken mellom fanene og panene, som skal være
+/// svakere enn rammen.
+const RAMME_ANDEL: f32 = 0.35;
+const AKTIV_RAMME_ANDEL: f32 = 0.6;
+const SKILLE_ANDEL: f32 = 0.2;
 const INNE_ANDEL: f32 = 0.05;
 const UNDER_MUSEN_ANDEL: f32 = 0.06;
 const OVERSKRIFT_ANDEL: f32 = 0.08;
@@ -101,6 +106,16 @@ fn inne() -> Style {
     tonet(None, INNE_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
 
+/// Uten farger fra terminalen er den aktive rammen vanlig og de andre svake.
+fn rammestil(aktiv: bool) -> Style {
+    let (andel, uten) = if aktiv { (AKTIV_RAMME_ANDEL, VANLIG) } else { (RAMME_ANDEL, SVAK) };
+    tonet(None, andel).map_or(uten, |c| Style::new().fg(c))
+}
+
+fn skillestil() -> Style {
+    tonet(None, SKILLE_ANDEL).map_or(SVAK, |c| Style::new().fg(c))
+}
+
 fn overskrift_bakgrunn() -> Style {
     tonet(None, OVERSKRIFT_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
@@ -109,11 +124,29 @@ fn under_musen() -> Style {
     tonet(None, UNDER_MUSEN_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
 
-/// Til høyre for lista, under faneraden. Lista er `liste` bred, men aldri
-/// mer enn halve skjermen.
+/// Fanene og streken under dem. Med bokser er streken toppkanten på boksene,
+/// og fanene har en ramme over seg.
+const FANERADER: u16 = 2;
+
+/// Raden fanene står på.
+pub fn fanerad(app: &App) -> u16 {
+    (app.utseende.paner == Rammer::Bokser) as u16
+}
+
+/// Kolonnene fanene har plass i, innenfor rammen med bokser.
+fn fanerom(app: &App) -> Range<u16> {
+    let v = app.visning;
+    match app.utseende.paner {
+        Rammer::Bokser => v.x + 2..v.right().saturating_sub(1),
+        Rammer::Linjer => v.x + 1..v.right(),
+    }
+}
+
+/// Til høyre for lista, under fanene. Lista er `liste` bred, men aldri mer
+/// enn halve skjermen.
 pub fn visning(størrelse: Size, liste: u16) -> Rect {
     let liste = liste.min(størrelse.width / 2).max(STRIPE.min(størrelse.width));
-    Rect::new(liste, 1, størrelse.width.saturating_sub(liste), størrelse.height.saturating_sub(1))
+    Rect::new(liste, FANERADER, størrelse.width.saturating_sub(liste), størrelse.height.saturating_sub(FANERADER))
 }
 
 /// Bredden på lista er der visningen starter.
@@ -131,8 +164,8 @@ pub fn alt(f: &mut Frame, app: &App) {
     let bokser = app.bokser();
     let mus = app.under_musen();
     tegn_liste(buf, område, app, mus.as_ref());
-    tegn_faner(buf, app, mus.as_ref());
     tegn_pane(buf, app, &bokser, mus.as_ref());
+    tegn_faner(buf, app, mus.as_ref());
     tegn_hint(buf, område, app);
 
     if let Some(rull) = app.hjelp {
@@ -552,7 +585,7 @@ pub fn pil_på(app: &App, y: u16) -> Option<bool> {
     }
 }
 
-/// Et vindu i sesjonen, som fane i statuslinja.
+/// Et vindu i sesjonen, som fane over panene.
 struct Fane {
     fra: u16,
     til: u16,
@@ -561,19 +594,23 @@ struct Fane {
     vist: bool,
 }
 
+/// Luft til høyre for navnet, med `×` i.
+const FANELUFT: u16 = 3;
+
 impl Fane {
-    /// Kolonnen til `×`, som står i alle fanene, så de ikke endrer bredde.
+    /// Kolonnen til `×`. Plassen står i fanen også når `×` ikke vises, så
+    /// fanene ikke endrer bredde når musen kommer.
     fn lukk(&self) -> u16 {
         self.til - 2
     }
 }
 
 fn faner(app: &App) -> Vec<Fane> {
-    let mut x = app.visning.x + 1;
+    let mut x = fanerom(app).start;
     let mut ut = Vec::new();
     for p in app.faner() {
         let navn = kutt(&p.vindunavn, 20);
-        let til = x + navn.chars().count() as u16 + 4;
+        let til = x + 1 + navn.chars().count() as u16 + FANELUFT;
         let vist = app.vist.as_ref() == Some(&p.vindu_id);
         ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist });
         x = til + 1;
@@ -581,35 +618,84 @@ fn faner(app: &App) -> Vec<Fane> {
     ut
 }
 
-/// Vinduene i sesjonen som flater med bakgrunn i øverste rad, uten strek, så
-/// det er bare fanene som har flate. Vinduet som vises, har sterkere bakgrunn.
+/// Vinduene i sesjonen som faner med en strek under, og med bokser i en ramme
+/// over panene, der streken er toppkanten på boksene. Fanen som vises, er en
+/// lapp med bakgrunn, og den og fanen under musen har `×`. Tegnes etter
+/// panene, fordi streken går inn i toppkanten på boksene.
 fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
     let v = app.visning;
-    let faner: Vec<Fane> = faner(app).into_iter().take_while(|f| f.til <= v.right()).collect();
-    for f in faner {
+    let (rom, rad) = (fanerom(app), fanerad(app));
+    let boks = app.utseende.paner == Rammer::Bokser;
+    let faner: Vec<Fane> = faner(app).into_iter().take_while(|f| f.til < rom.end).collect();
+    let y = v.y - 1 + boks as u16;
+    // Rammen over fanene har samme farge som boksen under.
+    let ramme = if boks && buf[(v.x, y)].symbol() == "╭" { buf[(v.x, y)].style() } else { SVAK };
+    // Ved siden av rammen over fanene står skillelinja for seg.
+    let fra = if boks { v.x } else { v.x.saturating_sub(1) };
+    for x in fra..v.right() {
+        let rute = &buf[(x, y)];
+        let (symbol, stil) = (rute.symbol().to_string(), rute.style());
+        let skillelinja = x + 1 == v.x;
+        // Merkelappen på rammen, som « kopi », står.
+        if !skillelinja && (!matches!(symbol.as_str(), " " | "─" | "╭" | "╮" | "┬") || stil.add_modifier.contains(Modifier::REVERSED)) {
+            continue;
+        }
+        let fra_boks = matches!(symbol.as_str(), "╭" | "╮" | "┬");
+        let kant = boks && (x == v.x || x + 1 == v.right());
+        let (opp, ned) = if skillelinja { (true, true) } else { (kant, fra_boks) };
+        let venstre = match () {
+            _ if skillelinja => matches!(symbol.as_str(), "┤" | "┼"),
+            _ => !(boks && x == v.x),
+        };
+        let høyre = x + 1 < v.right();
+        let tegn = match (opp, ned, venstre, høyre) {
+            (false, true, false, true) => "╭",
+            (false, true, true, false) => "╮",
+            (o, n, v, h) => rammetegn(o, n, v, h),
+        };
+        // Der en loddrett kant går gjennom streken, har den fargen til rammen,
+        // ellers ser kanten brutt ut.
+        let stil = match () {
+            _ if skillelinja => stil,
+            _ if fra_boks => stil,
+            _ if kant => ramme,
+            _ if boks => skillestil(),
+            _ => SVAK,
+        };
+        buf[(x, y)].set_symbol(tegn).set_style(stil);
+    }
+    if boks && v.width >= 2 {
+        buf.set_string(v.x, 0, format!("╭{}╮", "─".repeat(v.width as usize - 2)), ramme);
+        buf.set_string(v.x, rad, "│", ramme);
+        buf.set_string(v.right() - 1, rad, "│", ramme);
+    }
+    for f in &faner {
         let på_kryss = matches!(mus, Some(Mål::LukkFane(vindu)) if *vindu == f.vindu);
         let pekt = på_kryss || matches!(mus, Some(Mål::Fane(vindu)) if *vindu == f.vindu);
-        let stil = match (f.vist, pekt) {
-            (true, _) => markert().add_modifier(Modifier::BOLD),
-            (false, true) => markert(),
-            (false, false) => under_musen().patch(SVAK),
+        let (tekst, lapp) = match () {
+            _ if f.vist => (STERK, markert()),
+            _ if pekt => (VANLIG, under_musen()),
+            _ => (SVAK, Style::new()),
         };
-        buf.set_string(f.fra, 0, format!(" {} × ", f.navn), stil);
-        let kryss = match på_kryss {
-            true => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),
-            false => SVAK.remove_modifier(Modifier::BOLD),
-        };
-        buf.set_string(f.lukk(), 0, "×", stil.patch(kryss));
+        buf.set_style(Rect::new(f.fra, rad, f.til - f.fra, 1), lapp);
+        buf.set_string(f.fra + 1, rad, &f.navn, lapp.patch(tekst));
+        if pekt || f.vist {
+            let kryss = match på_kryss {
+                true => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),
+                false => SVAK,
+            };
+            buf.set_string(f.lukk(), rad, "×", lapp.patch(kryss));
+        }
     }
     if let Some(pluss) = ny_fane(app) {
-        let stil = if mus == Some(&Mål::NyFane) { under_musen() } else { SVAK };
-        buf.set_string(pluss.start, 0, " + ", stil);
+        let stil = if mus == Some(&Mål::NyFane) { VANLIG } else { SVAK };
+        buf.set_string(pluss.start, rad, " + ", stil);
     }
 }
 
-/// Vinduet til fanen i kolonne `x`.
+/// Vinduet til fanen i kolonne `x`, med luften etter den.
 pub fn fane_på(app: &App, x: u16) -> Option<String> {
-    faner(app).into_iter().find(|f| (f.fra..f.til).contains(&x)).map(|f| f.vindu)
+    faner(app).into_iter().find(|f| (f.fra..=f.til).contains(&x)).map(|f| f.vindu)
 }
 
 /// Vinduet til fanen med `×` i kolonne `x`. Rutene på hver side treffer
@@ -621,8 +707,9 @@ pub fn lukk_fane_på(app: &App, x: u16) -> Option<String> {
 /// `+` etter fanene, når et vindu vises og det er plass til den.
 fn ny_fane(app: &App) -> Option<Range<u16>> {
     app.valgt.as_ref()?;
-    let fra = faner(app).last().map_or(app.visning.x + 1, |f| f.til + 1);
-    (fra + 3 <= app.visning.right()).then_some(fra..fra + 3)
+    let rom = fanerom(app);
+    let fra = faner(app).last().map_or(rom.start, |f| f.til + 1);
+    (fra + 3 <= rom.end).then_some(fra..fra + 3)
 }
 
 pub fn ny_fane_på(app: &App, x: u16) -> bool {
@@ -1208,11 +1295,8 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
                 rute.set_style(Style::new().fg(Color::Black).bg(ORANSJE));
             }
         }
-        if let Some(ramme) = boks.ramme {
-            let stil = if lyse.iter().any(|b| b.pane == boks.pane) { VANLIG } else { SVAK };
-            tegn_ramme(buf, ramme, stil);
-        }
     }
+    tegn_rammer(buf, bokser, &lyse);
     if app.utseende.paner == Rammer::Linjer && bokser.len() > 1 {
         tegn_linjer(buf, app, bokser, &lyse);
     }
@@ -1296,16 +1380,36 @@ fn rammetegn(opp: bool, ned: bool, venstre: bool, høyre: bool) -> &'static str 
     }
 }
 
-fn tegn_ramme(buf: &mut Buffer, r: Rect, stil: Style) {
-    if r.width < 2 || r.height < 2 {
-        return;
-    }
-    let strek = "─".repeat(r.width as usize - 2);
-    buf.set_string(r.x, r.y, format!("╭{strek}╮"), stil);
-    buf.set_string(r.x, r.bottom() - 1, format!("╰{strek}╯"), stil);
-    for y in r.y + 1..r.bottom() - 1 {
-        buf.set_string(r.x, y, "│", stil);
-        buf.set_string(r.right() - 1, y, "│", stil);
+/// Rammene rundt boksene. Naboer deler kanten, så tegnet i hver rute kommer
+/// av hvilke kanter som møtes der. En kant som hører til en lys boks, er lys.
+fn tegn_rammer(buf: &mut Buffer, bokser: &[Boks], lyse: &[&Boks]) {
+    let rammer: Vec<(Rect, bool)> = bokser
+        .iter()
+        .filter_map(|b| Some((b.ramme?, lyse.iter().any(|l| l.pane == b.pane))))
+        .filter(|(r, _)| r.width >= 2 && r.height >= 2)
+        .collect();
+    let vannrett = |r: &Rect, y: u16, fra: u16, til: u16| (y == r.y || y + 1 == r.bottom()) && r.x <= fra && til < r.right();
+    let loddrett = |r: &Rect, x: u16, fra: u16, til: u16| (x == r.x || x + 1 == r.right()) && r.y <= fra && til < r.bottom();
+    for (r, _) in &rammer {
+        let kant = (r.x..r.right()).flat_map(|x| [(x, r.y), (x, r.bottom() - 1)]);
+        let sider = (r.y..r.bottom()).flat_map(|y| [(r.x, y), (r.right() - 1, y)]);
+        for (x, y) in kant.chain(sider) {
+            let finnes = |f: &dyn Fn(&Rect) -> bool| rammer.iter().any(|(r, _)| f(r));
+            let opp = y > 0 && finnes(&|r| loddrett(r, x, y - 1, y));
+            let ned = finnes(&|r| loddrett(r, x, y, y + 1));
+            let venstre = x > 0 && finnes(&|r| vannrett(r, y, x - 1, x));
+            let høyre = finnes(&|r| vannrett(r, y, x, x + 1));
+            let tegn = match (opp, ned, venstre, høyre) {
+                (false, true, false, true) => "╭",
+                (false, true, true, false) => "╮",
+                (true, false, false, true) => "╰",
+                (true, false, true, false) => "╯",
+                (o, n, v, h) => rammetegn(o, n, v, h),
+            };
+            let på_kanten = |r: &Rect| (r.x..r.right()).contains(&x) && (r.y..r.bottom()).contains(&y);
+            let lys = rammer.iter().any(|(r, lys)| *lys && på_kanten(r) && (vannrett(r, y, x, x) || loddrett(r, x, y, y)));
+            buf[(x, y)].set_symbol(tegn).set_style(rammestil(lys));
+        }
     }
 }
 
