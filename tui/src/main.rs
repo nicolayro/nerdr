@@ -1449,6 +1449,7 @@ impl App {
         self.bytt_fokus(Fokus::Pane);
         let (Some(innhold), Some(pane)) = (self.innhold(), self.aktiv().map(|p| p.id.clone())) else { return };
         self.markering = None;
+        self.kopiert = None;
         self.kopimodus = Some(Kopimodus::ny(pane, &innhold, self.markør));
     }
 
