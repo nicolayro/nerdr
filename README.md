@@ -162,7 +162,7 @@ Bindingene etter prefikset i `.tmux.conf` gjelder også i nerdr, som
 `bind | split-window -h`, og tastene med `-r` kan trykkes igjen uten
 prefikset. Kommandoer som trenger et skjermbilde fra tmux, som `display-popup`,
 `command-prompt` og `copy-mode`, virker ikke, og da gjør tasten det den gjør i
-nerdr. `f`, `r`, `w`, `s`, `b`, `d`, `?`, `:`, `(`, `)`, `[` og `]` er alltid nerdr sine.
+nerdr. `f`, `r`, `w`, `s`, `b`, `d`, `?`, `:`, `(` og `)` er alltid nerdr sine.
 Hjelpen og handlingene viser tastene du har bundet. nerdr leser bindingene når
 den starter.
 
