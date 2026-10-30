@@ -304,7 +304,7 @@ fn main() {
             Ok(())
         }
         ["-v" | "-V" | "--version"] => {
-            println!("nerdr {}", env!("CARGO_PKG_VERSION"));
+            println!("nerdr {}", hjelp::versjon());
             Ok(())
         }
         _ => bruk(),
