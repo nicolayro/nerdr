@@ -91,6 +91,18 @@ pub const MERKER: [(Merke, &str); 5] = [
     (Merke::Starter, "starter"),
 ];
 
+/// Branchen bygget er fra, når det ikke er main.
+fn branch() -> Option<&'static str> {
+    Some(env!("NERDR_BRANCH")).filter(|b| !b.is_empty())
+}
+
+pub fn versjon() -> String {
+    match branch() {
+        None => env!("CARGO_PKG_VERSION").into(),
+        Some(branch) => format!("{} {branch}", env!("CARGO_PKG_VERSION")),
+    }
+}
+
 pub const BARE_TMUX: &str = "Bare Claude som kjører i tmux, vises.";
 
 pub fn mapper() -> String {
@@ -113,7 +125,7 @@ pub fn tekst() -> String {
          -h, --help     denne hjelpen\n  \
          -v, --version  versjonen\n\n\
          I lista:\n",
-        env!("CARGO_PKG_VERSION")
+        versjon()
     );
     for (tast, hva) in TASTER {
         ut += &format!("  {tast:<9}{hva}\n");

@@ -218,6 +218,8 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         let y = plass(app);
         buf.set_string(0, y, "─".repeat(bredde as usize), SVAK);
         overskrifter.push(y);
+        let versjon = format!(" nerdr {}", hjelp::versjon());
+        buf.set_stringn(0, app.visning.bottom() - 1, versjon, bredde as usize, SVAK);
     }
     let prefiks = app.prefiks.navn();
     let (pluss, tekststil) = match app.fokus {
@@ -646,9 +648,9 @@ fn alle_knapper(app: &App) -> bool {
     !stripe(app) && app.visning.bottom() >= HØYDE_TIL_KNAPPENE
 }
 
-/// Streken og én rad per knapp, eller bare raden med `+`.
+/// Streken, én rad per knapp og versjonen, eller bare raden med `+`.
 fn knapperader(app: &App) -> u16 {
-    if alle_knapper(app) { KNAPPER.len() as u16 + 1 } else { 1 }
+    if alle_knapper(app) { KNAPPER.len() as u16 + 2 } else { 1 }
 }
 
 /// Knappene og raden de står på. Når hintet står der, er de borte.
@@ -660,7 +662,7 @@ fn knapper(app: &App) -> Vec<(Knapp, u16)> {
     if !alle_knapper(app) {
         return vec![(Knapp::Ny, bunn.saturating_sub(1))];
     }
-    let første = bunn - KNAPPER.len() as u16;
+    let første = bunn - KNAPPER.len() as u16 - 1;
     KNAPPER.iter().zip(første..).map(|(k, y)| (k.0, y)).collect()
 }
 

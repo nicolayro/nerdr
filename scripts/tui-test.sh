@@ -298,12 +298,13 @@ sjekk "klikk på gamma går inn i den" i_panen
 tast C-b w
 sjekk "tilbake i lista" i_lista
 
-sjekk "nederst i lista er det en strek" linje_har 16 '^─+┤'
-sjekk "«+ ny sesjon» først" linje_har 17 '^ \+ ny sesjon +C-b f │'
-sjekk "så «handlinger»" linje_har 18 '^   handlinger +C-b : │'
-sjekk "så «hjelp»" linje_har 19 '^   hjelp +C-b \? │'
-sjekk "og «avslutt» nederst" linje_har 20 '^   avslutt +C-b d │'
-klikk 3 19
+sjekk "nederst i lista er det en strek" linje_har 15 '^─+┤'
+sjekk "«+ ny sesjon» først" linje_har 16 '^ \+ ny sesjon +C-b f │'
+sjekk "så «handlinger»" linje_har 17 '^   handlinger +C-b : │'
+sjekk "så «hjelp»" linje_har 18 '^   hjelp +C-b \? │'
+sjekk "og «avslutt»" linje_har 19 '^   avslutt +C-b d │'
+sjekk "og versjonen helt nederst" linje_har 20 '^ nerdr [0-9]+\.[0-9]+\.[0-9]+.* │'
+klikk 3 18
 sjekk "klikk på «hjelp» viser hjelpen" har 'trykk en tast for å lukke'
 tast x
 sjekk "en tast lukker hjelpen" mangler 'trykk en tast for å lukke'
@@ -319,7 +320,7 @@ tast C-b :
 klikk 2 2
 sjekk "et klikk utenfor lukker dem også" mangler '⏎ kjør'
 
-klikk 3 17
+klikk 3 16
 sjekk "klikk på «+ ny sesjon» åpner popupen med 4 mapper og 1 prosjekt" linje_har 3 'mappe › .*5/5'
 sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 4 '▎~/git/annet'
 sjekk "så ~/eget, som er brukt før" linje_har 5 '~/eget'
@@ -373,7 +374,7 @@ sjekk "Esc lager ingen ny sesjon" linjer 6 maal list-sessions
 tast Up Up Up Up Up Up Up Up Down Down Enter
 sjekk "↑ til toppen, ↓ ned til alfa og Enter viser den" linje_har 5 '^▎ ●  Fiks testene +<1m │'
 
-klikk 3 18
+klikk 3 17
 sjekk "klikk på «handlinger» åpner dem" har '⏎ kjør · klikk · esc lukk'
 tast -l terminal
 klikk_paa 'ny terminal'
@@ -393,7 +394,7 @@ tast C-b '&'
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 tast C-b w
 tast C-b
-sjekk "C-b viser prefikstastene i hintlinja under streken" linje_har 17 'C-b … f ny · w lista · \? mer'
+sjekk "C-b viser prefikstastene i hintlinja under streken" linje_har 16 'C-b … f ny · w lista · \? mer'
 sjekk "og knappene er borte så lenge" mangler 'avslutt +C-b d'
 
 tast %
@@ -456,7 +457,7 @@ tast -l zoom
 sjekk "«zoom» viser kommandoen med tasten" har 'zoom pane +C-b z'
 tast Enter
 sjekk "Enter kjører den" er 1 zoom
-klikk 3 18
+klikk 3 17
 sjekk "klikk på «handlinger» fra panen åpner dem" har '⏎ kjør · klikk · esc lukk'
 tast -l zoom
 tast Enter
@@ -534,7 +535,7 @@ for i in 1 2 3 4 5 6 7 8 9; do
   registrer "ekstra$i" "ekstra$i" idle ",\"cwd\":\"$MAPPE\""
 done
 list_straks
-sjekk "får ikke lista plass, har nederste rad en pil" linje_har 15 '^  ↓ +│'
+sjekk "får ikke lista plass, har nederste rad en pil" linje_har 14 '^  ↓ +│'
 sjekk "og lista starter med luft under streken" linje_har 3 '^ AKTIVE'
 sjekk "øverst er det ingen pil" linje_mangler 1 '↑'
 for i in 1 2 3 4; do hjul 65 5 5; done
@@ -543,9 +544,9 @@ sjekk "som er oransje fordi alfa over spør" linje_med_farger_har 1 '38;2;217;11
 tast Down Down Down Down Down Down Down Down Down Down Down Down Down Down Enter
 sjekk "den valgte nederst i lista vises" har '^▎ ○'
 tast C-b w
-sjekk "nederst er det ingen pil" linje_mangler 15 '↓'
+sjekk "nederst er det ingen pil" linje_mangler 14 '↓'
 klikk 3 1
-sjekk "klikk på pilen ruller en side opp" linje_har 15 '↓'
+sjekk "klikk på pilen ruller en side opp" linje_har 14 '↓'
 for i in 1 2 3 4 5 6 7 8 9; do
   maal kill-session -t "ekstra$i"
   rm "$KONFIG/sessions/ekstra$i.json"
@@ -653,7 +654,7 @@ tast w
 dra 4 8 36 8
 sjekk "og å dra den ut gir lista tilbake" er 68x17 dimensjon alfa
 
-klikk 5 20
+klikk 5 19
 sjekk "klikk på «avslutt» avslutter" uten_klienter
 
 sjekk "nerdr liste grupperer som TUI-et: alfa er aktiv, og gamma og prosjekt.ny er ledige, nyest først" \
