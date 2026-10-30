@@ -333,6 +333,7 @@ sjekk "prosjekt.ny er valgt" linje_har 4 '▎~/git/prosjekt\.ny'
 tast Enter
 sjekk "Enter lager sesjonen prosjekt-ny i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny
 sjekk "claude skrives inn i prosjekt-ny" i_pane prosjekt-ny claude
+sjekk "og sesjonen er merket som nerdr sin" er 1 maal show-options -t prosjekt-ny -qv @nerdr-sesjon
 sjekk "nerdr er inne i prosjekt.ny, øverst med ◌" linje_har 3 '^▎ ◌  prosjekt\.ny'
 sjekk "og tastene går dit" i_panen
 
@@ -592,6 +593,46 @@ tast y
 sjekk "y lukker vinduet, og sesjonen med det" uten_sesjon lukk
 rm "$KONFIG/sessions/lukk2.json"
 
+# En sesjon nerdr har laget, hører til Claude-en i den.
+maal new-session -d -s egen -x 80 -y 20 -c "$MAPPE"
+maal set-option -t egen @nerdr-sesjon 1
+maal select-pane -t egen -T '✳ Egen sesjon'
+registrer egen egen idle ",\"cwd\":\"$MAPPE\""
+maal new-window -d -t egen:
+list_straks
+sjekk "Claude-en i en sesjon nerdr har laget, står i lista" har 'Egen sesjon'
+rad=$(linja_med 'Egen sesjon')
+beveg 10 "$rad"
+klikk 33 "$rad"
+sjekk "× spør om hele sesjonen, med det som kjører i den" har 'sesjonen egen, der cat i'
+tast y
+sjekk "y lukker sesjonen" uten_sesjon egen
+rm "$KONFIG/sessions/egen.json"
+
+maal new-session -d -s tom -x 80 -y 20 -c "$MAPPE" /bin/sh
+maal set-option -t tom @nerdr-sesjon 1
+registrer tom tom idle ",\"cwd\":\"$MAPPE\""
+maal new-session -d -s rest -x 80 -y 20 -c "$MAPPE" /bin/sh
+maal set-option -t rest @nerdr-sesjon 1
+maal select-pane -t rest -T '✳ Rest etter Claude'
+registrer rest rest idle ",\"cwd\":\"$MAPPE\""
+maal new-window -d -t rest:
+list_straks
+sjekk "to Claude-er til i sesjoner nerdr har laget" har 'Rest etter Claude'
+rm "$KONFIG/sessions/tom.json" "$KONFIG/sessions/rest.json"
+list_straks
+sjekk "når Claude-ene avslutter, er kortene borte" mangler 'Rest etter Claude'
+sjekk "men sesjonene står en stund" maal has-session -t =tom
+sleep 10
+sjekk "så lukkes sesjonen der bare skallet står igjen" uten_sesjon tom
+sjekk "og der cat kjører, blir den et kort" har 'uten Claude: cat'
+rad=$(linja_med 'uten Claude: cat')
+beveg 10 "$rad"
+klikk 33 "$rad"
+sjekk "× på kortet spør om sesjonen og det som kjører" har 'Sesjonen rest, der cat i'
+tast y
+sjekk "y lukker den" uten_sesjon rest
+
 dra 36 8 46 8
 sjekk "å dra i streken gjør lista bredere" linje_har 5 '^▎ ●  Fiks testene +<1m +│ '
 sjekk "og alfa smalere" er 58x17 dimensjon alfa
@@ -628,6 +669,7 @@ sjekk "nerdr samtaler viser Fiks testene i annet, med id" inneholder "$(nerdr sa
 ut=$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje")
 sjekk "nerdr ny lager sesjonen tredje" inneholder "$ut" 'tmux-sesjonen tredje'
 sjekk "og skriver inn claude" i_pane tredje claude
+sjekk "og merker sesjonen" er 1 maal show-options -t tredje -qv @nerdr-sesjon
 ut=$(nerdr -L "$MAAL" ny --fortsett abc-123 --json)
 sjekk "nerdr ny --fortsett finner mappa annet, og lager annet-2 når annet finnes" inneholder "$ut" '"sesjon":"annet-2"'
 sjekk "med claude --resume" i_pane annet-2 'claude --resume abc-123'

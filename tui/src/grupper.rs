@@ -172,7 +172,7 @@ mod tester {
     use super::*;
 
     fn pane(id: &str) -> Pane {
-        Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\t\t\t")).unwrap()
+        Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\t\t\t\t\t")).unwrap()
     }
 
     fn plass(merke: Merke, siden: u64) -> Option<Plass> {

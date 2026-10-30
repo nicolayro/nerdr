@@ -10,7 +10,7 @@
 use std::io;
 use std::path::Path;
 
-use crate::tmux;
+use crate::{paner, tmux};
 
 /// Punktum og kolon er skilletegn i tmux-targets, og tmux bytter dem ut selv.
 /// Da ville navnet ikke funnet sesjonen igjen.
@@ -42,6 +42,12 @@ pub fn ny_sesjon(navn: &str, mappe: &Path) -> Vec<String> {
     ["new-session", "-d", "-s", navn, "-c", &mappe, "-P", "-F", "#{pane_id}"].map(String::from).to_vec()
 }
 
+/// Så nerdr vet at sesjonen er dens egen, og kan lukke den når Claude-en er
+/// borte.
+pub fn merk(pane: &str) -> Vec<String> {
+    ["set-option", "-t", pane, paner::FRA_NERDR, "1"].map(String::from).to_vec()
+}
+
 pub fn skriv_inn(pane: &str, claude: &str) -> [Vec<String>; 2] {
     [
         ["send-keys", "-t", pane, "-l", claude].map(String::from).to_vec(),
@@ -62,6 +68,7 @@ pub fn start(socket: Option<&str>, mappe: &Path, samtale: Option<&str>) -> io::R
             Err(_) => forsøk += 1,
         }
     };
+    tmux::kjør(socket, &merk(&pane))?;
     for kommando in skriv_inn(&pane, &claude(samtale)) {
         tmux::kjør(socket, &kommando)?;
     }

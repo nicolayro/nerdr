@@ -101,9 +101,10 @@ er lukket, venter på deg neste gang.
 
 Et klikk på en Claude i lista går inn i den. Et klikk i panen går også inn, og
 et klikk i lista utenfor kortene tar deg ut igjen. Står musen
-over et kort, kommer `×` der tiden står. Den lukker vinduet til Claude-en, med
-det du har åpnet ved siden av, etter at du har svart. Deler flere Claude-er
-vinduet, lukkes bare panen. Klikk og
+over et kort, kommer `×` der tiden står. Den lukker sesjonen til Claude-en, med
+det du har åpnet ved siden av, etter at du har svart. Kjører noe annet enn et
+skall der, står det i spørsmålet. I en sesjon nerdr ikke har laget, lukkes bare
+vinduet, og deler flere Claude-er vinduet, bare panen. Klikk og
 musehjul i sesjonen går videre når programmet der har slått på mus, som Claude
 Code i fullskjerm. Ellers ruller hjulet i historikken, og en tast tar deg
 tilbake til bunnen. Det du drar over, kopieres når du slipper, med `pbcopy`,
@@ -179,6 +180,11 @@ under dem, inntil fire nivåer ned, som appene i et monorepo. Et prosjekt er en 
 `pyproject.toml` eller `deno.json`, utenfor `node_modules`, `target`, `build`
 og testmapper. Prosjektene kommer i lista når de er lest, og til da står det
 `…` etter antallet.
+
+Avslutter Claude-en i en sesjon nerdr har laget, lukkes sesjonen etter ti
+sekunder når det bare står skall igjen i den. Kjører noe annet der, som `nvim`,
+står sesjonen i lista som «uten Claude» med programmene, til du lukker den med
+`×`. Sesjoner du har laget selv, rører ikke nerdr.
 
 Prefikset og `r`, eller «hent samtale» under handlingene, viser de siste samtalene dine med mappe, tittel og alder, og `⏎`
 fortsetter den du velger, i mappa den hørte til. Samtaler som kjører, står ikke

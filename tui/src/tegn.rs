@@ -335,7 +335,7 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
     let tid = app.claude.get(&pane.id).map(|c| varighet(crate::nå_ms().saturating_sub(c.endret)));
     let info = kort::Info {
         merke,
-        oppgave: pane.oppgave().map(str::to_string),
+        oppgave: app.rester.get(&pane.id).map(|p| format!("uten Claude: {p}")).or_else(|| pane.oppgave().map(str::to_string)),
         sted: app.sted(pane),
         branch: repo.and_then(|r| r.branch.clone()),
         tid,
