@@ -619,7 +619,14 @@ impl App {
                 }
                 None => false,
             },
-            Hendelse::Term(Event::FocusLost) => self.musen.take().is_some(),
+            Hendelse::Term(Event::FocusLost) => {
+                self.send("refresh-client -f ignore-size", Svar::Ingenting);
+                self.musen.take().is_some()
+            }
+            Hendelse::Term(Event::FocusGained) => {
+                self.ta_plassen();
+                false
+            }
             Hendelse::Term(Event::Resize(..)) => true,
             Hendelse::Term(_) => false,
         }
@@ -1140,6 +1147,16 @@ impl App {
     /// Sendes bare når visningen endres eller vinduet deles på en annen måte,
     /// aldri fordi panene i tmux har endret størrelse. Et tmux-oppsett med en
     /// `client-resized`-hook som endrer panene, gir ellers en løkke.
+    /// Med flere klienter i control mode får vinduet størrelsen til den
+    /// minste, så en nerdr uten fokus har `ignore-size`, og den du går til,
+    /// tar plassen. tmux regner størrelsen på nytt først når en klient ber om
+    /// en, og derfor sendes den igjen.
+    fn ta_plassen(&mut self) {
+        self.send("refresh-client -f !ignore-size", Svar::Ingenting);
+        self.størrelser.clear();
+        self.synk_størrelse();
+    }
+
     fn synk_størrelse(&mut self) {
         if let Some(vist) = self.vist.clone().filter(|_| !self.vindu.is_empty()) {
             self.synk_størrelse_for(&vist);

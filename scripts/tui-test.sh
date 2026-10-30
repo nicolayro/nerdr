@@ -92,6 +92,8 @@ sett_er_tall() { maal show-options -p -t "$1" -v @nerdr-sett | grep -Eq '^[0-9]+
 samme_storrelser() { [ ! -s "$KONFIG/storrelser" ] || ! grep -vxFf "$KONFIG/for" "$KONFIG/storrelser"; }
 uten_klienter() { [ -z "$(tmux -L "${1:-$MAAL}" list-clients)" ]; }
 klienter() { maal list-clients | wc -l | tr -d ' '; }
+uten_storrelse() { maal list-clients -F '#{client_flags}' | grep -q ignore-size; }
+med_storrelse() { ! uten_storrelse; }
 uten_sesjon() { ! maal has-session -t "=$1" 2>/dev/null; }
 # Linja, fra 1, der teksten står først på skjermen.
 linja_med() { skjerm | grep -n -- "$1" | head -1 | cut -d: -f1; }
@@ -653,6 +655,13 @@ sjekk "fra stripa står hintet over panen" linje_har 20 '^ C-b … f ny · w lis
 tast w
 dra 4 8 36 8
 sjekk "og å dra den ut gir lista tilbake" er 68x17 dimensjon alfa
+
+# Med flere nerdr-er koblet til, er det den du ser på, som bestemmer størrelsen.
+tast -l $'\033[O'
+sjekk "uten fokus teller ikke størrelsen til nerdr" uten_storrelse
+tast -l $'\033[I'
+sjekk "med fokus teller den igjen" med_storrelse
+sjekk "og vinduet har fortsatt størrelsen til nerdr" er 68x17 dimensjon alfa
 
 klikk 5 19
 sjekk "klikk på «avslutt» avslutter" uten_klienter
