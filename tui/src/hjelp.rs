@@ -106,7 +106,7 @@ pub fn versjon() -> String {
 pub const BARE_TMUX: &str = "Bare Claude som kjører i tmux, vises.";
 
 pub fn mapper() -> String {
-    format!("Mappene er de du har brukt, og i {} ({}).", ny::mapper(), ny::MAPPER_VARIABEL)
+    format!("Mappene er de du har brukt, og de under {} ({}).", ny::mapper(), ny::MAPPER_VARIABEL)
 }
 
 pub fn tekst() -> String {

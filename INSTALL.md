@@ -33,13 +33,12 @@ Rust 1.85 eller nyere:
 cargo install --locked --git https://github.com/nicolayro/nerdr nerdr
 ```
 
-## 3. Sett mappene for nye Claude-sesjoner
+## 3. Mappene for nye Claude-sesjoner
 
 «+ ny sesjon» nederst i lista i nerdr starter en Claude i en mappe brukeren
-velger. Velgeren viser mappene brukeren har brukt Claude i, og mappene og
-prosjektene under `~/git`. Spør hvor
-brukeren har koden sin. Er det ikke `~/git`, sett `NERDR_MAPPER` i skallets
-oppstartsfil, kolonseparert:
+velger. Velgeren søker i mappene brukeren har brukt Claude i, og i mappene
+under `~`, så det trengs ikke noe oppsett. Vil brukeren bare søke noen steder,
+sett `NERDR_MAPPER` i skallets oppstartsfil, kolonseparert:
 
 ```
 export NERDR_MAPPER=~/git:~/kode
@@ -75,7 +74,7 @@ tastene og hvilket prefiks og hvilke mapper som gjelder.
 | --- | --- |
 | stoppe alt | `tmux kill-server`. Spør først, for det stopper alle Claude-er og terminaler i tmux. |
 | se en Claude som mangler i lista | Den kjører ikke i tmux. Avslutt den, og fortsett samtalen med prefikset og `r` i nerdr. |
-| ha en mappe i velgeren | Sett mappa over den i `NERDR_MAPPER`. Eller start en Claude der med `nerdr ny <mappe>` og skriv noe til den, så står mappa i velgeren etter det. |
+| ha en mappe i velgeren | Mapper under `~` er med, utenom skjulte mapper og det som er bygget. Står `NERDR_MAPPER` satt, sett mappa over den der. Eller start en Claude der med `nerdr ny <mappe>` og skriv noe til den, så står mappa i velgeren etter det. |
 | et annet prefiks | nerdr bruker prefikset fra `~/.tmux.conf`, ellers `C-b`. `NERDR_PREFIKS=C-a` endrer bare nerdr. |
 | endre utseendet | Prefikset og `b`. |
 | beholde utseendet og bredden etter at tmux er stoppet | Valgene står i `@nerdr-utseende` og `@nerdr-liste`, som forsvinner med tmux-serveren. Les verdiene med `tmux show-options -gqv @nerdr-utseende`, og legg dem i `~/.tmux.conf`, som `set -g @nerdr-utseende "farge=av plass=minimal"` og `set -g @nerdr-liste 46`. |

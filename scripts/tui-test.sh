@@ -56,10 +56,11 @@ har() { skjerm | grep -Eq -- "$1"; }
 mangler() { ! har "$1"; }
 i_pane() { maal capture-pane -p -t "$1" | grep -qF -- "$2"; }
 ikke_i_pane() { ! i_pane "$@"; }
-# Kolonnen, fra 1, til navnet i fane nummer to, eller til × etter det. Navnene
-# på vinduene endrer seg med programmet som kjører, så de kan ikke letes fram.
+# Kolonnen, fra 1, til navnet i fane nummer to, eller til × etter det, som står
+# der også når den ikke vises. Navnene på vinduene endrer seg med programmet som
+# kjører, så de kan ikke letes fram.
 fane_to() {
-  skjerm | sed -n 1p | perl -CSA -Mutf8 -ne 'BEGIN { $hva = shift } /│  [^ ]+ ×   ([^ ]+) ×/ and print $hva eq "navn" ? $-[1] + 1 : $+[1] + 2' "$1"
+  skjerm | sed -n 2p | perl -CSA -Mutf8 -ne 'BEGIN { $hva = shift } /[│┤]│ +[^ ]+ +(?:× +)?([^ +][^ ]*)/ and print $hva eq "navn" ? $-[1] + 1 : $+[1] + 2' "$1"
 }
 # Kolonnen, fra 1, der teksten starter på linja, regnet i tegn.
 kolonne() { skjerm | sed -n "$1p" | perl -CSA -e '$s = shift; while (<STDIN>) { print index($_, $s) + 1 }' "$2"; }
@@ -181,7 +182,9 @@ vert -f /dev/null start-server \; set -g window-style 'fg=#d0d1d2,bg=#0a0b0c' \;
   new-session -d -s vert -x 110 -y 20 \
   "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
-sjekk "paner=bokser fra tmux gir bokser, og fanene øverst uten strek" linje_har 1 '^ +prioritert │  [^ ]+ × '
+sjekk "paner=bokser fra tmux gir bokser, med en ramme over fanene" linje_har 1 '^ +prioritert │╭─+╮$'
+sjekk "og fanen som vises, med × inne i den" linje_har 2 '[┤│]│ +[^ ]+ × +\+ +│$'
+sjekk "og toppkanten på boksen er streken under fanene" linje_har 3 '├─+┤$'
 sjekk "overskriften har strek mot skillelinja, uten antallet" linje_har 2 '^ AKTIVE ─+┤'
 sjekk "alfa har ●, repoet og <1m i toppkanten" linje_har 3 '^╭─ ●  nerdr ─+ <1m ─╮'
 beveg 10 4
@@ -224,6 +227,7 @@ sjekk "og minimal tar den bort igjen" mangler 'oppgave +│ 1'
 klikk 2 2
 sjekk "et klikk utenfor lukker konfigurasjonen" mangler 'konfigurasjon'
 
+
 venstre=$(kolonne 1 'prioritert')
 klikk "$venstre" 1
 sjekk "et klikk på sorteringen øverst sorterer etter prosjekt" linje_har 2 '^ ▾  nerdr ─+┤'
@@ -234,10 +238,10 @@ klikk "$(kolonne 1 'aktivitet')" 1
 sjekk "og prioritert igjen" linje_har 2 '^ AKTIVE ─+┤'
 
 sjekk "minimal har én linje: alfa under AKTIVE med ●, oppgaven og <1m til høyre" linje_har 3 '^▎ ●  Fiks testene +<1m │'
-sjekk "overskriftene treffer skillestreken med ┤" linje_har 2 '^ AKTIVE ─+┤'
+sjekk "overskriften øverst treffer skillelinja, der fanen som vises, er åpen" linje_har 2 '^ AKTIVE ─+┤│'
 sjekk "gamma står under alfa med ◐, og uten oppgave er repoet tittelen" linje_har 4 '^  ◐  nerdr +<1m │'
 sjekk "beta har ingen Claude og vises ikke" mangler beta
-sjekk "alfa får størrelsen til boksen" er 68x17 dimensjon alfa
+sjekk "alfa får størrelsen til boksen" er 70x16 dimensjon alfa
 
 tast Enter
 tast -l 'hei æ'
@@ -249,7 +253,7 @@ vert paste-buffer -p -d -b test -t vert
 sjekk "innliming starter med ^[[200~" i_pane alfa '^[[200~linje én'
 sjekk "innliming slutter med ^[[201~, uten at tmux utvider \$HOME" i_pane alfa '$HOME "to"^[[201~'
 
-hjul 64 41 3
+hjul 64 40 4
 sjekk "musehjulet kommer fram i alfa, regnet fra boksen" i_pane alfa '^[[<64;2;1M'
 
 # Denne venter på intervallet, ikke på list_straks.
@@ -323,15 +327,17 @@ klikk 2 2
 sjekk "et klikk utenfor lukker dem også" mangler '⏎ kjør'
 
 klikk 3 16
-sjekk "klikk på «+ ny sesjon» åpner popupen med 4 mapper og 1 prosjekt" linje_har 3 'mappe › .*5/5'
-sjekk "~/git/annet er brukt sist, står først og er valgt" linje_har 4 '▎~/git/annet'
-sjekk "så ~/eget, som er brukt før" linje_har 5 '~/eget'
-sjekk "så ~/git/prosjekt.ny" linje_har 6 '~/git/prosjekt\.ny'
-sjekk "så mappa i kode" linje_har 7 '~/kode/tredje'
-sjekk "og prosjektet i annet, men ikke det i node_modules" linje_har 8 '~/git/annet/apps/web +│'
+sjekk "klikk på «+ ny sesjon» åpner popupen med en strek under søkefeltet" linje_har 4 '├─+┤'
+sjekk "og uten treff" linje_har 5 '│ +│ +│$'
+sjekk "og 6 mapper: de 2 du har brukt, og 4 under mappene, uten node_modules" linje_har 3 'mappe › +6 │'
+tast -l an
+sjekk "«an» treffer annet og de 2 under" linje_har 3 'mappe › an .*3/6'
+sjekk "~/git/annet står først og er valgt" linje_har 5 '▎~/git/annet +│'
+sjekk "og prosjektet i annet" linje_har 7 '~/git/annet/apps/web +│'
+tast C-u
 tast -l pny
-sjekk "«pny» treffer bare prosjekt.ny" linje_har 3 'mappe › pny .*1/5'
-sjekk "prosjekt.ny er valgt" linje_har 4 '▎~/git/prosjekt\.ny'
+sjekk "«pny» treffer bare prosjekt.ny" linje_har 3 'mappe › pny .*1/6'
+sjekk "prosjekt.ny er valgt" linje_har 5 '▎~/git/prosjekt\.ny'
 
 tast Enter
 sjekk "Enter lager sesjonen prosjekt-ny i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny
@@ -347,7 +353,7 @@ sjekk "i registeret får prosjekt.ny vanlig merke, og er fortsatt aktiv" linje_h
 tast C-b f
 sjekk "C-b f åpner popupen fra panen" har 'mappe ›'
 tast -l pny
-sjekk "«pny» igjen" linje_har 3 '1/5'
+sjekk "«pny» igjen" linje_har 3 '1/6'
 tast Enter
 sjekk "samme mappe igjen gir sesjonen prosjekt-ny-2 i mappa" er "$(cd "$KONFIG/git/prosjekt.ny" && pwd -P)" mapper prosjekt-ny-2
 sjekk "og prosjekt-ny har fortsatt ett vindu" linjer 1 maal list-windows -t prosjekt-ny
@@ -356,7 +362,7 @@ sjekk "nerdr er inne i den nye sesjonen" i_panen
 tast C-b r
 sjekk "C-b r viser samtalene" linje_har 2 'hent samtale'
 sjekk "bare samtalen med meldinger, 1/1" linje_har 3 '1/1'
-sjekk "annet  Fiks testene er valgt" linje_har 4 '▎annet  Fiks testene +<1m'
+sjekk "annet  Fiks testene er valgt" linje_har 5 '▎annet  Fiks testene +<1m'
 tast C-r
 sjekk "C-r bytter til mappene" linje_har 2 'ny sesjon'
 tast C-r
@@ -387,8 +393,8 @@ tast C-b '&'
 sjekk "lukket igjen" linjer 1 maal list-windows -t alfa
 
 tast C-b w
-sjekk "+ står sist etter fanene" linje_har 1 ' \+$'
-klikk "$(kolonne 1 ' +')" 1
+sjekk "+ står sist etter fanene" linje_har 2 ' \+ +│$'
+klikk "$(kolonne 2 ' +')" 2
 sjekk "klikk på + etter fanene gir en terminal i et nytt vindu" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
 sjekk "slippet etter klikket kommer ikke fram i alfa" ikke_i_pane alfa '^[[<0;'
@@ -401,9 +407,9 @@ sjekk "og knappene er borte så lenge" mangler 'avslutt +C-b d'
 
 tast %
 sjekk "% deler alfa" linjer 2 maal list-panes -t alfa:0
-sjekk "to bokser med luft mellom" linje_har 2 '╮ ╭'
+sjekk "to bokser som deler kanten, som går inn i streken under fanene" linje_har 3 '─┬─'
 sjekk "begge panene står i nerdr-mappa" er "$MAPPE" mapper alfa:0
-sjekk "tmux får plass til begge boksene" er 64x17 dimensjon alfa:0
+sjekk "tmux får plass til begge boksene" er 68x16 dimensjon alfa:0
 
 tast Enter
 tast -l 'til venstre'
@@ -417,19 +423,19 @@ for i in $(seq 1 30); do maal send-keys -t alfa:0.1 "linje $i" Enter; done
 # cat ekkoer hver linje, og telleren er bare stabil når alt er kommet fram.
 sjekk "bunnen av høyre boks viser linje 30, to ganger" er 2 tell 'linje 30'
 for i in 1 2 3 4; do hjul 64 90 6; done
-sjekk "fire hakk opp gir 12/… på toppen av rammen" linje_har 2 ' 12/[0-9]+ '
+sjekk "fire hakk opp gir 12/… på toppen av rammen" linje_har 3 ' 12/[0-9]+ '
 for i in 1 2; do hjul 65 90 6; done
-sjekk "to hakk ned gir 6/…" linje_har 2 ' 6/[0-9]+ '
+sjekk "to hakk ned gir 6/…" linje_har 3 ' 6/[0-9]+ '
 tast Enter
-sjekk "Enter går tilbake til bunnen uten teller" linje_mangler 2 '[0-9]+/[0-9]+'
+sjekk "Enter går tilbake til bunnen uten teller" linje_mangler 3 '[0-9]+/[0-9]+'
 dra 85 4 100 6
 sjekk "å dra i en pane uten mus kopierer linjene" grep -q '^linje [0-9]*$' "$KONFIG/kopiert"
-sjekk "kopiert står på rammen" linje_har 2 ' kopiert '
+sjekk "kopiert står på rammen" linje_har 3 ' kopiert '
 
 maal send-keys -t alfa:0.1 'kopier meg' Enter
 sjekk "cat ekkoer linja, så den står to ganger" er 2 tell 'kopier meg'
 tast C-b '['
-sjekk "C-b [ starter kopimodus, og det står på rammen" linje_har 2 ' kopi '
+sjekk "C-b [ starter kopimodus, og det står på rammen" linje_har 3 ' kopi '
 sjekk "hintet står i stedet for knappene" har 'v marker · y kopier · q ut'
 tast k w v e y
 sjekk "k w v e y kopierer det siste ordet på linja over" er meg cat "$KONFIG/kopiert"
@@ -437,9 +443,9 @@ sjekk "y går ut av kopimodus" mangler 'v marker'
 tast C-b '[' k V k y
 sjekk "V og k kopierer begge linjene" er 2 grep -c '^kopier meg$' "$KONFIG/kopiert"
 tast C-b '[' g g
-sjekk "gg ruller til toppen av historikken" linje_har 2 ' kopi [0-9]+/[0-9]+ '
+sjekk "gg ruller til toppen av historikken" linje_har 3 ' kopi [0-9]+/[0-9]+ '
 tast q
-sjekk "q går ut og tilbake til bunnen" linje_mangler 2 'kopi|[0-9]+/[0-9]+'
+sjekk "q går ut og tilbake til bunnen" linje_mangler 3 'kopi|[0-9]+/[0-9]+'
 
 tast C-b C-b
 sjekk "C-b C-b sender ^B til panen" i_pane alfa:0.1 '^B'
@@ -448,10 +454,10 @@ sjekk "C-b o gjør Claude-en aktiv igjen" er 0 pane_indeks
 
 tast C-b z
 sjekk "C-b z zoomer inn" er 1 zoom
-sjekk "med zoom vises bare én boks" er 1 tell '╭'
+sjekk "med zoom vises bare én boks" mangler '┴'
 tast C-b z
 sjekk "C-b z igjen zoomer ut" er 0 zoom
-sjekk "begge boksene er tilbake" er 2 tell '╭'
+sjekk "begge boksene er tilbake" har '╰─+┴─+╯'
 
 tast C-b :
 sjekk "C-b : fra panen åpner handlingene" har '⏎ kjør · klikk · esc lukk'
@@ -482,10 +488,10 @@ tast C-b o C-b x
 sjekk "C-b x lukker panen uten å spørre" linjer 1 maal list-panes -t alfa:0
 
 tast C-b '"'
-sjekk "C-b \" deler over og under" er 2 tell '╭'
+sjekk "C-b \" deler over og under" har '├─+┤$'
 tast C-b x
 sjekk "C-b x lukker den nye" linjer 1 maal list-panes -t alfa:0
-sjekk "uten split fyller Claude-en hele visningen igjen" er 68x17 dimensjon alfa:0
+sjekk "uten split fyller Claude-en hele visningen igjen" er 70x16 dimensjon alfa:0
 
 tast C-b '|'
 sjekk "C-b | fra tmux-oppsettet deler side om side" side_om_side
@@ -498,15 +504,15 @@ sjekk "M med -r gjentas uten prefikset" linjer 2 cat "$KONFIG/gjentatt"
 tast C-b w
 
 tast C-b b Up Right Escape
-sjekk "linjer rundt panene i menyen gjør alfa større" er 74x19 dimensjon alfa
-sjekk "med linjer er det ingen bokser" mangler '╭'
+sjekk "linjer rundt panene i menyen gjør alfa større" er 74x18 dimensjon alfa
+sjekk "med linjer er det ingen bokser" mangler '╰'
 tast C-b b Up Left Escape
-sjekk "og bokser igjen" er 68x17 dimensjon alfa
-sjekk "boksen er tilbake" har '╭'
+sjekk "og bokser igjen" er 70x16 dimensjon alfa
+sjekk "boksen er tilbake" har '╰'
 
 tast C-b c
 sjekk "C-b c fra lista lager alfa:1" linjer 2 maal list-windows -t alfa
-sjekk "to faner øverst" linje_har 1 '│  [^ ]+ ×   [^ +][^ ]* × '
+sjekk "to faner øverst" linje_har 2 '[┤│]│ +[^ ]+ +(× +)?[^ +×][^ ]* +(× +)?\+'
 sjekk "nerdr er inne i det nye vinduet" i_panen
 tast -l 'i vindu 1'
 sjekk "det du skriver, havner i alfa:1" i_pane alfa:1 'i vindu 1'
@@ -517,11 +523,11 @@ tast C-b l
 sjekk "C-b l går tilbake til 1" er 1 vindu_indeks
 tast C-b 0
 sjekk "C-b 0 går til 0" er 0 vindu_indeks
-klikk "$(fane_to navn)" 1
+klikk "$(fane_to navn)" 2
 sjekk "klikk på fane 1 viser vindu 1" er 1 vindu_indeks
-klikk "$(fane_to kryss)" 1
+klikk "$(fane_to kryss)" 2
 sjekk "klikk på × på fanen lukker vinduet uten å spørre" linjer 1 maal list-windows -t alfa
-sjekk "bare én fane står igjen" linje_mangler 1 '│  [^ ]+ ×   [^ +][^ ]* × '
+sjekk "bare én fane står igjen" linje_har 2 '[┤│]│ +[^ ]+ × +\+ +│$'
 tast C-b w Enter
 sjekk "C-b w og Enter går inn i Claude-en i vindu 0" er 0 vindu_indeks
 
@@ -637,31 +643,31 @@ tast y
 sjekk "y lukker den" uten_sesjon rest
 
 dra 36 8 46 8
-sjekk "å dra i streken gjør lista bredere" linje_har 5 '^▎ ●  Fiks testene +<1m +│ '
-sjekk "og alfa smalere" er 58x17 dimensjon alfa
+sjekk "å dra i streken gjør lista bredere" linje_har 5 '^▎ ●  Fiks testene +<1m +││'
+sjekk "og alfa smalere" er 60x16 dimensjon alfa
 sjekk "bredden står i tmux" er 46 maal show-options -gqv @nerdr-liste
 klikk 46 8
 klikk 46 8
-sjekk "dobbeltklikk på streken gjør lista til en stripe" linje_har 5 '^▎● │ '
+sjekk "dobbeltklikk på streken gjør lista til en stripe" linje_har 5 '^▎● ││'
 sjekk "med bare tegnene" mangler 'Fiks testene'
 sjekk "også i tmux" er '46 stripe' maal show-options -gqv @nerdr-liste
 klikk 4 8
 klikk 4 8
-sjekk "dobbeltklikk igjen gir bredden tilbake" er 58x17 dimensjon alfa
+sjekk "dobbeltklikk igjen gir bredden tilbake" er 60x16 dimensjon alfa
 dra 46 8 2 8
-sjekk "å dra streken helt inn gir stripa" linje_har 5 '^▎● │ '
+sjekk "å dra streken helt inn gir stripa" linje_har 5 '^▎● ││'
 tast C-b
 sjekk "fra stripa står hintet over panen" linje_har 20 '^ C-b … f ny · w lista · \? mer'
 tast w
 dra 4 8 36 8
-sjekk "og å dra den ut gir lista tilbake" er 68x17 dimensjon alfa
+sjekk "og å dra den ut gir lista tilbake" er 70x16 dimensjon alfa
 
 # Med flere nerdr-er koblet til, er det den du ser på, som bestemmer størrelsen.
 tast -l $'\033[O'
 sjekk "uten fokus teller ikke størrelsen til nerdr" uten_storrelse
 tast -l $'\033[I'
 sjekk "med fokus teller den igjen" med_storrelse
-sjekk "og vinduet har fortsatt størrelsen til nerdr" er 68x17 dimensjon alfa
+sjekk "og vinduet har fortsatt størrelsen til nerdr" er 70x16 dimensjon alfa
 
 klikk 5 19
 sjekk "klikk på «avslutt» avslutter" uten_klienter

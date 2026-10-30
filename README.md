@@ -117,9 +117,10 @@ velger et klikk det du klikker på, hjulet blar, og et klikk utenfor lukker.
 Er vinduet delt i flere paner, viser nerdr dem der tmux har plassert dem, i
 hver sin boks eller med streker mellom. Tastene går til den aktive panen, og et klikk gjør en annen pane aktiv. En
 terminal ved siden av Claude-en får du ved å dele vinduet eller lage et nytt.
-Øverst står vinduene i sesjonen som faner med bakgrunn, og vinduet som vises,
-har sterkere bakgrunn. Et klikk på en fane viser vinduet, og `×` i fanen
-lukker det. Fra lista går du alltid inn i vinduet til Claude-en.
+Øverst står vinduene i sesjonen som faner, med bokser i en ramme over panene.
+Vinduet som vises, har bakgrunn, og den og fanen under musen har `×`, som lukker
+vinduet. Et klikk på en fane viser vinduet, og et midtklikk lukker det. Fra
+lista går du alltid inn i vinduet til Claude-en.
 
 Med tmux 3.5 eller nyere får panene fargene terminalen hadde da nerdr startet,
 så Claude Code med «Auto (match terminal)» i `/theme` blir lys eller mørk som
@@ -173,13 +174,16 @@ den starter.
 søker fram en mappe, og `⏎` starter `claude`
 der i en ny tmux-sesjon med samme navn som mappa. Finnes sesjonen, får den nye
 et nummer etter navnet, som `nerdr-2`, så vinduene du lager ved siden av en
-Claude, hører til den. Først står mappene du har brukt Claude i, sist brukt først, så du ikke
-trenger å sette noe. Så kommer mappene rett under `NERDR_MAPPER` og prosjektene
-under dem, inntil fire nivåer ned, som appene i et monorepo. Et prosjekt er en mappe med
+Claude, hører til den. Lista er tom til du skriver. Velgeren søker i mappene
+du har brukt Claude i, og i alle mappene under `NERDR_MAPPER`, som er `~` om
+du ikke har satt den. Ved like gode treff står mappene du har brukt, først. I
+et git-repo er bare repoet og prosjektene i det med, inntil fire nivåer ned,
+som appene i et monorepo. Et prosjekt er en mappe med
 `package.json`, `pom.xml`, `build.gradle`, `Cargo.toml`, `go.mod`,
-`pyproject.toml` eller `deno.json`, utenfor `node_modules`, `target`, `build`
-og testmapper. Prosjektene kommer i lista når de er lest, og til da står det
-`…` etter antallet.
+`pyproject.toml` eller `deno.json`. Skjulte mapper, `node_modules`, `target`,
+`build`, testmapper og `~/Library` er ikke med. Mappene leses på nytt hver gang
+velgeren åpnes, så en mappe du nettopp har laget, er med. Til alle er lest,
+står det `…` etter antallet.
 
 Avslutter Claude-en i en sesjon nerdr har laget, lukkes sesjonen etter ti
 sekunder når det bare står skall igjen i den. Kjører noe annet der, som `nvim`,
@@ -221,7 +225,7 @@ ikke gjelder.
 
 | | |
 | --- | --- |
-| **ramme** | `bokser` gir hver pane en boks med avrundede hjørner og luft mellom, også når vinduet har én pane. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
+| **ramme** | `bokser` gir hver pane en boks med avrundede hjørner, også når vinduet har én pane, og boksene ved siden av hverandre deler kanten. `linjer` lar panene fylle visningen med streker mellom, som i tmux. |
 | **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
 | **ulest** | Fargen til det som er ferdig og ikke sett. `oransje` er som det som spør, og `blå` skiller dem. Bare med farge. |
 | **kortdesign** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
@@ -243,7 +247,7 @@ prioritert. I `@nerdr-utseende` står valgene med navnene de hadde først:
 
 | | |
 | --- | --- |
-| `NERDR_MAPPER` | Mappene mappevelgeren viser mappene under, i tillegg til dem du har brukt Claude i. Kolonseparert, som `~/git:~/kode`. Standard er `~/git`. |
+| `NERDR_MAPPER` | Mappene mappevelgeren søker under, i tillegg til dem du har brukt Claude i. Kolonseparert, som `~/git:~/kode`. Standard er `~`. |
 | `NERDR_PREFIKS` | Prefikset, skrevet som i tmux: `C-a`, `M-a` eller `C-Space`. Standard er prefikset i tmux-oppsettet ditt, ellers `C-b`. Det endrer ikke tmux, bare nerdr. |
 | `CLAUDE_CONFIG_DIR` | Katalogen til Claude Code, som for Claude Code selv. Standard er `~/.claude`. |
 | `nerdr -L <socket>` | tmux-serveren, som `tmux -L`. |

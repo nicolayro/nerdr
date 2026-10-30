@@ -1,19 +1,20 @@
 //! Ny Claude: mappa, eller en tidligere samtale, velges i en popup, og
 //! sesjonen i tmux får navnet til mappa.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-use std::{env, fs};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant, SystemTime};
+use std::{env, fs, mem};
 
 use nerdr_kjerne::samtaler;
 
 use crate::tekst::{mappenavn, med_tilde, varighet};
 
-/// Mappene det søkes i, kolonseparert som `PATH`. Kandidatene er mappene rett
-/// under dem.
+/// Mappene det søkes under, kolonseparert som `PATH`.
 pub const MAPPER_VARIABEL: &str = "NERDR_MAPPER";
-const STANDARD_MAPPER: &str = "~/git";
+const STANDARD_MAPPER: &str = "~";
 pub const SAMTALER: usize = 50;
 /// En mappe med en av disse er et prosjekt, som en app i et monorepo.
 const PROSJEKTFILER: [&str; 8] =
@@ -21,8 +22,14 @@ const PROSJEKTFILER: [&str; 8] =
 /// Bygget, lastet ned eller testdata, og aldri et sted du starter en Claude.
 const HOPP_OVER: [&str; 12] =
     ["node_modules", "target", "build", "dist", "out", "vendor", "__pycache__", "test", "tests", "__tests__", "fixtures", "mocks"];
-/// Så mange nivåer under mappene i `NERDR_MAPPER` søkes det etter prosjekter.
+/// Mappene til macOS i `$HOME`, med flere mapper enn alt annet der til sammen.
+const SYSTEMMAPPER: [&str; 2] = ["Library", "Applications"];
+/// Så mange nivåer under roten av et git-repo søkes det etter prosjekter.
+/// Utenfor et repo er alle mappene med, men i et repo er det bare prosjektene,
+/// for der er det mange flere mapper enn steder du starter en Claude.
 const PROSJEKT_DYBDE: usize = 4;
+/// Så ofte velgeren får mappene som er lest.
+const SEND_HVER: Duration = Duration::from_millis(50);
 
 pub struct Kandidat {
     pub mappe: PathBuf,
@@ -38,37 +45,34 @@ pub struct Kandidat {
 pub struct Treff<'a> {
     pub kandidat: &'a Kandidat,
     /// Tegnindeksene i `vis` som søket traff.
-    pub tegn: Vec<usize>,
+    pub tegn: &'a [usize],
 }
 
 pub struct Velger {
     mapper: Vec<Kandidat>,
-    toppmapper: Vec<PathBuf>,
+    lest: HashSet<PathBuf>,
+    røtter: Vec<PathBuf>,
     samtaler: Vec<Kandidat>,
-    pub søk: String,
+    søk: String,
+    /// Poengene, plassen i kandidatene og tegnene søket traff, best først.
+    /// Det er mange tusen mapper, så treffene regnes bare ut når søket endres.
+    treff: Vec<(i32, usize, Vec<usize>)>,
     pub valgt: usize,
     /// Første treff som vises.
     pub rull: usize,
-    /// Prosjektene under mappene er ikke lest ennå.
+    /// Mappene under røttene er ikke lest ferdig.
     pub søker: bool,
     /// Tidligere samtaler vises i stedet for mappene.
     pub fortsett: bool,
+    stopp: Arc<AtomicBool>,
 }
 
 impl Velger {
     /// `prosjekter` er `~/.claude/projects`, og samtalene i `kjører` er i gang
-    /// og vises ikke. Mappene du har brukt Claude i, står først, så velgeren
-    /// er til nytte uten at `NERDR_MAPPER` er satt.
+    /// og vises ikke. Mappene du har brukt Claude i, står først, så de vinner
+    /// når treffet ellers er like godt.
     pub fn ny(fortsett: bool, prosjekter: &Path, kjører: &HashSet<String>) -> Velger {
         let hjem = PathBuf::from(env::var("HOME").unwrap_or_default());
-        let toppmapper = kandidater(&røtter(&mapper(), &hjem));
-        let mut mapper = Vec::new();
-        let brukte = samtaler::mapper(prosjekter).into_iter().filter(|m| !skjult(m));
-        for mappe in brukte.chain(toppmapper.iter().cloned()) {
-            if !mapper.iter().any(|k: &Kandidat| k.mappe == mappe) {
-                mapper.push(Kandidat { vis: med_tilde(&mappe), mappe, samtale: None, alder: None });
-            }
-        }
         let nå = SystemTime::now();
         let samtaler = samtaler::siste(prosjekter, SAMTALER, kjører)
             .into_iter()
@@ -81,25 +85,56 @@ impl Velger {
                 }
             })
             .collect();
-        Velger { mapper, toppmapper, samtaler, søk: String::new(), valgt: 0, rull: 0, søker: true, fortsett }
+        let mut velger = Velger {
+            mapper: Vec::new(),
+            lest: HashSet::new(),
+            røtter: røtter(&mapper(), &hjem),
+            samtaler,
+            søk: String::new(),
+            treff: Vec::new(),
+            valgt: 0,
+            rull: 0,
+            søker: true,
+            fortsett,
+            stopp: Arc::new(AtomicBool::new(false)),
+        };
+        velger.legg_til(samtaler::mapper(prosjekter).into_iter().filter(|m| !skjult(m)).collect(), false);
+        velger.finn_treff();
+        velger
     }
 
-    /// Mappene rett under dem i `NERDR_MAPPER`, der prosjektene søkes. Ikke
-    /// mappene du har brukt Claude i, for en av dem kan være `~`.
-    pub fn toppmapper(&self) -> Vec<PathBuf> {
-        self.toppmapper.clone()
+    pub fn røtter(&self) -> Vec<PathBuf> {
+        self.røtter.clone()
     }
 
-    /// Prosjektene kommer etter at velgeren er åpnet, så den du har valgt,
-    /// blir stående valgt.
-    pub fn legg_til(&mut self, prosjekter: Vec<PathBuf>) {
+    /// Settes når velgeren lukkes, så lesingen av mappene stopper.
+    pub fn stopp(&self) -> Arc<AtomicBool> {
+        self.stopp.clone()
+    }
+
+    /// Mapper fra en velger som er lukket, kan komme etter at en ny er åpnet.
+    pub fn leser(&self, stopp: &Arc<AtomicBool>) -> bool {
+        Arc::ptr_eq(&self.stopp, stopp)
+    }
+
+    /// Mappene kommer etter at velgeren er åpnet, så den du har valgt, blir
+    /// stående valgt.
+    pub fn legg_til(&mut self, mapper: Vec<PathBuf>, ferdig: bool) {
         let valgt = self.valgt().map(|k| k.mappe.clone());
-        let nye: Vec<PathBuf> = prosjekter.into_iter().filter(|p| !self.mapper.iter().any(|k| &k.mappe == p)).collect();
-        self.mapper.extend(nye.into_iter().map(|mappe| Kandidat { vis: med_tilde(&mappe), mappe, samtale: None, alder: None }));
-        self.søker = false;
-        if !self.fortsett
-            && let Some(i) = valgt.and_then(|v| self.treff().iter().position(|t| t.kandidat.mappe == v))
-        {
+        let fra = self.mapper.len();
+        for mappe in mapper {
+            if self.lest.insert(mappe.clone()) {
+                self.mapper.push(Kandidat { vis: med_tilde(&mappe), mappe, samtale: None, alder: None });
+            }
+        }
+        self.søker &= !ferdig;
+        if self.fortsett || self.søk.is_empty() {
+            return;
+        }
+        let nye = self.poeng_fra(fra);
+        self.treff.extend(nye);
+        self.treff.sort_by_key(|(poeng, i, _)| (-poeng, *i));
+        if let Some(i) = valgt.and_then(|v| self.treff().iter().position(|t| t.kandidat.mappe == v)) {
             self.valgt = i;
         }
     }
@@ -112,42 +147,72 @@ impl Velger {
         self.kandidater().len()
     }
 
+    pub fn søk(&self) -> &str {
+        &self.søk
+    }
+
     pub fn bytt(&mut self) {
         self.fortsett = !self.fortsett;
         self.valgt = 0;
+        self.finn_treff();
+    }
+
+    /// Mappene vises ikke før du skriver noe, for uten søk er det bare en lang
+    /// liste i alfabetisk rekkefølge.
+    fn finn_treff(&mut self) {
+        self.treff = if self.søk.is_empty() && !self.fortsett { Vec::new() } else { self.poeng_fra(0) };
+        self.treff.sort_by_key(|(poeng, i, _)| (-poeng, *i));
+    }
+
+    fn poeng_fra(&self, fra: usize) -> Vec<(i32, usize, Vec<usize>)> {
+        self.kandidater()[fra..]
+            .iter()
+            .enumerate()
+            .filter_map(|(i, k)| poeng_for(k, &self.søk).map(|(poeng, tegn)| (poeng, fra + i, tegn)))
+            .collect()
     }
 
     /// Kandidatene søket treffer, best først. Like gode beholder rekkefølgen.
     pub fn treff(&self) -> Vec<Treff<'_>> {
-        let mut treff: Vec<(i32, Treff)> = self
-            .kandidater()
-            .iter()
-            .filter_map(|k| {
-                let (poeng, tegn) = poeng_for(k, &self.søk)?;
-                Some((poeng, Treff { kandidat: k, tegn }))
-            })
-            .collect();
-        treff.sort_by_key(|(poeng, _)| -poeng);
-        treff.into_iter().map(|(_, t)| t).collect()
+        let kandidater = self.kandidater();
+        self.treff.iter().map(|(_, i, tegn)| Treff { kandidat: &kandidater[*i], tegn }).collect()
+    }
+
+    pub fn antall_treff(&self) -> usize {
+        self.treff.len()
     }
 
     pub fn skriv(&mut self, tekst: &str) {
         self.søk.extend(tekst.chars().filter(|c| !c.is_control()));
         self.valgt = 0;
+        self.finn_treff();
     }
 
     pub fn slett(&mut self) {
         self.søk.pop();
         self.valgt = 0;
+        self.finn_treff();
+    }
+
+    pub fn tøm(&mut self) {
+        self.søk.clear();
+        self.valgt = 0;
+        self.finn_treff();
     }
 
     pub fn flytt(&mut self, steg: isize) {
-        let siste = self.treff().len().saturating_sub(1) as isize;
+        let siste = self.treff.len().saturating_sub(1) as isize;
         self.valgt = (self.valgt as isize + steg).clamp(0, siste) as usize;
     }
 
     pub fn valgt(&self) -> Option<&Kandidat> {
-        self.treff().into_iter().nth(self.valgt).map(|t| t.kandidat)
+        self.treff.get(self.valgt).map(|(_, i, _)| &self.kandidater()[*i])
+    }
+}
+
+impl Drop for Velger {
+    fn drop(&mut self) {
+        self.stopp.store(true, Ordering::Relaxed);
     }
 }
 
@@ -172,52 +237,47 @@ fn skjult(mappe: &Path) -> bool {
     mappe.components().any(|d| d.as_os_str().to_string_lossy().starts_with('.'))
 }
 
-fn kandidater(røtter: &[PathBuf]) -> Vec<PathBuf> {
-    let mut alle = Vec::new();
-    for rot in røtter {
-        let Ok(filer) = fs::read_dir(rot) else { continue };
-        let mut mapper: Vec<PathBuf> = filer
-            .flatten()
-            .filter(|f| !f.file_name().to_string_lossy().starts_with('.'))
-            .map(|f| f.path())
-            .filter(|m| m.is_dir())
-            .collect();
-        mapper.sort();
-        alle.extend(mapper);
-    }
-    alle
-}
-
-/// Prosjektene under `mapper`, nivå for nivå, uten skjulte mapper og det i
-/// `HOPP_OVER`. Mappene selv er ikke med.
-pub fn prosjekter(mapper: &[PathBuf]) -> Vec<PathBuf> {
-    let mut ut = Vec::new();
-    for mappe in mapper {
-        let_etter_prosjekter(mappe, 0, &mut ut);
-    }
-    ut
-}
-
-fn let_etter_prosjekter(mappe: &Path, dybde: usize, ut: &mut Vec<PathBuf>) {
-    let Ok(filer) = fs::read_dir(mappe) else { return };
-    let (mut under, mut prosjekt) = (Vec::new(), false);
-    for fil in filer.flatten() {
-        let (navn, Ok(type_)) = (fil.file_name(), fil.file_type()) else { continue };
-        let navn = navn.to_string_lossy();
-        if type_.is_file() && PROSJEKTFILER.contains(&&*navn) {
-            prosjekt = true;
-        } else if type_.is_dir() && !navn.starts_with('.') && !HOPP_OVER.contains(&&*navn) {
-            under.push(fil.path());
+/// Mappene under `røtter`, nivå for nivå, uten skjulte mapper og det i
+/// `HOPP_OVER`. De sendes litt og litt, så velgeren kan brukes mens resten
+/// leses, og `ferdig` er sann for de siste. Røttene selv er ikke med.
+pub fn les_mapper(røtter: &[PathBuf], hjem: &Path, stopp: &AtomicBool, send: impl Fn(Vec<PathBuf>, bool)) {
+    let systemmapper = SYSTEMMAPPER.map(|m| hjem.join(m));
+    // Mappa, hvor dypt den ligger, og hvor dypt repoet den er i, starter.
+    let mut kø: VecDeque<(PathBuf, usize, Option<usize>)> = røtter.iter().map(|r| (r.clone(), 0, None)).collect();
+    let (mut lest, mut sendt) = (Vec::new(), Instant::now());
+    while let Some((mappe, dybde, repo)) = kø.pop_front() {
+        if stopp.load(Ordering::Relaxed) {
+            return;
+        }
+        let Ok(filer) = fs::read_dir(&mappe) else { continue };
+        let (mut under, mut prosjekt, mut git) = (Vec::new(), false, false);
+        for fil in filer.flatten() {
+            let (navn, Ok(type_)) = (fil.file_name(), fil.file_type()) else { continue };
+            let navn = navn.to_string_lossy();
+            if navn == ".git" {
+                git = true;
+            } else if type_.is_file() && PROSJEKTFILER.contains(&&*navn) {
+                prosjekt = true;
+            } else if type_.is_dir() && !navn.starts_with('.') && !HOPP_OVER.contains(&&*navn) {
+                under.push(fil.path());
+            }
+        }
+        let repo = repo.or(git.then_some(dybde));
+        let i_repo = repo.map(|r| dybde - r);
+        if dybde > 0 && i_repo.is_none_or(|d| d == 0 || prosjekt) {
+            lest.push(mappe);
+        }
+        if i_repo.is_none_or(|d| d < PROSJEKT_DYBDE) {
+            under.sort();
+            kø.extend(under.into_iter().filter(|m| !systemmapper.contains(m)).map(|m| (m, dybde + 1, repo)));
+        }
+        if !lest.is_empty() && sendt.elapsed() >= SEND_HVER {
+            send(mem::take(&mut lest), false);
+            sendt = Instant::now();
         }
     }
-    if prosjekt && dybde > 0 {
-        ut.push(mappe.to_path_buf());
-    }
-    if dybde < PROSJEKT_DYBDE {
-        under.sort();
-        for mappe in under {
-            let_etter_prosjekter(&mappe, dybde + 1, ut);
-        }
+    if !stopp.load(Ordering::Relaxed) {
+        send(lest, true);
     }
 }
 
@@ -269,39 +329,35 @@ pub fn poeng(søk: &str, tekst: &str) -> Option<(i32, Vec<usize>)> {
 #[cfg(test)]
 mod tester {
     use super::*;
+    use std::sync::Mutex;
 
     #[test]
-    fn kandidater_er_mappene_rett_under_hver_rot() {
-        let hjem = env::temp_dir().join(format!("nerdr-ny-{}", std::process::id()));
-        for m in ["git/b", "git/a/dypere", "git/.skjult", "kode/c"] {
-            fs::create_dir_all(hjem.join(m)).unwrap();
-        }
-        fs::write(hjem.join("git/fil"), "").unwrap();
-
-        let navn: Vec<_> = kandidater(&røtter("git:kode", &hjem)).iter().map(|m| m.strip_prefix(&hjem).unwrap().to_path_buf()).collect();
-        assert_eq!(navn, [Path::new("git/a"), Path::new("git/b"), Path::new("kode/c")]);
-        fs::remove_dir_all(hjem).unwrap();
-    }
-
-    #[test]
-    fn prosjekter_under_mappene_uten_det_som_er_bygget() {
-        let rot = env::temp_dir().join(format!("nerdr-prosjekter-{}", std::process::id()));
+    fn alle_mappene_utenfor_et_repo_og_prosjektene_i_det() {
+        let hjem = env::temp_dir().join(format!("nerdr-les-{}", std::process::id()));
         for (m, fil) in [
-            ("mono", "package.json"),
-            ("mono/apps/web", "package.json"),
-            ("mono/libs/felles", "pom.xml"),
-            ("mono/apps/web/node_modules/pakke", "package.json"),
-            ("mono/apps/web/tests/mock", "package.json"),
-            ("mono/.skjult/app", "Cargo.toml"),
-            ("mono/a/b/c/d/e", "go.mod"),
-            ("mono/docs", "README.md"),
+            ("notater/2026", "a.md"),
+            ("Library/Caches", "a"),
+            ("git/mono", ".git"),
+            ("git/mono/apps/web", "package.json"),
+            ("git/mono/docs", "README.md"),
+            ("git/mono/apps/web/node_modules/pakke", "package.json"),
+            ("git/mono/apps/web/tests/mock", "package.json"),
+            ("git/mono/.skjult/app", "Cargo.toml"),
+            ("git/mono/a/b/c/d/e", "go.mod"),
         ] {
-            fs::create_dir_all(rot.join(m)).unwrap();
-            fs::write(rot.join(m).join(fil), "").unwrap();
+            fs::create_dir_all(hjem.join(m)).unwrap();
+            fs::write(hjem.join(m).join(fil), "").unwrap();
         }
-        let funnet: Vec<_> = prosjekter(&[rot.join("mono")]).iter().map(|p| p.strip_prefix(&rot).unwrap().to_path_buf()).collect();
-        assert_eq!(funnet, [Path::new("mono/apps/web"), Path::new("mono/libs/felles")]);
-        fs::remove_dir_all(rot).unwrap();
+        let (funnet, ferdig) = (Mutex::new(Vec::new()), AtomicBool::new(false));
+        les_mapper(std::slice::from_ref(&hjem), &hjem, &AtomicBool::new(false), |mapper, siste| {
+            funnet.lock().unwrap().extend(mapper);
+            ferdig.store(siste, Ordering::Relaxed);
+        });
+        let funnet: Vec<_> = funnet.into_inner().unwrap().iter().map(|p| p.strip_prefix(&hjem).unwrap().to_path_buf()).collect();
+        let nærmest_først = ["git", "notater", "git/mono", "notater/2026", "git/mono/apps/web"];
+        assert_eq!(funnet, nærmest_først.map(PathBuf::from));
+        assert!(ferdig.into_inner());
+        fs::remove_dir_all(hjem).unwrap();
     }
 
     #[test]

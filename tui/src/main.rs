@@ -16,7 +16,9 @@ mod utseende;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
@@ -69,8 +71,8 @@ const LISTE_OPTION: &str = "@nerdr-liste";
 enum Hendelse {
     Tmux(Melding),
     Term(Event),
-    /// Prosjektene til mappevelgeren, lest i en egen tråd.
-    Prosjekter(Vec<PathBuf>),
+    /// Mappene til mappevelgeren, lest i en egen tråd, og om de er de siste.
+    Mapper(Arc<AtomicBool>, Vec<PathBuf>, bool),
 }
 
 /// Hva neste svar fra tmux gjelder. Svarene kommer i samme rekkefølge som
@@ -479,7 +481,7 @@ impl App {
                     h.rull = tegn::følg(h.valgt, h.rull, rader, h.treff().len());
                 }
                 if let Some(v) = &mut self.velger {
-                    v.rull = tegn::følg(v.valgt, v.rull, rader, v.treff().len());
+                    v.rull = tegn::følg(v.valgt, v.rull, rader, v.antall_treff());
                 }
                 let (utsnitt, valgt) = tegn::utsnitt(self);
                 self.liste_rull = match valgt.filter(|_| self.liste_følger) {
@@ -612,12 +614,12 @@ impl App {
                     false
                 }
             },
-            Hendelse::Prosjekter(prosjekter) => match &mut self.velger {
-                Some(velger) => {
-                    velger.legg_til(prosjekter);
+            Hendelse::Mapper(fra, mapper, ferdig) => match &mut self.velger {
+                Some(velger) if velger.leser(&fra) => {
+                    velger.legg_til(mapper, ferdig);
                     true
                 }
-                None => false,
+                _ => false,
             },
             Hendelse::Term(Event::FocusLost) => {
                 self.send("refresh-client -f ignore-size", Svar::Ingenting);
@@ -1253,7 +1255,7 @@ impl App {
                 KeyCode::Char('p' | 'k') if ctrl => velger.flytt(-1),
                 KeyCode::Down => velger.flytt(1),
                 KeyCode::Char('n' | 'j') if ctrl => velger.flytt(1),
-                KeyCode::Char('u') if ctrl => velger.søk.clear(),
+                KeyCode::Char('u') if ctrl => velger.tøm(),
                 KeyCode::Backspace => velger.slett(),
                 KeyCode::Char(c) if !ctrl => velger.skriv(c.encode_utf8(&mut [0; 4])),
                 _ => return false,
@@ -1431,14 +1433,18 @@ impl App {
         self.åpne_velger(fortsett);
     }
 
-    /// Prosjektene under mappene tar tid å lese i store repoer, så velgeren
-    /// viser mappene først og får prosjektene når de er lest.
+    /// Det tar sekunder å lese alle mappene i `$HOME`, så velgeren åpner med
+    /// en gang og får mappene mens de leses. De leses på nytt hver gang, så en
+    /// mappe du nettopp har laget, er med.
     fn åpne_velger(&mut self, fortsett: bool) {
         let kjører: HashSet<String> = self.claude.values().filter_map(|s| s.samtale.clone()).collect();
         let velger = ny::Velger::ny(fortsett, &self.konfig.join("projects"), &kjører);
-        let (mapper, tx) = (velger.toppmapper(), self.tx.clone());
+        let (røtter, stopp, tx) = (velger.røtter(), velger.stopp(), self.tx.clone());
+        let hjem = PathBuf::from(env::var("HOME").unwrap_or_default());
         thread::spawn(move || {
-            let _ = tx.send(Hendelse::Prosjekter(ny::prosjekter(&mapper)));
+            ny::les_mapper(&røtter, &hjem, &stopp, |mapper, ferdig| {
+                let _ = tx.send(Hendelse::Mapper(stopp.clone(), mapper, ferdig));
+            });
         });
         self.velger = Some(velger);
     }
@@ -1565,6 +1571,9 @@ impl App {
             return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
         }
         if y < v.y {
+            if y != tegn::fanerad(self) {
+                return None;
+            }
             if let Some(vindu) = tegn::lukk_fane_på(self, x) {
                 return Some(Mål::LukkFane(vindu));
             }
@@ -1677,7 +1686,14 @@ impl App {
             return true;
         }
         if m.row < v.y && m.column >= v.x {
-            if m.row != 0 || m.kind != MouseEventKind::Down(MouseButton::Left) {
+            if m.row == tegn::fanerad(self)
+                && m.kind == MouseEventKind::Down(MouseButton::Middle)
+                && let Some(vindu) = tegn::fane_på(self, m.column)
+            {
+                self.send(&format!("kill-window -t {}", sitat(&vindu)), Svar::Ingenting);
+                return true;
+            }
+            if m.row != tegn::fanerad(self) || m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
             if let Some(vindu) = tegn::lukk_fane_på(self, m.column) {
