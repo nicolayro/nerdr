@@ -16,6 +16,7 @@ mod utseende;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::process::Child;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
@@ -159,6 +160,9 @@ struct App {
     /// det siste vinduet i den lukkes. Da kobler nerdr til igjen.
     koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>,
     koblet_igjen: Option<Instant>,
+    socket: Option<String>,
+    /// Klientene bindingene fra tmux-oppsettet kjører i, se `kontroll::for_seg`.
+    for_seg: Vec<Child>,
     /// For det som leses i egne tråder.
     tx: Sender<Hendelse>,
     kø: VecDeque<Svar>,
@@ -370,6 +374,7 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
         }
     };
     let kontroll = koble()?;
+    let app_socket = socket.clone();
     let koble_igjen = move || {
         // Uten sesjoner ville tilkoblingen laget en, og da er det du som har
         // avsluttet tmux.
@@ -387,8 +392,12 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 
     let mut terminal = ratatui::init();
     execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange)?;
-    let mut app = App::ny(kontroll, Box::new(koble_igjen), prosjekter_tx);
+    let mut app = App::ny(kontroll, Box::new(koble_igjen), app_socket, prosjekter_tx);
     let res = app.løkke(&mut terminal, &rx);
+    for barn in &mut app.for_seg {
+        let _ = barn.kill();
+        let _ = barn.wait();
+    }
     let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste, DisableFocusChange);
     ratatui::restore();
 
@@ -400,12 +409,19 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 }
 
 impl App {
-    fn ny(kontroll: Kontroll, koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>, tx: Sender<Hendelse>) -> App {
+    fn ny(
+        kontroll: Kontroll,
+        koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>,
+        socket: Option<String>,
+        tx: Sender<Hendelse>,
+    ) -> App {
         App {
             kontroll,
             tx,
             koble_igjen,
             koblet_igjen: None,
+            socket,
+            for_seg: Vec::new(),
             kø: VecDeque::new(),
             claude_paner: Vec::new(),
             rester: HashMap::new(),
@@ -853,8 +869,10 @@ impl App {
             _ if self.prefiks.er(&k) => self.prefikstast(k),
             Some(bindinger::Hva::Som(nerdr)) => self.prefikstast(nerdr),
             Some(bindinger::Hva::Send(kommandoer)) => {
-                for kommando in kommandoer {
-                    self.send(&kommando, Svar::Ingenting);
+                self.for_seg.retain_mut(|barn| matches!(barn.try_wait(), Ok(None)));
+                let pane = self.aktiv().map(|p| p.id.clone());
+                if let Ok(barn) = kontroll::for_seg(self.socket.as_deref(), pane.as_deref(), &kommandoer) {
+                    self.for_seg.push(barn);
                 }
             }
             None => self.prefikstast(k),

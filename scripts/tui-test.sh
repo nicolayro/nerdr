@@ -169,7 +169,8 @@ maal set -g default-command /bin/cat
 # Bindinger som i et tmux-oppsett. nerdr leser dem når den starter. r er
 # «hent samtale» i nerdr, og den vinner.
 maal bind-key '|' split-window -h \; bind-key T set -g @nerdr-binding ja \; \
-  bind-key -r M run-shell "echo x >> $KONFIG/gjentatt" \; bind-key r source-file /dev/null
+  bind-key -r M run-shell "echo x >> $KONFIG/gjentatt" \; bind-key r source-file /dev/null \; \
+  bind-key V run-shell "sleep 60"
 
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
 # alfa registreres sist, så den står øverst.
@@ -525,6 +526,9 @@ tast C-b T
 sjekk "C-b T sender set-option til tmux" er ja maal show-options -gqv @nerdr-binding
 tast C-b M M
 sjekk "M med -r gjentas uten prefikset" linjer 2 cat "$KONFIG/gjentatt"
+tast C-b V
+tast -l "etter V"
+sjekk "en binding som venter, som run-shell med en popup, stopper ikke panen" har "etter V"
 tast C-b w
 
 # Ramme står over bredde, som står over farge, der menyen åpner.

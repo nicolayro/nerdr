@@ -148,6 +148,22 @@ fn utenfra(socket: Option<&str>) -> std::process::Command {
     tmux
 }
 
+/// Kjører linjene som en egen klient på samme server, med `pane` som
+/// gjeldende, og venter ikke på den. En kommando fra tmux-oppsettet som venter,
+/// som `run-shell` med en popup nerdr ikke kan vise, stopper da bare denne
+/// klienten og ikke svarene nerdr tegner panen med.
+pub fn for_seg(socket: Option<&str>, pane: Option<&str>, linjer: &[String]) -> io::Result<Child> {
+    let mut tmux = utenfra(socket);
+    tmux.arg("source-file");
+    if let Some(pane) = pane {
+        tmux.args(["-t", pane]);
+    }
+    let mut barn = tmux.arg("-").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
+    let mut inn = barn.stdin.take().expect("stdin er piped");
+    inn.write_all(format!("{}\n", linjer.join("\n")).as_bytes())?;
+    Ok(barn)
+}
+
 /// Om nerdr står i en pane på serveren `Kontroll::start` ville koblet til.
 /// Der tar tmux prefikset før nerdr ser det, og vinduet nerdr står i, kan
 /// vises i nerdr og krympes til boksen sin, om og om igjen.

@@ -13,7 +13,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 /// Det bare nerdr har. Her vinner nerdr over oppsettet.
 const NERDR: [char; 11] = ['f', 'r', 'w', 's', 'b', 'B', 'd', '?', ':', '(', ')'];
 
-/// Virker fra en control mode-klient, mot panen nerdr viser.
+/// Virker fra en klient uten terminal, mot panen nerdr viser.
 const SENDES: [&str; 39] = [
     "break-pane",
     "clear-history",
@@ -60,7 +60,7 @@ const SENDES: [&str; 39] = [
 pub enum Hva {
     /// Som tasten etter prefikset i nerdr.
     Som(KeyEvent),
-    /// Kommandoene, hver for seg, siden tmux svarer på hver av dem.
+    /// Kommandoene, hver for seg.
     Send(Vec<String>),
 }
 
