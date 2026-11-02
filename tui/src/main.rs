@@ -192,6 +192,10 @@ struct App {
     /// Panen du er inne i, og plassen den hadde da du gikk inn. Den blir stående
     /// der i delen til du går ut, så kortet ikke flytter seg for hver melding.
     låst: Option<(String, Plass)>,
+    /// Panen du sist gikk ut av, med plassen fra `låst`. Den holdes til
+    /// registeret er lest på nytt, fordi tilstanden nerdr har, kan være eldre
+    /// enn prompten du nettopp sendte.
+    forlatt: Option<(String, Plass)>,
     /// Prosjektene som er brettet sammen, når lista er ordnet etter mappe.
     brettet: HashSet<String>,
 
@@ -416,6 +420,7 @@ impl App {
             repoer: HashMap::new(),
             sett: HashMap::new(),
             låst: None,
+            forlatt: None,
             brettet: HashSet::new(),
             valgt: None,
             peker: None,
@@ -665,6 +670,7 @@ impl App {
                 self.lister = false;
                 self.sist_listet = Some(Instant::now());
                 self.claude = register::les(&self.konfig.join("sessions"));
+                self.forlatt = None;
                 let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
                 let tom = !alle.iter().any(|p| self.claude.contains_key(&p.id));
                 self.utenfor_tmux = if tom { register::utenfor_tmux(&self.konfig.join("sessions")) } else { 0 };
@@ -1946,7 +1952,10 @@ impl App {
         }
         self.låst = match fokus {
             Fokus::Pane => self.valgt.as_ref().and_then(|p| Some((p.id.clone(), self.plass(p)?))),
-            Fokus::Liste => None,
+            Fokus::Liste => {
+                self.forlatt = self.låst.take();
+                None
+            }
         };
         self.peker = self.valgt.as_ref().map(|p| p.id.clone());
         self.liste_følger = true;
@@ -1987,11 +1996,12 @@ impl App {
         let del = Del::fra(merke);
         // Som tiden på kortet, så de ledige ikke flytter seg når du har vært inne i en.
         let siden = self.claude.get(&pane.id).map(|c| c.endret);
-        Some(match &self.låst {
-            // Den du er inne i, blir ikke ledig før du går ut. En ny Claude
-            // regnes som sett fra den dukker opp i registeret. Settes en
-            // ledig i gang, havner den øverst blant de aktive.
-            Some((id, låst)) if *id == pane.id => {
+        Some(match self.låst.iter().chain(&self.forlatt).find(|(id, _)| *id == pane.id) {
+            // Den du er inne i, blir ikke ledig før du er ute og registeret
+            // er lest. En ny Claude regnes som sett fra den dukker opp i
+            // registeret. Settes en ledig i gang, havner den øverst blant de
+            // aktive.
+            Some((_, låst)) => {
                 let del = del.min(låst.del);
                 Plass { del, merke, siden: if del == låst.del { låst.siden } else { None } }
             }
