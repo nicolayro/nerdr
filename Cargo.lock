@@ -358,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "nerdr"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "libc",
  "nerdr-kjerne",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "nerdr-kjerne"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "serde",
  "serde_json",
