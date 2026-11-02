@@ -218,7 +218,7 @@ tast Right
 sjekk "orden aktivitet har ingen overskrifter" mangler '^ (aktive|ledige)'
 tast Right Up Up Up Right Escape
 sjekk "Esc lukker menyen" mangler 'farge +│ av'
-sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1 ulest=oransje topp=venstre sti=på bredde=vanlig' maal show-options -gqv @nerdr-utseende
+sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1 ulest=oransje topp=venstre sti=på bredde=vanlig snarveier=av' maal show-options -gqv @nerdr-utseende
 tast C-b b
 sjekk "med minimal er oppgave borte fra innstillingene" mangler 'oppgave +│ 1'
 klikk_paa 'vanlig  minimal'
@@ -325,6 +325,15 @@ tast C-b w
 sjekk "tilbake i agentlista" i_lista
 
 sjekk "nederst i agentlista er det ingen knapper" linje_har 20 '^ +│'
+# Snarveier står nederst i innstillingene.
+tast C-b b Down Down Down Down Down Down Down Down Down Down Down Down Right Escape
+sjekk "snarveiene nederst viser hent samtale med tasten" har 'hent samtale +C-b r'
+klikk_paa 'handlinger'
+sjekk "klikk på «handlinger» åpner handlingene" har 'del side om side'
+tast Escape
+sjekk "Esc lukker handlingene" mangler 'del side om side'
+tast C-b b Down Down Down Down Down Down Down Down Down Down Down Down Left Escape
+sjekk "og snarveiene kan slås av igjen" mangler 'hent samtale'
 klikk_paa '? hjelp'
 sjekk "klikk på «? hjelp» viser hjelpen" har 'trykk en tast for å lukke'
 tast x

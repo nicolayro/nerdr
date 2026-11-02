@@ -245,13 +245,14 @@ ikke gjelder.
 | **sortering** | `prioritert` deler agentlista i aktive og ledige. `prosjekt` har en gruppe for hvert repo, og både repoene og Claude-ene i dem står i den rekkefølgen de ble startet. `←` og `→`, eller `h` og `l`, bretter repoet sammen og ut. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. Et klikk på sorteringen øverst til høyre i agentlista bytter til neste. |
 | **overskrift** | Navnet på repoet over Claude-ene, uten stien, så det stemmer også for et worktree: på en `rad` med bakgrunn, med en `strek` bort til skillelinja, eller med strek på begge sider, `venstre`. Pilen foran navnet viser at et klikk bretter repoet sammen og ut. Bare med `prosjekt`. |
 | **ledige** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av agentlista, så de ikke flytter seg når en blir aktiv. Bare med `prioritert`. |
+| **snarveier** | `på` gir knapper nederst i agentlista for ny sesjon, hent samtale, ny terminal, innstillinger og handlinger, med tasten etter prefikset som gjør det samme. Når agentlista er lav, er de borte. |
 
 Standard er linjer mellom panene, vanlig bredde, farge på med ulest i oransje,
 vanlig kortdesign, én linje til oppgaven, mappa i kortet, og sortert prioritert
-med de ledige under. Sortert etter prosjekt har repoet strek på begge sider. `nerdr liste` er alltid sortert
+med de ledige under, uten snarveier nederst. Sortert etter prosjekt har repoet strek på begge sider. `nerdr liste` er alltid sortert
 prioritert. I `@nerdr-utseende` står valgene med navnene de hadde først:
 `paner`, `farge`, `plass`, `tittel`, `orden` med `nerdr`, `mappe` og
-`aktivitet`, `ledig`, `topp` for overskriften, `sti` for mappa og `bredde`.
+`aktivitet`, `ledig`, `topp` for overskriften, `sti` for mappa, `bredde` og `snarveier`.
 
 ## Miljøvariabler
 

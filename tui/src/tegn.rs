@@ -301,14 +301,30 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
         Fokus::Liste => (Style::new().fg(ORANSJE), VANLIG),
         Fokus::Pane => (SVAK, SVAK),
     };
+    if knapper_nederst(app) {
+        let y = område.height - rader_nederst(app);
+        buf.set_string(0, y, "─".repeat(bredde as usize), SVAK);
+        overskrifter.push(y);
+    }
     for (knapp, x, y) in knapper(app) {
         let stil = if mus == Some(&Mål::Knapp(knapp)) { under_musen() } else { Style::new() };
         if stripe(app) {
             buf.set_string(0, y, " + ", pluss.patch(stil));
             continue;
         }
-        let Some(&(_, navn, _)) = KNAPPER.iter().find(|k| k.0 == knapp) else { continue };
+        let Some(&(_, navn, tast)) = KNAPPER.iter().find(|k| k.0 == knapp) else { continue };
         buf.set_style(Rect::new(x.start, y, x.end - x.start, 1), stil);
+        if y > TOPPEN {
+            let tast = app.bindinger.vis(&KeyEvent::new(KeyCode::Char(tast), KeyModifiers::NONE));
+            let tast = format!("{} {tast}", app.prefiks.navn());
+            let tast_x = x.end.saturating_sub(tast.chars().count() as u16 + 1);
+            if knapp == Knapp::Ny {
+                buf.set_string(1, y, "+", pluss.patch(stil));
+            }
+            buf.set_stringn(3, y, navn, tast_x.saturating_sub(4) as usize, tekststil.patch(stil));
+            buf.set_string(tast_x, y, tast, SVAK.patch(stil));
+            continue;
+        }
         if knapp == Knapp::Ny {
             buf.set_string(1, y, "+", pluss.patch(stil));
             buf.set_stringn(3, y, navn, x.end.saturating_sub(4) as usize, tekststil.patch(stil));
@@ -567,7 +583,7 @@ fn plasser(app: &App) -> Vec<Plassert<'_>> {
 
 /// Rader til kortene, under streken øverst.
 fn plass(app: &App) -> u16 {
-    listeflate(app).height.saturating_sub(TOPPEN + 1)
+    listeflate(app).height.saturating_sub(TOPPEN + 1 + rader_nederst(app))
 }
 
 fn liste(app: &App) -> (Vec<Plassert<'_>>, Utsnitt) {
@@ -895,13 +911,29 @@ pub fn ny_fane_på(app: &App, x: u16) -> bool {
     ny_fane(app).is_some_and(|r| r.contains(&x))
 }
 
-/// Knappene øverst i agentlista, med tasten etter prefikset som gjør det
-/// samme.
-const KNAPPER: [(Knapp, &str, char); 3] = [
+/// Knappene i agentlista, med tasten etter prefikset som gjør det samme.
+const KNAPPER: [(Knapp, &str, char); 7] = [
     (Knapp::Ny, "ny sesjon", 'f'),
     (Knapp::Hjelp, "? hjelp", '?'),
     (Knapp::Avslutt, LUKK_NERDR, 'd'),
+    (Knapp::Samtale, "hent samtale", 'r'),
+    (Knapp::Terminal, "ny terminal", 'c'),
+    (Knapp::Innstillinger, "innstillinger", 'b'),
+    (Knapp::Handlinger, "handlinger", ':'),
 ];
+/// Nederst i agentlista, når de er slått på i innstillingene.
+const NEDERST: [Knapp; 5] = [Knapp::Ny, Knapp::Samtale, Knapp::Terminal, Knapp::Innstillinger, Knapp::Handlinger];
+/// Lista må ha plass til noen kort over knappene nederst.
+const HØYDE_TIL_KNAPPENE: u16 = 16;
+
+fn knapper_nederst(app: &App) -> bool {
+    app.utseende.snarveier == utseende::Snarveier::På && !stripe(app) && listeflate(app).height >= HØYDE_TIL_KNAPPENE
+}
+
+/// Streken over knappene nederst, og én rad per knapp.
+fn rader_nederst(app: &App) -> u16 {
+    if knapper_nederst(app) { NEDERST.len() as u16 + 1 } else { 0 }
+}
 
 /// Et klikk på knappen er det samme som prefikset og denne tasten.
 pub fn tasten_til(knapp: Knapp) -> char {
@@ -924,6 +956,10 @@ fn knapper(app: &App) -> Vec<(Knapp, Range<u16>, u16)> {
     let mut ut = vec![(Knapp::Ny, 0..midt, NY_RAD)];
     if midt < slutt {
         ut.push((Knapp::Hjelp, midt..slutt, 0));
+    }
+    if knapper_nederst(app) {
+        let første = listeflate(app).height - NEDERST.len() as u16;
+        ut.extend(NEDERST.iter().zip(første..).map(|(&k, y)| (k, 0..slutt, y)));
     }
     ut
 }

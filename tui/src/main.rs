@@ -142,12 +142,15 @@ enum Mål {
     Skille,
 }
 
-/// Knappene nederst i lista.
 #[derive(Clone, Copy, PartialEq)]
 enum Knapp {
     Ny,
     Hjelp,
     Avslutt,
+    Samtale,
+    Terminal,
+    Innstillinger,
+    Handlinger,
 }
 
 struct App {

@@ -87,6 +87,13 @@ impl Bredde {
     }
 }
 
+/// Knappene nederst i agentlista, for dem som klikker framfor prefikset.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Snarveier {
+    Av,
+    På,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Utseende {
     pub paner: Rammer,
@@ -100,20 +107,23 @@ pub struct Utseende {
     pub topp: Topp,
     pub sti: Sti,
     pub bredde: Bredde,
+    pub snarveier: Snarveier,
 }
 
 /// Står i `OPTION` foran verdien, som `farge=på`, så en akse kan komme til
 /// eller forsvinne uten at de andre leses feil.
-pub const AKSER: [&str; 10] = ["paner", "farge", "plass", "orden", "ledig", "tittel", "ulest", "topp", "sti", "bredde"];
+pub const AKSER: [&str; 11] =
+    ["paner", "farge", "plass", "orden", "ledig", "tittel", "ulest", "topp", "sti", "bredde", "snarveier"];
 pub const ORDEN: usize = 3;
 const LEDIG: usize = 4;
 const ULEST: usize = 6;
 const TOPP: usize = 7;
 pub const BREDDE: usize = 9;
+const SNARVEIER: usize = 10;
 /// Aksene fra denne gjelder bare boksene.
 pub const BOKSAKSER: usize = 5;
 /// Står i `OPTION`, og endres ikke.
-const VERDIER: [&[&str]; 10] = [
+const VERDIER: [&[&str]; 11] = [
     &["bokser", "linjer", "vindu"],
     &["av", "på"],
     &["vanlig", "minimal"],
@@ -124,17 +134,19 @@ const VERDIER: [&[&str]; 10] = [
     &["rad", "strek", "venstre"],
     &["av", "på"],
     &["smal", "vanlig", "bred"],
+    &["av", "på"],
 ];
 /// Det sorteringen heter i menyen og på knappen, som `VERDIER` for orden.
 pub const SORTERINGER: [&str; 3] = ["prioritert", "prosjekt", "aktivitet"];
 /// Navnene i menyen, i samme rekkefølge som `AKSER`.
-const I_MENYEN: [&str; 10] =
-    ["ramme", "farge", "kortdesign", "sortering", "ledige", "oppgave", "ulest", "overskrift", "mappe", "bredde"];
+const I_MENYEN: [&str; 11] = [
+    "ramme", "farge", "kortdesign", "sortering", "ledige", "oppgave", "ulest", "overskrift", "mappe", "bredde", "snarveier",
+];
 /// Rekkefølgen i menyen, under overskriften. Et valg som bare gjelder for
 /// valget over, står rett under det.
-pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Agentliste", &[9, 1, 6, 2, 5, 8, 3, 7, 4])];
+pub const MENY: [(&str, &[usize]); 2] = [("Pane", &[0]), ("Agentliste", &[9, 1, 6, 2, 5, 8, 3, 7, 4, 10])];
 /// Står nederst i menyen for valget du står på, i samme rekkefølge som `AKSER`.
-pub const FORKLARING: [&str; 10] = [
+pub const FORKLARING: [&str; 11] = [
     "Bokser rammer inn hver pane, og linjer har streker mellom. Vindu har også ramme rundt agentlista.",
     "Tegnet og tiden får fargen til gruppen, og rammene en tone av den.",
     "Vanlig har en boks for hver sesjon. Minimal har én linje for hver.",
@@ -145,9 +157,10 @@ pub const FORKLARING: [&str; 10] = [
     "Prosjektet over sesjonene, på en rad med bakgrunn, med en strek bort til skillelinja, eller med strek på begge sider.",
     "Mappa under branchen når Claude-en ikke jobber i mappa til repoet: stien til et worktree, eller en undermappe i repoet.",
     "Hvor bred agentlista er. Du kan også dra i streken til høyre for den.",
+    "Knapper nederst i agentlista for ny sesjon, hent samtale, ny terminal, innstillinger og handlinger.",
 ];
 /// Verdiene som i handlingene, i samme rekkefølge som `VERDIER`.
-pub const NAVN: [&[&str]; 10] = [
+pub const NAVN: [&[&str]; 11] = [
     &["paner i bokser", "paner med linjer", "paner i et vindu"],
     &["uten farge", "med farge"],
     &["vanlig liste", "minimal liste"],
@@ -158,6 +171,7 @@ pub const NAVN: [&[&str]; 10] = [
     &["prosjektet på en rad", "prosjektet med strek", "prosjektet med strek til venstre"],
     &["uten mappe i kortet", "med mappe i kortet"],
     &["smal agentliste", "vanlig agentliste", "bred agentliste"],
+    &["uten snarveier nederst", "med snarveier nederst"],
 ];
 const PANER: [Rammer; 3] = [Rammer::Bokser, Rammer::Linjer, Rammer::Vindu];
 const FARGER: [Farge; 2] = [Farge::Av, Farge::På];
@@ -168,6 +182,7 @@ const ULESTFARGER: [Ulestfarge; 2] = [Ulestfarge::Oransje, Ulestfarge::Blå];
 const TOPPER: [Topp; 3] = [Topp::Rad, Topp::Strek, Topp::Venstre];
 const STIER: [Sti; 2] = [Sti::Av, Sti::På];
 const BREDDER: [Bredde; 3] = [Bredde::Smal, Bredde::Vanlig, Bredde::Bred];
+const SNARVEIENE: [Snarveier; 2] = [Snarveier::Av, Snarveier::På];
 
 impl Utseende {
     pub fn ny(paner: Rammer) -> Utseende {
@@ -182,6 +197,7 @@ impl Utseende {
             topp: Topp::Venstre,
             sti: Sti::På,
             bredde: Bredde::Vanlig,
+            snarveier: Snarveier::Av,
         }
     }
 
@@ -214,7 +230,8 @@ impl Utseende {
             6 => ULESTFARGER.iter().position(|f| *f == self.ulest),
             7 => TOPPER.iter().position(|t| *t == self.topp),
             8 => STIER.iter().position(|s| *s == self.sti),
-            _ => BREDDER.iter().position(|b| *b == self.bredde),
+            9 => BREDDER.iter().position(|b| *b == self.bredde),
+            _ => SNARVEIENE.iter().position(|k| *k == self.snarveier),
         };
         i.unwrap_or(0)
     }
@@ -230,7 +247,8 @@ impl Utseende {
             6 => self.ulest = ULESTFARGER[i],
             7 => self.topp = TOPPER[i],
             8 => self.sti = STIER[i],
-            _ => self.bredde = BREDDER[i],
+            9 => self.bredde = BREDDER[i],
+            _ => self.snarveier = SNARVEIENE[i],
         }
     }
 
@@ -247,7 +265,7 @@ impl Utseende {
             LEDIG => self.orden == Orden::Nerdr,
             ULEST => self.farge == Farge::På,
             TOPP => self.orden == Orden::Mappe,
-            BREDDE => true,
+            BREDDE | SNARVEIER => true,
             _ => akse < BOKSAKSER || self.plass != Plass::Minimal,
         }
     }
@@ -278,7 +296,7 @@ mod tester {
         u.endre(1, 1);
         u.endre(2, 1);
         u.endre(3, -1);
-        assert_eq!(u.tekst(), "paner=bokser farge=av plass=minimal orden=aktivitet ledig=under tittel=1 ulest=oransje topp=venstre sti=på bredde=vanlig");
+        assert_eq!(u.tekst(), "paner=bokser farge=av plass=minimal orden=aktivitet ledig=under tittel=1 ulest=oransje topp=venstre sti=på bredde=vanlig snarveier=av");
         let mut lest = Utseende::ny(Rammer::Linjer);
         lest.les(&u.tekst());
         assert_eq!(lest, u);
@@ -294,10 +312,10 @@ mod tester {
     #[test]
     fn menyen_viser_bare_valg_som_gjelder() {
         let mut u = Utseende::ny(Rammer::Linjer);
-        assert_eq!(u.synlige(), [0, 9, 1, 6, 2, 5, 8, 3, 4]);
+        assert_eq!(u.synlige(), [0, 9, 1, 6, 2, 5, 8, 3, 4, 10]);
         u.plass = Plass::Minimal;
         u.orden = Orden::Mappe;
-        assert_eq!(u.synlige(), [0, 9, 1, 6, 2, 3, 7]);
+        assert_eq!(u.synlige(), [0, 9, 1, 6, 2, 3, 7, 10]);
         assert_eq!(u.nabo(2, 1), 3);
         assert_eq!(u.nabo(0, -1), 0);
     }
