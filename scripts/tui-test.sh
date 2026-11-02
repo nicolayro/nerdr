@@ -170,7 +170,7 @@ maal set -g default-command /bin/cat
 # «hent samtale» i nerdr, og den vinner.
 maal bind-key '|' split-window -h \; bind-key T set -g @nerdr-binding ja \; \
   bind-key -r M run-shell "echo x >> $KONFIG/gjentatt" \; bind-key r source-file /dev/null \; \
-  bind-key V run-shell "sleep 60"
+  bind-key V run-shell "sleep 10" \; bind-key Q display-popup -E true
 
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
 # alfa registreres sist, så den står øverst.
@@ -529,6 +529,14 @@ sjekk "M med -r gjentas uten prefikset" linjer 2 cat "$KONFIG/gjentatt"
 tast C-b V
 tast -l "etter V"
 sjekk "en binding som venter, som run-shell med en popup, stopper ikke panen" har "etter V"
+tast C-b Q
+sjekk "en popup nerdr ikke kan vise, gir en beskjed i stedet for ingenting" har "C-b Q åpner en popup i tmux"
+# Svarer ikke tilkoblingen, kobler nerdr til på nytt. Lista hentes hvert annet
+# sekund, og etter fem sekunder uten svar gir nerdr opp tilkoblingen.
+kill -STOP "$(pgrep -f -- "-L $MAAL -C attach-session")"
+sleep 7
+tast -l " etter frys"
+sjekk "panen kommer tilbake når tmux slutter å svare" har "etter frys"
 tast C-b w
 
 # Ramme står over bredde, som står over farge, der menyen åpner.

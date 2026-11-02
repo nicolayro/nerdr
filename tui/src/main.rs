@@ -63,6 +63,10 @@ const UTEN_CLAUDE_MAKS: Duration = Duration::from_secs(10);
 /// i historikken.
 const RULL_STEG: u32 = 3;
 const KOPIERT_VISES: Duration = Duration::from_millis(1500);
+const BESKJED_VISES: Duration = Duration::from_secs(4);
+/// Uten svar fra tmux så lenge står klienten fast, og panene blir tomme til
+/// nerdr kobler til på nytt. Det skal ikke skje etter `kontroll::for_seg`.
+const SVAR_MAKS: Duration = Duration::from_secs(5);
 /// Terminalen sender to klikk og sier ikke fra om dobbeltklikk.
 const DOBBELTKLIKK: Duration = Duration::from_millis(500);
 /// Global option i tmux med bredden på lista, og `stripe` etter når den er en
@@ -70,7 +74,8 @@ const DOBBELTKLIKK: Duration = Duration::from_millis(500);
 const LISTE_OPTION: &str = "@nerdr-liste";
 
 enum Hendelse {
-    Tmux(Melding),
+    /// Med nummeret til tilkoblingen meldingen kom fra.
+    Tmux(u64, Melding),
     Term(Event),
     /// Mappene til mappevelgeren, lest i en egen tråd, og om de er de siste.
     Mapper(Arc<AtomicBool>, Vec<PathBuf>, bool),
@@ -158,8 +163,12 @@ struct App {
     kontroll: Kontroll,
     /// tmux kobler fra klienten når sesjonen den står i, forsvinner, som når
     /// det siste vinduet i den lukkes. Da kobler nerdr til igjen.
-    koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>,
+    koble_igjen: Box<dyn FnMut() -> io::Result<(Kontroll, u64)>>,
     koblet_igjen: Option<Instant>,
+    /// Nummeret til tilkoblingen. Meldinger fra en nerdr har gitt opp, hoppes over.
+    tilkobling: u64,
+    /// Siden da nerdr sist fikk et svar, så lenge noen mangler.
+    venter_siden: Option<Instant>,
     socket: Option<String>,
     /// Klientene bindingene fra tmux-oppsettet kjører i, se `kontroll::for_seg`.
     for_seg: Vec<Child>,
@@ -275,6 +284,8 @@ struct App {
     kopimodus: Option<Kopimodus>,
     /// Da markeringen sist ble kopiert, så det kan stå en liten stund.
     kopiert: Option<Instant>,
+    /// Det nerdr ikke kunne gjøre, og når det skjedde.
+    beskjed: Option<(String, Instant)>,
     /// Mappevelgeren, når den er oppe.
     velger: Option<ny::Velger>,
     handlinger: Option<Handlinger>,
@@ -364,13 +375,16 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
     tegn::bruk_farger(palett::les());
     let (tx, rx) = mpsc::channel();
     let socket = socket.map(String::from);
-    let koble = {
+    let mut koble = {
         let (socket, tx) = (socket.clone(), tx.clone());
+        let mut nr = 0;
         move || {
-            let tx = tx.clone();
-            Kontroll::start(socket.as_deref(), move |m| {
-                let _ = tx.send(Hendelse::Tmux(m));
-            })
+            nr += 1;
+            let (tx, nr) = (tx.clone(), nr);
+            let kontroll = Kontroll::start(socket.as_deref(), move |m| {
+                let _ = tx.send(Hendelse::Tmux(nr, m));
+            })?;
+            Ok((kontroll, nr))
         }
     };
     let kontroll = koble()?;
@@ -410,8 +424,8 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 
 impl App {
     fn ny(
-        kontroll: Kontroll,
-        koble_igjen: Box<dyn FnMut() -> io::Result<Kontroll>>,
+        (kontroll, tilkobling): (Kontroll, u64),
+        koble_igjen: Box<dyn FnMut() -> io::Result<(Kontroll, u64)>>,
         socket: Option<String>,
         tx: Sender<Hendelse>,
     ) -> App {
@@ -420,6 +434,8 @@ impl App {
             tx,
             koble_igjen,
             koblet_igjen: None,
+            tilkobling,
+            venter_siden: None,
             socket,
             for_seg: Vec::new(),
             kø: VecDeque::new(),
@@ -477,6 +493,7 @@ impl App {
             markering: None,
             kopimodus: None,
             kopiert: None,
+            beskjed: None,
             velger: None,
             handlinger: None,
             hjelp: None,
@@ -540,6 +557,15 @@ impl App {
                 self.kopiert = None;
                 tegne = true;
             }
+            if self.beskjed.as_ref().is_some_and(|(_, t)| t.elapsed() >= BESKJED_VISES) {
+                self.beskjed = None;
+                tegne = true;
+            }
+            if self.venter_siden.is_some_and(|t| t.elapsed() >= SVAR_MAKS) {
+                // Går det ikke, prøves det igjen like lenge etter.
+                self.venter_siden = Some(Instant::now());
+                tegne |= self.koble_til_igjen();
+            }
 
             if self.sist_listet.is_some_and(|t| t.elapsed() >= LISTE_INTERVALL) {
                 self.list_paner();
@@ -568,10 +594,12 @@ impl App {
         if self.koblet_igjen.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
             return false;
         }
-        let Ok(kontroll) = (self.koble_igjen)() else { return false };
+        let Ok((kontroll, nr)) = (self.koble_igjen)() else { return false };
         self.kontroll = kontroll;
+        self.tilkobling = nr;
         self.koblet_igjen = Some(Instant::now());
         self.kø.clear();
+        self.venter_siden = None;
         (self.lister, self.list_igjen, self.henter) = (false, false, false);
         self.størrelser.clear();
         self.fargelagt.clear();
@@ -597,28 +625,33 @@ impl App {
 
     fn send(&mut self, kommando: &str, svar: Svar) {
         match self.kontroll.send(kommando) {
-            Ok(()) => self.kø.push_back(svar),
+            Ok(()) => {
+                self.kø.push_back(svar);
+                self.venter_siden.get_or_insert_with(Instant::now);
+            }
             Err(feil) => self.ferdig = Some(format!("tmux: {feil}")),
         }
     }
 
     fn håndter(&mut self, h: Hendelse) -> bool {
         match h {
-            Hendelse::Tmux(Melding::Svar { ok, linjer }) => match self.kø.pop_front() {
-                Some(svar) => self.håndter_svar(svar, ok, linjer),
-                None => false,
-            },
-            Hendelse::Tmux(Melding::Output { pane, data }) => {
+            Hendelse::Tmux(nr, _) if nr != self.tilkobling => false,
+            Hendelse::Tmux(_, Melding::Svar { ok, linjer }) => {
+                let svar = self.kø.pop_front();
+                self.venter_siden = (!self.kø.is_empty()).then(Instant::now);
+                svar.is_some_and(|svar| self.håndter_svar(svar, ok, linjer))
+            }
+            Hendelse::Tmux(_, Melding::Output { pane, data }) => {
                 if self.vindu.iter().any(|p| p.id == pane) {
                     self.output(pane, &data);
                 }
                 false
             }
-            Hendelse::Tmux(Melding::Endret) => {
+            Hendelse::Tmux(_, Melding::Endret) => {
                 self.list_paner();
                 false
             }
-            Hendelse::Tmux(Melding::Slutt(grunn)) => {
+            Hendelse::Tmux(_, Melding::Slutt(grunn)) => {
                 if grunn.is_empty() && self.koble_til_igjen() {
                     return true;
                 }
@@ -874,6 +907,10 @@ impl App {
                 if let Ok(barn) = kontroll::for_seg(self.socket.as_deref(), pane.as_deref(), &kommandoer) {
                     self.for_seg.push(barn);
                 }
+            }
+            Some(bindinger::Hva::Trenger { tast, hva }) => {
+                let tekst = format!("{} {tast} åpner {hva} i tmux, som nerdr ikke kan vise", self.prefiks.navn());
+                self.beskjed = Some((tekst, Instant::now()));
             }
             None => self.prefikstast(k),
         }

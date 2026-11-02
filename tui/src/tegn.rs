@@ -1506,6 +1506,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
         tegn_linjer(buf, app, bokser, &lyse);
     }
     let merkelapp = match () {
+        _ if app.beskjed.is_some() => app.beskjed.as_ref().map(|(tekst, _)| format!(" {tekst} ")),
         _ if app.kopiert.is_some() => Some(" kopiert ".to_string()),
         _ if app.kopimodus.is_some() && app.rull > 0 => Some(format!(" kopi {}/{} ", app.rull, app.historie)),
         _ if app.kopimodus.is_some() => Some(" kopi ".to_string()),

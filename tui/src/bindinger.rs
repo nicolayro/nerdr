@@ -62,6 +62,8 @@ pub enum Hva {
     Som(KeyEvent),
     /// Kommandoene, hver for seg.
     Send(Vec<String>),
+    /// tmux tegner `hva` på terminalen til klienten, og nerdr har ingen.
+    Trenger { tast: String, hva: &'static str },
 }
 
 /// Tasten slik den sammenlignes. Store bokstaver er sin egen tast, så shift
@@ -103,7 +105,10 @@ impl Bindinger {
             if matches!(nøkkel(&k), (KeyCode::Char(c), false, false, _) if NERDR.contains(&c)) {
                 continue;
             }
-            let Some(hva) = tolk(&binding.kommando) else { continue };
+            let Some(mut hva) = tolk(&binding.kommando) else { continue };
+            if let Hva::Trenger { tast, .. } = &mut hva {
+                tast.clone_from(&binding.tast);
+            }
             if let Hva::Som(nerdr) = &hva
                 && nøkkel(nerdr) != nøkkel(&k)
             {
@@ -196,10 +201,28 @@ fn tolk(kommando: &str) -> Option<Hva> {
     {
         return Some(Hva::Som(k));
     }
+    if let Some(hva) = deler.iter().find_map(|ord| trenger_terminal(ord)) {
+        return Some(Hva::Trenger { tast: String::new(), hva });
+    }
     let sendes = |ord: &Vec<String>| {
         ord.first().is_some_and(|k| SENDES.contains(&k.as_str())) && !ord.iter().any(|o| o == "{" || o.contains("%%"))
     };
     deler.iter().all(sendes).then(|| Hva::Send(kommando.split(" \\; ").map(|k| k.trim().to_string()).collect()))
+}
+
+/// En `run-shell` som åpner en popup, venter på et valg i den som aldri kommer.
+fn trenger_terminal(ord: &[String]) -> Option<&'static str> {
+    let popup = || ord.iter().any(|o| ["display-popup", "fzf-tmux -p", "--tmux"].iter().any(|p| o.contains(p)));
+    match ord.first()?.as_str() {
+        "display-popup" | "popup" => Some("en popup"),
+        "run-shell" | "run" if popup() => Some("en popup"),
+        "display-menu" | "menu" => Some("en meny"),
+        "command-prompt" => Some("et tekstfelt"),
+        "confirm-before" => Some("et spørsmål"),
+        "choose-tree" | "choose-client" | "choose-buffer" => Some("en velger"),
+        "clock-mode" | "display-panes" | "customize-mode" | "show-messages" => Some("en visning"),
+        _ => None,
+    }
 }
 
 /// `confirm-before` spør i tmux før kommandoen, men lukking spør ikke i nerdr.
@@ -323,12 +346,17 @@ mod tester {
             b("R", "source-file ~/.tmux.conf \\; display-message \"lastet\""),
             b("g", "display-popup -E -h 18 hopp.sh"),
             b(",", "command-prompt -I \"#W\" { rename-window \"%%\" }"),
+            b("k", "run-shell \"sesh connect \\\"$(sesh list | fzf-tmux -p 80%,70%)\\\"\""),
+            b("j", "run-shell \"tmux split-window \\\"$(ls | fzf-tmux)\\\"\""),
         ];
         let bindinger = Bindinger::ny(&egne);
         let send = Hva::Send(vec!["source-file ~/.tmux.conf".into(), "display-message \"lastet\"".into()]);
+        let trenger = |tast: &str, hva| Some(Hva::Trenger { tast: tast.into(), hva });
         assert_eq!(bindinger.finn(&k('R')), Some(&send));
-        assert_eq!(bindinger.finn(&k('g')), None);
-        assert_eq!(bindinger.finn(&k(',')), None);
+        assert_eq!(bindinger.finn(&k('g')).cloned(), trenger("g", "en popup"));
+        assert_eq!(bindinger.finn(&k(',')).cloned(), trenger(",", "et tekstfelt"));
+        assert_eq!(bindinger.finn(&k('k')).cloned(), trenger("k", "en popup"));
+        assert!(matches!(bindinger.finn(&k('j')), Some(Hva::Send(_))));
     }
 
     #[test]
