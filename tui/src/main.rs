@@ -188,6 +188,9 @@ struct App {
     alle: Vec<Pane>,
     lister: bool,
     list_igjen: bool,
+    /// Panen `aktiver` gjorde aktiv mens en liste var på vei. Den lista er
+    /// eldre enn `select-pane`, og ville gitt `x` rett etter `o` den gamle.
+    aktivert: Option<String>,
     sist_listet: Option<Instant>,
     /// Konfigurasjonskatalogen til Claude Code, med registeret i `sessions`
     /// og samtalene i `projects`.
@@ -445,6 +448,7 @@ impl App {
             alle: Vec::new(),
             lister: false,
             list_igjen: false,
+            aktivert: None,
             sist_listet: None,
             konfig: konfigkatalog(),
             claude: HashMap::new(),
@@ -601,6 +605,7 @@ impl App {
         self.kø.clear();
         self.venter_siden = None;
         (self.lister, self.list_igjen, self.henter) = (false, false, false);
+        self.aktivert = None;
         self.størrelser.clear();
         self.fargelagt.clear();
         self.utdatert = true;
@@ -717,6 +722,7 @@ impl App {
         match svar {
             Svar::Paner => {
                 self.lister = false;
+                let aktivert = self.aktivert.take();
                 self.sist_listet = Some(Instant::now());
                 self.claude = register::les(&self.konfig.join("sessions"));
                 self.forlatt = None;
@@ -761,7 +767,7 @@ impl App {
                     // Oppdatert, så størrelsen regnes fra det tmux sier nå.
                     Some(pane) => {
                         self.valgt = Some(pane);
-                        self.oppdater_vindu(None);
+                        self.oppdater_vindu(aktivert.as_deref());
                     }
                     None => {
                         // Tastene du er midt i, skal ikke gå til en annen pane.
@@ -1162,6 +1168,10 @@ impl App {
 
     fn aktiver(&mut self, id: &str) {
         self.send(&format!("select-pane -t {}", sitat(id)), Svar::Ingenting);
+        if self.lister {
+            self.aktivert = Some(id.to_string());
+            self.list_igjen = true;
+        }
         for p in &mut self.vindu {
             p.aktiv = p.id == id;
         }
