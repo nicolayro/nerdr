@@ -974,6 +974,8 @@ impl App {
             return;
         };
         let id = sitat(&aktiv.id);
+        // Til vinduet, så tmux velger panen: den nerdr har, er eldre rett etter
+        // en split, og `x` lukket da Claude-en.
         let retning = match k.code {
             KeyCode::Left => Some("-L"),
             KeyCode::Right => Some("-R"),
@@ -986,10 +988,10 @@ impl App {
                 let Some(args) = taster::send_keys(&self.prefiks.tast()) else { return };
                 format!("send-keys -t {id} {args}")
             }
-            (_, Some(retning)) if ctrl || alt => format!("resize-pane {retning} -t {id} {}", if alt { 5 } else { 1 }),
-            (_, Some(retning)) => format!("select-pane {retning} -t {id}"),
-            (KeyCode::Char('%'), _) => format!("split-window -h -t {id} -c '#{{pane_current_path}}'"),
-            (KeyCode::Char('"'), _) => format!("split-window -v -t {id} -c '#{{pane_current_path}}'"),
+            (_, Some(retning)) if ctrl || alt => format!("resize-pane {retning} -t {vindu} {}", if alt { 5 } else { 1 }),
+            (_, Some(retning)) => format!("select-pane {retning} -t {vindu}"),
+            (KeyCode::Char('%'), _) => format!("split-window -h -t {vindu} -c '#{{pane_current_path}}'"),
+            (KeyCode::Char('"'), _) => format!("split-window -v -t {vindu} -c '#{{pane_current_path}}'"),
             (KeyCode::Char('o'), _) if ctrl => format!("rotate-window -t {vindu}"),
             (KeyCode::Char('o'), _) => {
                 let i = self.vindu.iter().position(|p| p.aktiv).unwrap_or(0);
@@ -999,16 +1001,16 @@ impl App {
                 return;
             }
             (KeyCode::Char(';'), _) => format!("last-pane -t {vindu}"),
-            (KeyCode::Char('z'), _) => format!("resize-pane -Z -t {id}"),
-            (KeyCode::Char('{'), _) => format!("swap-pane -U -t {id}"),
-            (KeyCode::Char('}'), _) => format!("swap-pane -D -t {id}"),
+            (KeyCode::Char('z'), _) => format!("resize-pane -Z -t {vindu}"),
+            (KeyCode::Char('{'), _) => format!("swap-pane -U -t {vindu}"),
+            (KeyCode::Char('}'), _) => format!("swap-pane -D -t {vindu}"),
             (KeyCode::Char(' '), _) => format!("next-layout -t {vindu}"),
             (KeyCode::Char('c'), _) => {
                 let sesjon = sitat(&format!("{}:", aktiv.sesjon_id));
                 self.send(&format!("new-window -t {sesjon} -c '#{{pane_current_path}}' -P -F '#{{window_id}}'"), Svar::NyttVindu);
                 return;
             }
-            (KeyCode::Char('x'), _) => format!("kill-pane -t {id}"),
+            (KeyCode::Char('x'), _) => format!("kill-pane -t {vindu}"),
             (KeyCode::Char('&'), _) => format!("kill-window -t {}", sitat(&aktiv.vindu_id)),
             (KeyCode::PageUp, _) => {
                 let side = self.bokser().iter().find(|b| b.pane == aktiv.id).map_or(1, |b| b.innhold.height.max(1));

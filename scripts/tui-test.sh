@@ -53,6 +53,7 @@ linje_med_farger_har() { vert capture-pane -p -e -t vert | sed -n "$1p" | grep -
 gronn_glyf() { linje_med_farger_har "$1" '38;5;108m◐'; }
 uten_gronn_glyf() { ! gronn_glyf "$1"; }
 har() { skjerm | grep -Eq -- "$1"; }
+under_toppen_har() { skjerm | sed 1,3d | grep -Eq -- "$1"; }
 mangler() { ! har "$1"; }
 i_pane() { maal capture-pane -p -t "$1" | grep -qF -- "$2"; }
 ikke_i_pane() { ! i_pane "$@"; }
@@ -514,9 +515,16 @@ tast C-b o C-b x
 sjekk "C-b x lukker panen uten å spørre" linjer 1 maal list-panes -t alfa:0
 
 tast C-b '"'
-sjekk "C-b \" deler over og under" har '├─+┤$'
+sjekk "C-b \" deler over og under" linjer 2 maal list-panes -t alfa:0
+# Rad 3 er streken under fanene, med de samme tegnene.
+sjekk "og nerdr viser streken mellom dem" under_toppen_har '├─+┤$'
 tast C-b x
 sjekk "C-b x lukker den nye" linjer 1 maal list-panes -t alfa:0
+# Før nerdr har listet panene på nytt, så x må gå til den tmux har gjort aktiv.
+tast C-b '"' C-b x
+sleep 0.5
+sjekk "C-b x rett etter en split lukker den nye" linjer 1 maal list-panes -t alfa:0
+sjekk "og Claude-en står igjen" i_pane alfa:0 'Do you want to proceed?'
 sjekk "uten split fyller Claude-en hele visningen igjen" er 70x16 dimensjon alfa:0
 
 tast C-b '|'
