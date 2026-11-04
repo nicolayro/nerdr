@@ -1,5 +1,6 @@
 # Kjører sjekkene fra «Før commit» i CLAUDE.md, så en commit som hopper over
-# dem, blir oppdaget før den havner i en release.
+# dem, blir oppdaget før den havner i en release. release.yml kaller den, så
+# en tag på en commit som feiler her, ikke blir en release.
 name: CI
 
 on:
@@ -7,6 +8,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read

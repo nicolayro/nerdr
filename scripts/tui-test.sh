@@ -410,6 +410,7 @@ sjekk "↑ til toppen, ↓ ned til alfa og Enter viser den" linje_har 7 '^▎ �
 tast C-b :
 sjekk "C-b : åpner handlingene" har '⏎ kjør · klikk · esc lukk'
 tast -l terminal
+sjekk "søket står i feltet før det klikkes på treffet" har '› terminal'
 klikk_paa 'ny terminal'
 sjekk "«ny terminal» der gir en terminal i et nytt vindu i alfa" linjer 2 maal list-windows -t alfa
 sjekk "i mappa til alfa" er "$MAPPE" mapper alfa:1
@@ -677,9 +678,9 @@ dra 4 8 36 8
 sjekk "og å dra den ut gir agentlista tilbake" er 70x16 dimensjon alfa
 
 # Med flere nerdr-er koblet til, er det den du ser på, som bestemmer størrelsen.
-tast -l $'\033[O'
+tast -l "$(printf '\033[O')"
 sjekk "uten fokus teller ikke størrelsen til nerdr" uten_storrelse
-tast -l $'\033[I'
+tast -l "$(printf '\033[I')"
 sjekk "med fokus teller den igjen" med_storrelse
 sjekk "og vinduet har fortsatt størrelsen til nerdr" er 70x16 dimensjon alfa
 
@@ -695,6 +696,12 @@ sjekk "nerdr liste --json har repoet der det er et" er 'nerdr ' fra_json repo
 sjekk "nerdr liste --json har versjon" inneholder "$(nerdr -L "$MAAL" liste --json)" '"versjon":1'
 sjekk "alle tre har sett med et tall" er 3 sett_i_json
 sjekk "nerdr samtaler viser Fiks testene i annet, med id" inneholder "$(nerdr samtaler)" 'abc-123  annet  Fiks testene'
+
+# Et skall som ikke leser oppstartsfilene til brukeren, der en ekte claude
+# kan stå først i PATH og ville sendt prompten.
+printf '#!/bin/sh\nprintf "argument: %%s\\n" "$@"\n' > "$KONFIG/bin/claude"
+chmod +x "$KONFIG/bin/claude"
+maal set-option -g default-command "PATH='$KONFIG/bin:/usr/bin:/bin' ENV= exec /bin/sh"
 
 ut=$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje")
 sjekk "nerdr ny lager sesjonen tredje" inneholder "$ut" 'tmux-sesjonen tredje'
