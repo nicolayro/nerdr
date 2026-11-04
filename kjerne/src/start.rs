@@ -10,6 +10,7 @@
 use std::io;
 use std::path::Path;
 
+use crate::kontroll::sitat;
 use crate::{paner, tmux};
 
 /// Punktum og kolon er skilletegn i tmux-targets, og tmux bytter dem ut selv.
@@ -28,12 +29,30 @@ pub fn nummerert(navn: &str, forsøk: u32) -> String {
     if forsøk <= 1 { navn.into() } else { format!("{navn}-{forsøk}") }
 }
 
-/// Det som skrives inn: en ny samtale, eller en tidligere som fortsettes.
-pub fn claude(samtale: Option<&str>) -> String {
-    match samtale {
-        Some(id) => format!("claude --resume {id}"),
-        None => "claude".into(),
+/// Hvordan Claude startes. Uten noe er det en ny samtale uten navn.
+#[derive(Clone, Copy, Default)]
+pub struct Valg<'a> {
+    /// En tidligere samtale som fortsettes.
+    pub samtale: Option<&'a str>,
+    pub navn: Option<&'a str>,
+    /// Den første meldingen.
+    pub prompt: Option<&'a str>,
+}
+
+/// Det som skrives inn i skallet. Navnet og prompten står i enkle
+/// anførselstegn, så skallet ikke tolker noe i dem.
+pub fn claude(valg: Valg) -> String {
+    let mut ut = String::from("claude");
+    if let Some(id) = valg.samtale {
+        ut += &format!(" --resume {id}");
     }
+    if let Some(navn) = valg.navn {
+        ut += &format!(" -n {}", sitat(navn));
+    }
+    if let Some(prompt) = valg.prompt {
+        ut += &format!(" {}", sitat(prompt));
+    }
+    ut
 }
 
 /// Svarer med pane-id-en, eller med en feil når sesjonen finnes.
@@ -57,7 +76,7 @@ pub fn skriv_inn(pane: &str, claude: &str) -> [Vec<String>; 2] {
 
 /// Starter Claude med enkeltstående tmux-kommandoer, og gir sesjonsnavnet og
 /// pane-id-en.
-pub fn start(socket: Option<&str>, mappe: &Path, samtale: Option<&str>) -> io::Result<(String, String)> {
+pub fn start(socket: Option<&str>, mappe: &Path, valg: Valg) -> io::Result<(String, String)> {
     let mappenavn = sesjonsnavn(mappe);
     let mut forsøk = 1;
     let (navn, pane) = loop {
@@ -69,7 +88,7 @@ pub fn start(socket: Option<&str>, mappe: &Path, samtale: Option<&str>) -> io::R
         }
     };
     tmux::kjør(socket, &merk(&pane))?;
-    for kommando in skriv_inn(&pane, &claude(samtale)) {
+    for kommando in skriv_inn(&pane, &claude(valg)) {
         tmux::kjør(socket, &kommando)?;
     }
     Ok((navn, pane))
@@ -84,6 +103,27 @@ mod tester {
         assert_eq!(sesjonsnavn(Path::new("/h/git/nit.æ")), "nit-æ");
         assert_eq!(sesjonsnavn(Path::new("/h/git/a:b")), "a-b");
         assert_eq!(sesjonsnavn(Path::new("/")), "claude");
+    }
+
+    /// Kjører kommandoen i `sh` med `printf` i stedet for `claude`, og gir
+    /// argumentene slik `claude` ville fått dem.
+    fn argumenter(kommando: &str) -> Vec<String> {
+        let kommando = kommando.replacen("claude", r"printf '%s\0'", 1);
+        let ut = std::process::Command::new("sh").args(["-c", &kommando]).output().unwrap();
+        String::from_utf8(ut.stdout).unwrap().split_terminator('\0').map(String::from).collect()
+    }
+
+    #[test]
+    fn navn_og_prompt_kommer_fram_som_de_er() {
+        let prompt = "it's $HOME, `ls` og \"to\"\nlinjer \\ ! *";
+        let kommando = claude(Valg { navn: Some("ticket 11 postadresse"), prompt: Some(prompt), ..Valg::default() });
+        assert_eq!(argumenter(&kommando), ["-n", "ticket 11 postadresse", prompt]);
+    }
+
+    #[test]
+    fn en_tidligere_samtale_fortsettes_med_resume() {
+        assert_eq!(claude(Valg::default()), "claude");
+        assert_eq!(claude(Valg { samtale: Some("abc-123"), ..Valg::default() }), "claude --resume abc-123");
     }
 
     #[test]

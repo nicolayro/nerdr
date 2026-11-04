@@ -107,7 +107,8 @@ pub fn samtaler(som_json: bool) -> io::Result<()> {
 }
 
 /// Uten `mappe` fortsettes samtalen i mappa den hørte til.
-pub fn ny(socket: Option<&str>, mappe: Option<&str>, fortsett: Option<&str>, som_json: bool) -> io::Result<()> {
+pub fn ny(socket: Option<&str>, mappe: Option<&str>, valg: start::Valg, som_json: bool) -> io::Result<()> {
+    let fortsett = valg.samtale;
     if let Some(id) = fortsett.filter(|id| !samtaler::gyldig_id(id)) {
         return Err(io::Error::other(format!("{id} er ikke en id for en samtale")));
     }
@@ -130,9 +131,9 @@ pub fn ny(socket: Option<&str>, mappe: Option<&str>, fortsett: Option<&str>, som
         return Err(io::Error::other(format!("{} er ikke en mappe", mappe.display())));
     }
 
-    let (sesjon, pane) = start::start(socket, &mappe, fortsett)?;
+    let (sesjon, pane) = start::start(socket, &mappe, valg)?;
     skriv(&if som_json {
-        format!("{}\n", json!({ "versjon": VERSJON, "sesjon": sesjon, "pane": pane, "mappe": mappe }))
+        format!("{}\n", json!({ "versjon": VERSJON, "sesjon": sesjon, "pane": pane, "mappe": mappe, "navn": valg.navn }))
     } else {
         format!("Startet Claude i {} ({pane}, tmux-sesjonen {sesjon}).\n", mappe.display())
     })

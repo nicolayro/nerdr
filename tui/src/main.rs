@@ -310,20 +310,29 @@ struct App {
 
 fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
-    let (Some(socket), Some(fortsett)) = (ta_verdi(&mut args, "-L"), ta_verdi(&mut args, "--fortsett")) else {
+    let prompt = args.iter().position(|a| a == "--").map(|i| args.split_off(i)[1..].join(" "));
+    let (Some(socket), Some(fortsett), Some(navn)) =
+        (ta_verdi(&mut args, "-L"), ta_verdi(&mut args, "--fortsett"), ta_verdi(&mut args, "--navn"))
+    else {
         bruk();
     };
     let json = ta_flagg(&mut args, "--json");
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    let (socket, fortsett) = (socket.as_deref(), fortsett.as_deref());
+    let socket = socket.as_deref();
+    let valg = start::Valg {
+        samtale: fortsett.as_deref(),
+        navn: navn.as_deref().filter(|n| !n.is_empty()),
+        prompt: prompt.as_deref().filter(|p| !p.is_empty()),
+    };
+    let flagg_for_ny = fortsett.is_some() || navn.is_some() || prompt.is_some();
 
     let res = match args.as_slice() {
-        [] if !json && fortsett.is_none() => kjør(socket),
-        ["liste"] if fortsett.is_none() => kommandoer::liste(socket, json),
-        ["samtaler"] if fortsett.is_none() => kommandoer::samtaler(json),
-        ["forklar"] if !json && fortsett.is_none() => kommandoer::skriv(&forklar::tekst(socket)),
-        ["ny"] if fortsett.is_some() => kommandoer::ny(socket, None, fortsett, json),
-        ["ny", mappe] => kommandoer::ny(socket, Some(mappe), fortsett, json),
+        [] if !json && !flagg_for_ny => kjør(socket),
+        ["liste"] if !flagg_for_ny => kommandoer::liste(socket, json),
+        ["samtaler"] if !flagg_for_ny => kommandoer::samtaler(json),
+        ["forklar"] if !json && !flagg_for_ny => kommandoer::skriv(&forklar::tekst(socket)),
+        ["ny"] if valg.samtale.is_some() => kommandoer::ny(socket, None, valg, json),
+        ["ny", mappe] => kommandoer::ny(socket, Some(mappe), valg, json),
         ["-h" | "--help"] => {
             print!("{}", hjelp::tekst());
             Ok(())
@@ -342,7 +351,8 @@ fn main() {
 
 fn bruk() -> ! {
     eprintln!(
-        "bruk: nerdr [liste | samtaler | ny <mappe> | ny --fortsett <id> [mappe] | forklar] [--json] [-L socket], eller nerdr --help"
+        "bruk: nerdr [liste | samtaler | ny <mappe> | ny --fortsett <id> [mappe] | forklar] [--json] [-L socket], eller nerdr --help\n      \
+         nerdr ny tar også --navn <navn> og -- <prompt>"
     );
     std::process::exit(2);
 }
@@ -1080,7 +1090,7 @@ impl App {
     /// kommer som en melding.
     fn start_claude(&mut self, mappe: PathBuf, samtale: Option<&str>) {
         let navn = start::sesjonsnavn(&mappe);
-        let claude_kommando = start::claude(samtale);
+        let claude_kommando = start::claude(start::Valg { samtale, ..start::Valg::default() });
         self.send(&tmux::linje(&start::ny_sesjon(&navn, &mappe)), Svar::NySesjon { navn, forsøk: 1, mappe, claude_kommando });
     }
 

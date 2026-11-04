@@ -119,7 +119,9 @@ pub fn tekst() -> String {
          nerdr liste [--json]              Claude-ene i tmux, med tilstand og pane\n       \
          nerdr samtaler [--json]           tidligere samtaler, nyest først, med id\n       \
          nerdr ny <mappe> [--json]         start en Claude i mappa\n       \
-         nerdr ny --fortsett <id> [mappe]  fortsett en samtale, i mappa den hørte til\n\n  \
+         nerdr ny --fortsett <id> [mappe]  fortsett en samtale, i mappa den hørte til\n       \
+         nerdr ny … --navn <navn>          med et navn, som claude -n\n       \
+         nerdr ny … -- <prompt>            med den første meldingen\n\n  \
          -L socket      tmux-serveren, som tmux -L\n  \
          --json         JSON i stedet for tekst, med et versjonsfelt\n  \
          -h, --help     denne hjelpen\n  \

@@ -710,6 +710,10 @@ sjekk "og merker sesjonen" er 1 maal show-options -t tredje -qv @nerdr-sesjon
 ut=$(nerdr -L "$MAAL" ny --fortsett abc-123 --json)
 sjekk "nerdr ny --fortsett finner mappa annet, og lager annet-2 når annet finnes" inneholder "$ut" '"sesjon":"annet-2"'
 sjekk "med claude --resume" i_pane annet-2 'claude --resume abc-123'
+ut=$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje" --json --navn 'ticket 11' -- "it's" '$HOME')
+sjekk "nerdr ny --navn har navnet i JSON" inneholder "$ut" '"navn":"ticket 11"'
+sjekk "og claude får navnet med -n" i_pane tredje-2 'argument: ticket 11'
+sjekk "og prompten etter -- som ett argument, uten at skallet tolker den" i_pane tredje-2 "argument: it's \$HOME"
 
 registrer tredje tredje busy ',"sessionId":"abc-123"'
 sjekk "en samtale som kjører, startes ikke en gang til" inneholder "$(nerdr -L "$MAAL" ny --fortsett abc-123)" 'samtalen abc-123 kjører alt'

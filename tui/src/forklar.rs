@@ -127,7 +127,8 @@ Merkene i agentlista:
 ## Det du kan gjøre selv
 
 - `nerdr ny <mappe>` starter en Claude i mappa, som «+ ny sesjon», og brukeren
-  ser den i agentlista med en gang.
+  ser den i agentlista med en gang. `--navn \"<navn>\" -- \"<prompt>\"` gir den et
+  navn i agentlista og oppgaven som første melding.
 - `nerdr samtaler` viser tidligere samtaler med id, og `nerdr ny --fortsett <id>`
   fortsetter én i mappa den hørte til.
 - `nerdr liste --json` viser Claude-ene. `merke` er `spør` når en spør om noe,
