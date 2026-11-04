@@ -114,7 +114,7 @@ struct Lukke {
 }
 
 /// Om tastene går til lista eller til den aktive panen i vinduet som vises.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Fokus {
     Liste,
     Pane,
@@ -346,6 +346,22 @@ fn main() {
     if let Err(feil) = res {
         eprintln!("nerdr: {}", uten_tmux(feil));
         std::process::exit(1);
+    }
+}
+
+fn logg(tekst: &str) {
+    use std::io::Write;
+    use std::sync::{Mutex, OnceLock};
+    static FIL: OnceLock<Option<Mutex<std::fs::File>>> = OnceLock::new();
+    if tekst.starts_with("send capture-pane") {
+        return;
+    }
+    let fil = FIL.get_or_init(|| {
+        let sti = env::var("NERDR_LOGG").ok()?;
+        std::fs::OpenOptions::new().create(true).append(true).open(sti).ok().map(Mutex::new)
+    });
+    if let Some(Ok(mut f)) = fil.as_ref().map(|f| f.lock()) {
+        let _ = writeln!(f, "{} {tekst}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() % 100000);
     }
 }
 
@@ -639,6 +655,7 @@ impl App {
     }
 
     fn send(&mut self, kommando: &str, svar: Svar) {
+        logg(&format!("send {kommando}"));
         match self.kontroll.send(kommando) {
             Ok(()) => {
                 self.kø.push_back(svar);
@@ -737,6 +754,7 @@ impl App {
                 self.claude = register::les(&self.konfig.join("sessions"));
                 self.forlatt = None;
                 let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
+                logg(&format!("paner aktivert={aktivert:?} {:?}", alle.iter().filter(|p| p.sesjon == "alfa").map(|p| (p.id.clone(), p.aktiv)).collect::<Vec<_>>()));
                 let tom = !alle.iter().any(|p| self.claude.contains_key(&p.id));
                 self.utenfor_tmux = if tom { register::utenfor_tmux(&self.konfig.join("sessions")) } else { 0 };
                 self.husk_sett(&alle);
@@ -1274,6 +1292,7 @@ impl App {
     }
 
     fn tast(&mut self, k: KeyEvent) -> bool {
+        logg(&format!("tast {:?} fokus={:?} etter_prefiks={} aktiv={:?} vindu={:?}", k.code, self.fokus, self.etter_prefiks, self.aktiv().map(|p| p.id.clone()), self.vindu.iter().map(|p| (p.id.clone(), p.aktiv)).collect::<Vec<_>>()));
         if self.hjelp.is_some() {
             let steg = match k.code {
                 KeyCode::Up | KeyCode::Char('k') => -1,

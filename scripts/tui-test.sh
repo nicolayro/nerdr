@@ -40,6 +40,7 @@ sjekk() {
       echo "FEIL i sjekk $antall: $hva"
       echo "  ($*)"
       skjerm | sed 's/^/  │/'
+      sed -n '/=== o x/,$p' "$KONFIG/logg" | head -80
       exit 1
     fi
     sleep 0.05
@@ -181,7 +182,7 @@ maal set -g @nerdr-utseende paner=bokser
 # Fargene vertsserveren svarer nerdr med, så testen ser at panene får dem.
 vert -f /dev/null start-server \; set -g window-style 'fg=#d0d1d2,bg=#0a0b0c' \; \
   new-session -d -s vert -x 110 -y 20 \
-  "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
+  "HOME=$KONFIG NERDR_LOGG=$KONFIG/logg PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
 sjekk "paner=bokser fra tmux gir bokser, med versjonen og hjelp øverst i agentlista" linje_har 1 '^ nerdr [0-9].* \? hjelp │╭─+╮$'
 sjekk "så ny sesjon og sorteringen, høyrestilt" linje_har 2 '^ \+ ny sesjon +prioritert ││'
@@ -515,12 +516,8 @@ dump() {
   maal list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_id} aktiv=#{pane_active} #{pane_current_command} #{pane_title}'
   skjerm | head -10
 }
-tast C-b o
-sleep 0.5
-dump "etter o"
-tast C-b x
-sleep 1
-dump "etter x"
+echo "=== o x" >> "$KONFIG/logg"
+tast C-b o C-b x
 sjekk "C-b x lukker panen uten å spørre" linjer 1 maal list-panes -t alfa:0
 
 tast C-b '"'
