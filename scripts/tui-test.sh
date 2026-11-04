@@ -515,10 +515,12 @@ dump() {
   maal list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_id} aktiv=#{pane_active} #{pane_current_command} #{pane_title}'
   skjerm | head -10
 }
-dump "før o x"
-tast C-b o C-b x
+tast C-b o
+sleep 0.5
+dump "etter o"
+tast C-b x
 sleep 1
-dump "etter o x"
+dump "etter x"
 sjekk "C-b x lukker panen uten å spørre" linjer 1 maal list-panes -t alfa:0
 
 tast C-b '"'
