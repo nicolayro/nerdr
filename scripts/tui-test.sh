@@ -482,9 +482,11 @@ sjekk "C-b o gjør Claude-en aktiv igjen" er 0 pane_indeks
 tast C-b z
 sjekk "C-b z zoomer inn" er 1 zoom
 sjekk "med zoom vises bare én boks" mangler '┴'
+sjekk "fanen viser zoomen" har ' Z ×'
 tast C-b z
 sjekk "C-b z igjen zoomer ut" er 0 zoom
 sjekk "begge boksene er tilbake" har '╰─+┴─+╯'
+sjekk "uten zoom står det ikke på fanen" mangler ' Z ×'
 
 tast C-b :
 sjekk "C-b : fra panen åpner handlingene" har '⏎ kjør · klikk · esc lukk'

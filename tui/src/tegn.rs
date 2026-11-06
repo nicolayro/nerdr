@@ -740,6 +740,7 @@ struct Fane {
     vindu: String,
     vist: bool,
     ikon: Ikon,
+    zoomet: bool,
 }
 
 /// Tegnet foran navnet på fanen, og kolonnene til navnet.
@@ -778,15 +779,19 @@ impl Fane {
     }
 }
 
+/// Etter navnet på fanen, som i statuslinja til tmux.
+const ZOOM: &str = " Z";
+
 fn faner(app: &App) -> Vec<Fane> {
     let mut x = fanerom(app).start;
     let mut ut = Vec::new();
     for p in app.faner() {
         let navn = kutt(&p.vindunavn, 20);
         let ikon = ikon(app, p);
-        let til = x + 1 + ikon.bredde + navn.chars().count() as u16 + FANELUFT;
+        let zoom = if p.zoomet { ZOOM.len() as u16 } else { 0 };
+        let til = x + 1 + ikon.bredde + navn.chars().count() as u16 + zoom + FANELUFT;
         let vist = app.vist.as_ref() == Some(&p.vindu_id);
-        ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist, ikon });
+        ut.push(Fane { fra: x, til, navn, vindu: p.vindu_id.clone(), vist, ikon, zoomet: p.zoomet });
         x = til;
     }
     ut
@@ -854,6 +859,10 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
         buf.set_style(Rect::new(f.fra, rad, f.til - f.fra, 1), lapp);
         buf.set_string(f.fra + 1, rad, &f.ikon.tegn, lapp.patch(f.ikon.stil));
         buf.set_string(f.fra + 1 + f.ikon.bredde, rad, &f.navn, lapp.patch(tekst));
+        if f.zoomet {
+            let x = f.fra + 1 + f.ikon.bredde + f.navn.chars().count() as u16;
+            buf.set_string(x, rad, ZOOM, lapp.patch(tekst));
+        }
         if pekt || f.vist {
             let kryss = match på_kryss {
                 true => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),

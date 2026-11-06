@@ -7,7 +7,7 @@ pub const FELT: &str = "#{session_id}\t#{session_name}\t#{window_id}\t#{window_i
 #{pane_id}\t#{pane_title}\t\
 #{window_width}\t#{window_height}\t#{pane_width}\t#{pane_height}\t\
 #{pane_left}\t#{pane_top}\t#{pane_active}\t#{window_visible_layout}\t#{window_active}\t#{window_name}\t\
-#{@nerdr-sett}\t#{pane_current_command}\t#{@nerdr-sesjon}\t#{pane_current_path}";
+#{@nerdr-sett}\t#{pane_current_command}\t#{@nerdr-sesjon}\t#{window_zoomed_flag}\t#{pane_current_path}";
 
 /// Pane-optionen der nerdr skriver når du sist var inne i panen. Den lever like
 /// lenge som panen, så nerdr trenger ingen fil for å huske den. Må stemme med
@@ -50,14 +50,16 @@ pub struct Pane {
     pub kommando: String,
     /// Sesjonen er laget av nerdr.
     pub fra_nerdr: bool,
+    /// Én pane i vinduet er zoomet, og de andre er skjult.
+    pub zoomet: bool,
     pub mappe: PathBuf,
 }
 
 impl Pane {
     pub fn fra_linje(linje: &str) -> Option<Pane> {
         // Mappa står sist, så en tab i den blir med.
-        let f: Vec<&str> = linje.splitn(20, '\t').collect();
-        let [sesjon_id, sesjon, vindu_id, vindu, id, tittel, vb, vh, b, h, x, y, aktiv, oppsett, vindu_aktiv, vindunavn, sett, kommando, fra_nerdr, mappe] =
+        let f: Vec<&str> = linje.splitn(21, '\t').collect();
+        let [sesjon_id, sesjon, vindu_id, vindu, id, tittel, vb, vh, b, h, x, y, aktiv, oppsett, vindu_aktiv, vindunavn, sett, kommando, fra_nerdr, zoomet, mappe] =
             f.as_slice()
         else {
             return None;
@@ -82,6 +84,7 @@ impl Pane {
             sett: sett.parse().ok(),
             kommando: kommando.to_string(),
             fra_nerdr: *fra_nerdr == "1",
+            zoomet: *zoomet == "1",
             mappe: PathBuf::from(mappe),
         })
     }
@@ -108,18 +111,18 @@ mod tester {
 
     #[test]
     fn leser_list_panes_linje() {
-        let p = Pane::fra_linje("$0\tmain\t@0\t0\t%0\t✳ Fiks\t176\t38\t140\t38\t36\t0\t1\tb25d,176x38,0,0,0\t1\tzsh\t17\tnvim\t1\t/h/git/med\ttab").unwrap();
+        let p = Pane::fra_linje("$0\tmain\t@0\t0\t%0\t✳ Fiks\t176\t38\t140\t38\t36\t0\t1\tb25d,176x38,0,0,0\t1\tzsh\t17\tnvim\t1\t1\t/h/git/med\ttab").unwrap();
         assert_eq!((p.id.as_str(), p.bredde, p.vindu_bredde), ("%0", 140, 176));
         assert_eq!((p.venstre, p.aktiv, p.oppsett.as_str()), (36, true, "b25d,176x38,0,0,0"));
         assert_eq!((p.vindu_aktiv, p.vindunavn.as_str(), p.sett), (true, "zsh", Some(17)));
-        assert_eq!((p.kommando.as_str(), p.fra_nerdr), ("nvim", true));
+        assert_eq!((p.kommando.as_str(), p.fra_nerdr, p.zoomet), ("nvim", true, true));
         assert_eq!(p.mappe, PathBuf::from("/h/git/med\ttab"));
         assert_eq!(Pane::fra_linje("for\tfå"), None);
     }
 
     #[test]
     fn oppgave_er_tittelen_etter_tegnet_til_claude() {
-        let med = |tittel: &str| Pane { tittel: tittel.into(), ..Pane::fra_linje("$0\ts\t@0\t0\t%0\t\t1\t1\t1\t1\t0\t0\t1\t\t1\t\t\t\t\t").unwrap() };
+        let med = |tittel: &str| Pane { tittel: tittel.into(), ..Pane::fra_linje("$0\ts\t@0\t0\t%0\t\t1\t1\t1\t1\t0\t0\t1\t\t1\t\t\t\t\t\t").unwrap() };
         assert_eq!(med("✳ Fiks testene").oppgave(), Some("Fiks testene"));
         assert_eq!(med("⠐ Fiks testene").oppgave(), Some("Fiks testene"));
         assert_eq!(med("min-maskin.local").oppgave(), None);
@@ -128,7 +131,7 @@ mod tester {
 
     #[test]
     fn skall_også_når_det_er_et_innloggingsskall() {
-        let med = |kommando: &str| Pane { kommando: kommando.into(), ..Pane::fra_linje("$0\ts\t@0\t0\t%0\t\t1\t1\t1\t1\t0\t0\t1\t\t1\t\t\t\t\t").unwrap() };
+        let med = |kommando: &str| Pane { kommando: kommando.into(), ..Pane::fra_linje("$0\ts\t@0\t0\t%0\t\t1\t1\t1\t1\t0\t0\t1\t\t1\t\t\t\t\t\t").unwrap() };
         assert!(med("zsh").bare_skall() && med("-zsh").bare_skall());
         assert!(!med("nvim").bare_skall() && !med("claude").bare_skall());
     }
