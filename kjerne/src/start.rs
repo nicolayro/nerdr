@@ -7,11 +7,28 @@
 //! går den gjennom `sh -c` eller `zsh -c`, som ikke leser skallets
 //! oppstartsfil, og en `claude`-funksjon der ville blitt hoppet over.
 
-use std::io;
-use std::path::Path;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+use std::{env, fs, io};
 
 use crate::kontroll::sitat;
 use crate::{paner, tmux};
+
+/// Alltid den samme mappa, så Claude Code bare spør første gang om du stoler
+/// på den, og samtalene står samlet.
+pub fn chatmappe() -> io::Result<PathBuf> {
+    let mappe = chatmappe_i(env::var_os("XDG_DATA_HOME"), env::var_os("HOME"))
+        .ok_or_else(|| io::Error::other("fant ikke hjemmemappa"))?;
+    fs::create_dir_all(&mappe)?;
+    Ok(mappe)
+}
+
+/// En relativ `XDG_DATA_HOME` er ugyldig etter spesifikasjonen.
+fn chatmappe_i(xdg: Option<OsString>, hjem: Option<OsString>) -> Option<PathBuf> {
+    let data = xdg.map(PathBuf::from).filter(|p| p.is_absolute());
+    let data = data.or_else(|| hjem.filter(|h| !h.is_empty()).map(|h| PathBuf::from(h).join(".local/share")))?;
+    Some(data.join("nerdr/chat"))
+}
 
 /// Punktum og kolon er skilletegn i tmux-targets, og tmux bytter dem ut selv.
 /// Da ville navnet ikke funnet sesjonen igjen.
@@ -124,6 +141,16 @@ mod tester {
     fn en_tidligere_samtale_fortsettes_med_resume() {
         assert_eq!(claude(Valg::default()), "claude");
         assert_eq!(claude(Valg { samtale: Some("abc-123"), ..Valg::default() }), "claude --resume abc-123");
+    }
+
+    #[test]
+    fn chatmappa_er_under_xdg_data_home_ellers_under_hjemmemappa() {
+        let s = |s: &str| Some(OsString::from(s));
+        assert_eq!(chatmappe_i(s("/data"), s("/h")), Some(PathBuf::from("/data/nerdr/chat")));
+        assert_eq!(chatmappe_i(None, s("/h")), Some(PathBuf::from("/h/.local/share/nerdr/chat")));
+        assert_eq!(chatmappe_i(s("relativ"), s("/h")), Some(PathBuf::from("/h/.local/share/nerdr/chat")));
+        assert_eq!(chatmappe_i(None, s("")), None);
+        assert_eq!(sesjonsnavn(&chatmappe_i(None, s("/h")).unwrap()), "chat");
     }
 
     #[test]

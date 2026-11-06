@@ -21,9 +21,10 @@ pub const TASTER: [(&str, &str); 6] = [
 ];
 
 /// Etter prefikset, fra lista og fra panen.
-pub const PREFIKSTASTER: [(&str, &str); 27] = [
+pub const PREFIKSTASTER: [(&str, &str); 28] = [
     (":", "handlinger: alt nerdr kan gjøre"),
     ("f", "ny sesjon"),
+    ("F", "ny chat, uten prosjekt"),
     ("r", "hent samtale"),
     ("c", "ny terminal"),
     ("n p", "neste og forrige vindu"),
@@ -120,6 +121,7 @@ pub fn tekst() -> String {
          nerdr liste [--json]              Claude-ene i tmux, med tilstand og pane\n       \
          nerdr samtaler [--json]           tidligere samtaler, nyest først, med id\n       \
          nerdr ny <mappe> [--json]         start en Claude i mappa\n       \
+         nerdr ny --chat                   start en Claude uten prosjekt\n       \
          nerdr ny --fortsett <id> [mappe]  fortsett en samtale, i mappa den hørte til\n       \
          nerdr ny … --navn <navn>          med et navn, som claude -n\n       \
          nerdr ny … -- <prompt>            med den første meldingen\n\n  \

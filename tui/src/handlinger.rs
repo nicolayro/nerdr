@@ -22,8 +22,9 @@ pub struct Oppføring {
 }
 
 /// Rekkefølgen er den lista har uten søk, med det du oftest trenger først.
-const PREFIKSTASTER: [(KeyCode, bool, &str); 25] = [
+const PREFIKSTASTER: [(KeyCode, bool, &str); 26] = [
     (KeyCode::Char('f'), false, "ny sesjon"),
+    (KeyCode::Char('F'), false, "ny chat"),
     (KeyCode::Char('r'), false, "hent samtale"),
     (KeyCode::Char('c'), false, "ny terminal"),
     (KeyCode::Char('%'), false, "del side om side"),

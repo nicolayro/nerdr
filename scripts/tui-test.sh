@@ -102,7 +102,7 @@ linja_med() { skjerm | grep -n -- "$1" | head -1 | cut -d: -f1; }
 # Tastene går til lista når nerdr ikke viser markøren til panen.
 i_lista() { er 0 vert display-message -p -t vert '#{cursor_flag}'; }
 i_panen() { er 1 vert display-message -p -t vert '#{cursor_flag}'; }
-nerdr() { CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
+nerdr() { XDG_DATA_HOME=$KONFIG/data CLAUDE_CONFIG_DIR=$KONFIG "$NERDR" "$@" 2>&1; }
 gruppert() { nerdr -L "$MAAL" liste | awk 'NF == 1 { printf "%s: ", $1 } NF > 1 { printf "%s %s, ", $1, $3 }'; }
 fra_json() { nerdr -L "$MAAL" liste --json | grep -o "\"$1\":\"[a-zæøå]*\"" | cut -d'"' -f4 | tr '\n' ' '; }
 sett_i_json() { nerdr -L "$MAAL" liste --json | grep -o '"sett":[0-9]' | wc -l | tr -d ' '; }
@@ -182,7 +182,7 @@ maal set -g @nerdr-utseende paner=bokser
 # Fargene vertsserveren svarer nerdr med, så testen ser at panene får dem.
 vert -f /dev/null start-server \; set -g window-style 'fg=#d0d1d2,bg=#0a0b0c' \; \
   new-session -d -s vert -x 110 -y 20 \
-  "HOME=$KONFIG PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
+  "HOME=$KONFIG XDG_DATA_HOME=$KONFIG/data PATH=$KONFIG/bin:$PATH NERDR_MAPPER=~/git:$KONFIG/kode CLAUDE_CONFIG_DIR=$KONFIG $NERDR -L $MAAL; sleep 30"
 
 sjekk "paner=bokser fra tmux gir bokser, med versjonen og hjelp øverst i agentlista" linje_har 1 '^ nerdr [0-9].* \? hjelp │╭─+╮$'
 sjekk "så ny sesjon og sorteringen, høyrestilt" linje_har 2 '^ \+ ny sesjon +prioritert ││'
@@ -696,6 +696,10 @@ tast -l "$(printf '\033[I')"
 sjekk "med fokus teller den igjen" med_storrelse
 sjekk "og vinduet har fortsatt størrelsen til nerdr" er 70x16 dimensjon alfa
 
+tast C-b F
+sjekk "C-b F starter en chat uten velgeren" i_pane chat claude
+sjekk "i en mappe for chat, som lages" er "$(cd "$KONFIG/data/nerdr/chat" && pwd -P)" mapper chat
+
 klikk_paa 'lukk nerdr'
 sjekk "klikk på «lukk nerdr» avslutter" uten_klienter
 
@@ -726,6 +730,9 @@ ut=$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje" --json --navn 'ticket 11' -- "it'
 sjekk "nerdr ny --navn har navnet i JSON" inneholder "$ut" '"navn":"ticket 11"'
 sjekk "og claude får navnet med -n" i_pane tredje-2 'argument: ticket 11'
 sjekk "og prompten etter -- som ett argument, uten at skallet tolker den" i_pane tredje-2 "argument: it's \$HOME"
+ut=$(nerdr -L "$MAAL" ny --chat --json)
+sjekk "nerdr ny --chat bruker samme mappe som C-b F, og lager chat-2" inneholder "$ut" '"sesjon":"chat-2"'
+sjekk "--chat sammen med en mappe gir bruken" inneholder "$(nerdr -L "$MAAL" ny "$KONFIG/kode/tredje" --chat)" 'bruk: nerdr'
 
 registrer tredje tredje busy ',"sessionId":"abc-123"'
 sjekk "en samtale som kjører, startes ikke en gang til" inneholder "$(nerdr -L "$MAAL" ny --fortsett abc-123)" 'samtalen abc-123 kjører alt'

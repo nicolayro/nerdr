@@ -21,8 +21,9 @@ use Tast::{Egen, Prefiks as P};
 
 /// Det brukeren vil, med musen og med tastaturet. Musen står først, for de
 /// fleste kan ikke tmux.
-const OFTEST: [(&str, &str, &[Tast]); 18] = [
+const OFTEST: [(&str, &str, &[Tast]); 19] = [
     ("Starte en ny Claude", "«+ ny sesjon» øverst i agentlista, søk fram mappa og trykk ⏎", &[P("f")]),
+    ("Spørre om noe uten et prosjekt", "", &[P("F")]),
     ("Fortsette en tidligere samtale", "", &[P("r")]),
     ("Se på en Claude", "klikk på kortet i agentlista", &[Egen("↑"), Egen("↓")]),
     ("Gå inn og skrive", "klikk på kortet, eller i Claude-en til høyre", &[Egen("⏎")]),
@@ -129,7 +130,8 @@ Merkene i agentlista:
 
 - `nerdr ny <mappe>` starter en Claude i mappa, som «+ ny sesjon», og brukeren
   ser den i agentlista med en gang. `--navn \"<navn>\" -- \"<prompt>\"` gir den et
-  navn i agentlista og oppgaven som første melding.
+  navn i agentlista og oppgaven som første melding. `nerdr ny --chat` starter
+  en Claude uten prosjekt, i en egen mappe for chat.
 - `nerdr samtaler` viser tidligere samtaler med id, og `nerdr ny --fortsett <id>`
   fortsetter én i mappa den hørte til.
 - `nerdr liste --json` viser Claude-ene. `merke` er `spør` når en spør om noe,

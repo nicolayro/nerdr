@@ -139,6 +139,11 @@ pub fn ny(socket: Option<&str>, mappe: Option<&str>, valg: start::Valg, som_json
     })
 }
 
+pub fn ny_chat(socket: Option<&str>, valg: start::Valg, som_json: bool) -> io::Result<()> {
+    let mappe = start::chatmappe().map_err(|feil| io::Error::other(format!("fikk ikke laget mappa for chat: {feil}")))?;
+    ny(socket, Some(&mappe.to_string_lossy()), valg, som_json)
+}
+
 /// `println!` får panikk når den som leser, lukker, som `nerdr samtaler | head`.
 pub fn skriv(tekst: &str) -> io::Result<()> {
     match io::stdout().lock().write_all(tekst.as_bytes()) {

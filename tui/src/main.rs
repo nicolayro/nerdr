@@ -317,6 +317,7 @@ fn main() {
         bruk();
     };
     let json = ta_flagg(&mut args, "--json");
+    let chat = ta_flagg(&mut args, "--chat");
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let socket = socket.as_deref();
     let valg = start::Valg {
@@ -324,15 +325,16 @@ fn main() {
         navn: navn.as_deref().filter(|n| !n.is_empty()),
         prompt: prompt.as_deref().filter(|p| !p.is_empty()),
     };
-    let flagg_for_ny = fortsett.is_some() || navn.is_some() || prompt.is_some();
+    let flagg_for_ny = fortsett.is_some() || navn.is_some() || prompt.is_some() || chat;
 
     let res = match args.as_slice() {
         [] if !json && !flagg_for_ny => kjør(socket),
         ["liste"] if !flagg_for_ny => kommandoer::liste(socket, json),
         ["samtaler"] if !flagg_for_ny => kommandoer::samtaler(json),
         ["forklar"] if !json && !flagg_for_ny => kommandoer::skriv(&forklar::tekst(socket)),
-        ["ny"] if valg.samtale.is_some() => kommandoer::ny(socket, None, valg, json),
-        ["ny", mappe] => kommandoer::ny(socket, Some(mappe), valg, json),
+        ["ny"] if chat && valg.samtale.is_none() => kommandoer::ny_chat(socket, valg, json),
+        ["ny"] if valg.samtale.is_some() && !chat => kommandoer::ny(socket, None, valg, json),
+        ["ny", mappe] if !chat => kommandoer::ny(socket, Some(mappe), valg, json),
         ["-h" | "--help"] => {
             print!("{}", hjelp::tekst());
             Ok(())
@@ -351,7 +353,7 @@ fn main() {
 
 fn bruk() -> ! {
     eprintln!(
-        "bruk: nerdr [liste | samtaler | ny <mappe> | ny --fortsett <id> [mappe] | forklar] [--json] [-L socket], eller nerdr --help\n      \
+        "bruk: nerdr [liste | samtaler | ny <mappe> | ny --chat | ny --fortsett <id> [mappe] | forklar] [--json] [-L socket], eller nerdr --help\n      \
          nerdr ny tar også --navn <navn> og -- <prompt>"
     );
     std::process::exit(2);
@@ -967,6 +969,7 @@ impl App {
             }
             KeyCode::Char('?') => return self.hjelp = Some(0),
             KeyCode::Char(c @ ('f' | 'r')) if !ctrl => return self.ny_sesjon(c == 'r'),
+            KeyCode::Char('F') if !ctrl => return self.ny_chat(),
             KeyCode::Char(':') => return self.åpne_handlinger(),
             KeyCode::Char('[') => return self.start_kopimodus(),
             _ => {}
@@ -1529,6 +1532,16 @@ impl App {
     fn ny_sesjon(&mut self, fortsett: bool) {
         self.bytt_fokus(Fokus::Liste);
         self.åpne_velger(fortsett);
+    }
+
+    fn ny_chat(&mut self) {
+        match start::chatmappe() {
+            Ok(mappe) => {
+                self.bytt_fokus(Fokus::Liste);
+                self.start_claude(mappe, None);
+            }
+            Err(feil) => self.beskjed = Some((format!("fikk ikke laget mappa for chat: {feil}"), Instant::now())),
+        }
     }
 
     /// Det tar sekunder å lese alle mappene i `$HOME`, så velgeren åpner med

@@ -145,6 +145,7 @@ virker både fra agentlista og fra panen:
 | --- | --- |
 | `:` | Handlinger: alt nerdr kan gjøre, søkbart |
 | `f` | Ny sesjon |
+| `F` | Ny chat, uten prosjekt |
 | `r` | Hent en tidligere samtale |
 | `c` | Ny terminal, i mappa til panen |
 | `n` `p` | Neste og forrige vindu |
@@ -175,7 +176,7 @@ Bindingene etter prefikset i `.tmux.conf` gjelder også i nerdr, som
 `bind | split-window -h`, og tastene med `-r` kan trykkes igjen uten
 prefikset. Kommandoer som trenger et skjermbilde fra tmux, som `display-popup`,
 `command-prompt` og `copy-mode`, virker ikke, og da gjør tasten det den gjør i
-nerdr. `f`, `r`, `w`, `s`, `b`, `u`, `d`, `?`, `:`, `(` og `)` er alltid nerdr sine.
+nerdr. `f`, `F`, `r`, `w`, `s`, `b`, `u`, `d`, `?`, `:`, `(` og `)` er alltid nerdr sine.
 Hjelpen og handlingene viser tastene du har bundet. nerdr leser bindingene når
 den starter.
 
@@ -205,7 +206,12 @@ Prefikset og `r`, eller «hent samtale» i handlingene, viser de siste samtalene
 fortsetter den du velger, i mappa den hørte til. Samtaler som kjører, står ikke
 der. `C-r` i popupen bytter mellom samtalene og mappene.
 
-I begge tilfeller er du inne i den nye Claude-en med en gang.
+Prefikset og `F` starter en Claude uten prosjekt, for et raskt spørsmål, uten
+velgeren. Den starter i `~/.local/share/nerdr/chat`, eller i
+`$XDG_DATA_HOME/nerdr/chat` når den er satt. Sesjonene heter `chat`, `chat-2`
+og så videre, og samtalene kan hentes igjen med prefikset og `r`.
+
+I alle tilfellene er du inne i den nye Claude-en med en gang.
 
 ## Kommandoer
 
@@ -217,6 +223,7 @@ med et `versjon`-felt.
 | `nerdr liste` | Claude-ene i tmux, gruppert som i TUI-et, med pane, mappe, repo, branch og oppgave |
 | `nerdr samtaler` | Tidligere samtaler, nyest først, med id, mappe og tittel |
 | `nerdr ny <mappe>` | Start en Claude i mappa, som «+ ny sesjon» |
+| `nerdr ny --chat` | Start en Claude uten prosjekt, som prefikset og `F` |
 | `nerdr ny --fortsett <id>` | Fortsett en samtale i mappa den hørte til, som «hent samtale» |
 | `nerdr ny … --navn <navn> -- <prompt>` | Med et navn i agentlista og den første meldingen |
 | `nerdr forklar` | Hvordan nerdr brukes, skrevet for en agent som skal forklare det eller gjøre noe for deg. `nerdr --help` viser til den. |
@@ -271,7 +278,8 @@ prioritert. I `@nerdr-utseende` står valgene med navnene de hadde først:
 curl -fsSL https://github.com/nicolayro/nerdr/releases/latest/download/avinstaller.sh | sh
 ```
 
-nerdr lagrer ingenting annet enn seg selv. Har du satt `NERDR_MAPPER`, kan linja
+nerdr lagrer ingenting annet enn seg selv og mappa for chat,
+`~/.local/share/nerdr`, som du kan slette. Har du satt `NERDR_MAPPER`, kan linja
 fjernes fra skallets oppstartsfil.
 
 ## Bygge fra kildekoden
