@@ -172,6 +172,8 @@ maal set -g default-command /bin/cat
 maal bind-key '|' split-window -h \; bind-key T set -g @nerdr-binding ja \; \
   bind-key -r M run-shell "echo x >> $KONFIG/gjentatt" \; bind-key r source-file /dev/null \; \
   bind-key V run-shell "sleep 10" \; bind-key Q display-popup -E true
+# Som vim-tmux-navigator, med en fil i stedet for vim.
+maal bind-key -n C-l if-shell "test -e $KONFIG/vim" "send-keys C-l" "select-pane -R"
 
 # alfa venter og gamma jobber. beta er et skall uten Claude og skal ikke vises.
 # alfa registreres sist, så den står øverst.
@@ -478,6 +480,15 @@ tast C-b C-b
 sjekk "C-b C-b sender ^B til panen" i_pane alfa:0.1 '^B'
 tast C-b o
 sjekk "C-b o gjør Claude-en aktiv igjen" er 0 pane_indeks
+
+tast C-l
+sjekk "C-l fra bind -n bytter pane når sjekken i if-shell slår feil" er 1 pane_indeks
+touch "$KONFIG/vim"
+tast C-l
+sjekk "og sendes til panen når den slår til" i_pane alfa:0.1 '^L'
+rm "$KONFIG/vim"
+tast C-b o
+sjekk "C-b o tilbake til Claude-en" er 0 pane_indeks
 
 tast C-b z
 sjekk "C-b z zoomer inn" er 1 zoom

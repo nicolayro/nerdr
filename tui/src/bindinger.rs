@@ -1,4 +1,5 @@
-//! Prefikstabellen fra tmux, med bindingene i oppsettet ditt, brukt i nerdr.
+//! Prefikstabellen og root-tabellen fra tmux, med bindingene i oppsettet
+//! ditt, brukt i nerdr.
 //! Kommandoer nerdr har en tast for, gjøres som med den tasten, så visningen
 //! følger med. Kommandoer som ikke trenger et skjermbilde fra tmux, sendes til
 //! tmux. Resten gjør ingenting her, og da er tasten som i nerdr. Standarden i
@@ -96,13 +97,22 @@ impl Default for Bindinger {
 
 impl Bindinger {
     pub fn ny(tabellen: &[Binding]) -> Bindinger {
+        Bindinger::med(tabellen, &NERDR)
+    }
+
+    /// Root-tabellen, med tastene uten prefiks. nerdr har ingen av dem.
+    pub fn root(tabellen: &[Binding]) -> Bindinger {
+        Bindinger::med(tabellen, &[])
+    }
+
+    fn med(tabellen: &[Binding], egne: &[char]) -> Bindinger {
         let mut b = Bindinger::default();
         for binding in tabellen {
             let Some(k) = tast(&binding.tast) else { continue };
             if binding.gjentas {
                 b.gjentas.insert(nøkkel(&k));
             }
-            if matches!(nøkkel(&k), (KeyCode::Char(c), false, false, _) if NERDR.contains(&c)) {
+            if matches!(nøkkel(&k), (KeyCode::Char(c), false, false, _) if egne.contains(&c)) {
                 continue;
             }
             let Some(mut hva) = tolk(&binding.kommando) else { continue };
@@ -205,9 +215,24 @@ fn tolk(kommando: &str) -> Option<Hva> {
         return Some(Hva::Trenger { tast: String::new(), hva });
     }
     let sendes = |ord: &Vec<String>| {
-        ord.first().is_some_and(|k| SENDES.contains(&k.as_str())) && !ord.iter().any(|o| o == "{" || o.contains("%%"))
+        let kan = match ord.first().map(String::as_str) {
+            Some("if-shell" | "if") => grener(ord).is_some_and(|g| g.iter().all(|k| matches!(tolk(k), Some(Hva::Som(_) | Hva::Send(_))))),
+            Some(k) => SENDES.contains(&k),
+            None => false,
+        };
+        kan && !ord.iter().any(|o| o == "{" || o.contains("%%"))
     };
     deler.iter().all(sendes).then(|| Hva::Send(kommando.split(" \\; ").map(|k| k.trim().to_string()).collect()))
+}
+
+/// Grenene i `if-shell [flagg] <sjekk> <ja> [nei]`. Hele kommandoen sendes,
+/// så tmux kjører sjekken, som i vim-tmux-navigator spør om panen kjører vim.
+fn grener(ord: &[String]) -> Option<&[String]> {
+    let mut i = 1;
+    while let Some(flagg) = ord.get(i).filter(|o| o.starts_with('-')) {
+        i += if flagg == "-t" { 2 } else { 1 };
+    }
+    ord.get(i + 1..).filter(|g| (1..=2).contains(&g.len()))
 }
 
 /// En `run-shell` som åpner en popup, venter på et valg i den som aldri kommer.
@@ -364,6 +389,30 @@ mod tester {
         let bindinger = Bindinger::ny(&[b("r", "source-file ~/.tmux.conf"), b("l", "select-pane -R")]);
         assert_eq!(bindinger.finn(&k('r')), None);
         assert_eq!(bindinger.finn(&k('l')), Some(&Hva::Som(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))));
+    }
+
+    #[test]
+    fn root_tabellen_fra_vim_tmux_navigator_sendes_hel() {
+        let linjer = [
+            r##"bind-key  -T root M-Left                    resize-pane -L 5"##,
+            r##"bind-key  -T root C-h                       if-shell "ps -o state= -o comm= -t '#{pane_tty}' | grep -iqE '^[^TXZ ]+ +(\\S+\\/)?g?(view|l?n?vim?x?|fzf)(diff)?$'" "send-keys C-h" "select-pane -L""##,
+            r##"bind-key  -T root f                         if-shell -F "#{pane_in_mode}" { send-keys f } { display-popup }"##,
+            r##"bind-key  -T root MouseDown1Pane            select-pane -t = \; send-keys -M"##,
+        ];
+        let tabellen = nerdr_kjerne::bindinger::les(&linjer.map(String::from));
+        let root = Bindinger::root(&tabellen);
+        let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+        assert_eq!(root.finn(&KeyEvent::new(KeyCode::Left, KeyModifiers::ALT)), Some(&Hva::Som(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT))));
+        assert!(matches!(root.finn(&ctrl('h')), Some(Hva::Send(k)) if k.len() == 1 && k[0].starts_with("if-shell \"ps ")));
+        assert_eq!(root.finn(&k('f')), None);
+        assert_eq!(root.taster.len(), 2);
+    }
+
+    #[test]
+    fn if_shell_sendes_bare_når_grenene_kan_sendes() {
+        assert!(matches!(tolk("if-shell -b 'test -n \"$X\"' 'send-keys C-l' 'select-pane -R'"), Some(Hva::Send(_))));
+        assert_eq!(tolk("if-shell true 'display-popup -E htop'"), None);
+        assert_eq!(tolk("if-shell true"), None);
     }
 
     #[test]

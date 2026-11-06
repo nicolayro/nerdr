@@ -98,6 +98,7 @@ enum Svar {
     Prefiks,
     /// Prefikstabellen fra `list-keys`.
     Bindinger,
+    Root,
     Gjentatid,
     /// Bredden på lista fra `LISTE_OPTION`.
     Liste,
@@ -269,6 +270,8 @@ struct App {
     /// Prefikset er trykket, og neste tast er en kommando.
     etter_prefiks: bool,
     bindinger: bindinger::Bindinger,
+    /// Tastene uten prefiks fra `bind -n`, som gjelder i panen.
+    root: bindinger::Bindinger,
     /// Til da går en tast med `-r` til tmux-kommandoen uten prefikset.
     gjentar: Option<Instant>,
     /// Det som lukkes hvis du svarer `y`.
@@ -499,6 +502,7 @@ impl App {
             utseende_meny: None,
             etter_prefiks: false,
             bindinger: bindinger::Bindinger::default(),
+            root: bindinger::Bindinger::default(),
             gjentar: None,
             lukke: None,
             visning: Rect::default(),
@@ -525,6 +529,7 @@ impl App {
             self.send("show-options -gv prefix", Svar::Prefiks);
         }
         self.send("list-keys -T prefix", Svar::Bindinger);
+        self.send("list-keys -T root", Svar::Root);
         self.send("show-options -gv repeat-time", Svar::Gjentatid);
         self.send(&format!("show-options -gqv {LISTE_OPTION}"), Svar::Liste);
         self.send(&format!("show-options -gqv {}", utseende::OPTION), Svar::Utseende);
@@ -897,6 +902,12 @@ impl App {
                 }
                 false
             }
+            Svar::Root => {
+                if ok {
+                    self.root = bindinger::Bindinger::root(&nerdr_kjerne::bindinger::les(&linjer));
+                }
+                false
+            }
             Svar::Gjentatid => {
                 if let Some(ms) = linjer.first().filter(|_| ok).and_then(|l| l.parse().ok()) {
                     self.bindinger.gjentatid = Duration::from_millis(ms);
@@ -918,22 +929,30 @@ impl App {
     fn etter_prefikset(&mut self, k: KeyEvent) {
         match self.bindinger.finn(&k).cloned() {
             _ if self.prefiks.er(&k) => self.prefikstast(k),
-            Some(bindinger::Hva::Som(nerdr)) => self.prefikstast(nerdr),
-            Some(bindinger::Hva::Send(kommandoer)) => {
-                self.for_seg.retain_mut(|barn| matches!(barn.try_wait(), Ok(None)));
-                let pane = self.aktiv().map(|p| p.id.clone());
-                if let Ok(barn) = kontroll::for_seg(self.socket.as_deref(), pane.as_deref(), &kommandoer) {
-                    self.for_seg.push(barn);
-                }
-            }
-            Some(bindinger::Hva::Trenger { tast, hva }) => {
-                let tekst = format!("{} {tast} åpner {hva} i tmux, som nerdr ikke kan vise", self.prefiks.navn());
-                self.beskjed = Some((tekst, Instant::now()));
-            }
+            Some(hva) => self.kjør_binding(hva, &format!("{} ", self.prefiks.navn())),
             None => self.prefikstast(k),
         }
         if self.bindinger.gjentas(&k) {
             self.gjentar = Some(Instant::now() + self.bindinger.gjentatid);
+        }
+    }
+
+    /// `foran` står foran tasten i beskjeden, som prefikset.
+    fn kjør_binding(&mut self, hva: bindinger::Hva, foran: &str) {
+        match hva {
+            bindinger::Hva::Som(nerdr) => self.prefikstast(nerdr),
+            bindinger::Hva::Send(kommandoer) => {
+                self.for_seg.retain_mut(|barn| matches!(barn.try_wait(), Ok(None)));
+                // Vinduet, så tmux velger panen, som i `prefikstast`.
+                let mål = self.vist.clone().or_else(|| self.aktiv().map(|p| p.id.clone()));
+                if let Ok(barn) = kontroll::for_seg(self.socket.as_deref(), mål.as_deref(), &kommandoer) {
+                    self.for_seg.push(barn);
+                }
+            }
+            bindinger::Hva::Trenger { tast, hva } => {
+                let tekst = format!("{foran}{tast} åpner {hva} i tmux, som nerdr ikke kan vise");
+                self.beskjed = Some((tekst, Instant::now()));
+            }
         }
     }
 
@@ -1381,6 +1400,10 @@ impl App {
             return self.kopitast(k);
         }
         if self.fokus == Fokus::Pane {
+            if let Some(hva) = self.root.finn(&k).cloned() {
+                self.kjør_binding(hva, "");
+                return true;
+            }
             if let (Some(pane), Some(args)) = (self.aktiv(), taster::send_keys(&k)) {
                 let kommando = format!("send-keys -t {} {args}", sitat(&pane.id));
                 self.send(&kommando, Svar::Ingenting);

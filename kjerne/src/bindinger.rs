@@ -1,4 +1,4 @@
-//! Bindingene i prefikstabellen til tmux, fra `list-keys -T prefix`, som
+//! Bindingene i en tabell i tmux, fra `list-keys -T prefix` eller `-T root`, som
 //! skriver hver av dem slik de ville stått i `.tmux.conf`:
 //!
 //! ```text

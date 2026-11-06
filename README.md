@@ -180,6 +180,12 @@ nerdr. `f`, `F`, `r`, `w`, `s`, `b`, `u`, `d`, `?`, `:`, `(` og `)` er alltid ne
 Hjelpen og handlingene viser tastene du har bundet. nerdr leser bindingene når
 den starter.
 
+Tastene uten prefiks, fra `bind -n`, gjelder når du står i panen, som
+`C-h` `C-j` `C-k` `C-l` fra
+[vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator). En
+`if-shell` kjøres av tmux, så tasten går til vim når panen kjører vim. Har du
+ingen, går alle tastene til panen.
+
 ### Starte og fortsette
 
 «+ ny sesjon» øverst i agentlista, eller prefikset og `f`, åpner en popup der du
