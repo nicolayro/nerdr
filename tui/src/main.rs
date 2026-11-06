@@ -960,7 +960,8 @@ impl App {
                 return;
             }
             KeyCode::Char('d') if !ctrl => return self.ferdig = Some(String::new()),
-            KeyCode::Char('b' | 'B') if !ctrl => {
+            KeyCode::Char('b') if !ctrl => return self.bytt_stripe(),
+            KeyCode::Char('u') if !ctrl => {
                 self.utseende_meny = Some(1);
                 return;
             }
@@ -1779,8 +1780,7 @@ impl App {
         if m.column + 1 == v.x && m.kind == MouseEventKind::Down(MouseButton::Left) {
             let dobbelt = self.sist_klikket.take().is_some_and(|(mål, t)| mål == Mål::Skille && t.elapsed() < DOBBELTKLIKK);
             if dobbelt {
-                self.liste_stripe = !self.liste_stripe;
-                self.lagre_liste();
+                self.bytt_stripe();
             } else {
                 self.sist_klikket = Some((Mål::Skille, Instant::now()));
                 self.drar_skille = true;
@@ -1968,6 +1968,11 @@ impl App {
         if !self.liste_stripe {
             self.liste_bredde = bredde.max(tegn::LISTE_MIN).min(self.skjerm.width / 2);
         }
+    }
+
+    fn bytt_stripe(&mut self) {
+        self.liste_stripe = !self.liste_stripe;
+        self.lagre_liste();
     }
 
     fn lagre_liste(&mut self) {

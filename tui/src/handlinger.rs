@@ -22,7 +22,7 @@ pub struct Oppføring {
 }
 
 /// Rekkefølgen er den lista har uten søk, med det du oftest trenger først.
-const PREFIKSTASTER: [(KeyCode, bool, &str); 24] = [
+const PREFIKSTASTER: [(KeyCode, bool, &str); 25] = [
     (KeyCode::Char('f'), false, "ny sesjon"),
     (KeyCode::Char('r'), false, "hent samtale"),
     (KeyCode::Char('c'), false, "ny terminal"),
@@ -44,7 +44,8 @@ const PREFIKSTASTER: [(KeyCode, bool, &str); 24] = [
     (KeyCode::Char('o'), true, "roter paner"),
     (KeyCode::Char('x'), false, "lukk pane"),
     (KeyCode::Char('&'), false, "lukk vindu"),
-    (KeyCode::Char('b'), false, "innstillinger"),
+    (KeyCode::Char('b'), false, "agentlista som stripe"),
+    (KeyCode::Char('u'), false, "innstillinger"),
     (KeyCode::Char('?'), false, "hjelp"),
     (KeyCode::Char('d'), false, "avslutt"),
 ];

@@ -918,7 +918,7 @@ const KNAPPER: [(Knapp, &str, char); 7] = [
     (Knapp::Avslutt, LUKK_NERDR, 'd'),
     (Knapp::Samtale, "hent samtale", 'r'),
     (Knapp::Terminal, "ny terminal", 'c'),
-    (Knapp::Innstillinger, "innstillinger", 'b'),
+    (Knapp::Innstillinger, "innstillinger", 'u'),
     (Knapp::Handlinger, "handlinger", ':'),
 ];
 /// Nederst i agentlista, når de er slått på i innstillingene.

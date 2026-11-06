@@ -21,7 +21,7 @@ use Tast::{Egen, Prefiks as P};
 
 /// Det brukeren vil, med musen og med tastaturet. Musen står først, for de
 /// fleste kan ikke tmux.
-const OFTEST: [(&str, &str, &[Tast]); 17] = [
+const OFTEST: [(&str, &str, &[Tast]); 18] = [
     ("Starte en ny Claude", "«+ ny sesjon» øverst i agentlista, søk fram mappa og trykk ⏎", &[P("f")]),
     ("Fortsette en tidligere samtale", "", &[P("r")]),
     ("Se på en Claude", "klikk på kortet i agentlista", &[Egen("↑"), Egen("↓")]),
@@ -35,7 +35,8 @@ const OFTEST: [(&str, &str, &[Tast]); 17] = [
     ("Kopiere tekst", "dra over teksten, den kopieres når du slipper", &[P("[")]),
     ("Rulle tilbake", "musehjulet", &[P("PgUp")]),
     ("Bredere eller smalere agentliste", "dra i streken mellom agentlista og Claude-en", &[]),
-    ("Endre utseendet", "", &[P("b")]),
+    ("Agentlista som en stripe med bare tegnene, og tilbake", "dobbeltklikk på streken", &[P("b")]),
+    ("Endre utseendet", "", &[P("u")]),
     ("Finne alt nerdr kan gjøre", "", &[P(":")]),
     ("Hjelp", "«hjelp»", &[P("?")]),
     ("Avslutte nerdr", "«lukk nerdr». Claude-ene kjører videre", &[Egen("C-c i agentlista"), P("d")]),

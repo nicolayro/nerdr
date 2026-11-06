@@ -209,8 +209,8 @@ SLUTT
   sjekk "en pane får bakgrunnen til terminalen fra nerdr" i_pane farge 'rgb:0a0a/0b0b/0c0c'
   maal kill-session -t farge
 fi
-tast C-b b
-sjekk "C-b b åpner innstillingene" har 'farge +│ av  på'
+tast C-b u
+sjekk "C-b u åpner innstillingene" har 'farge +│ av  på'
 tast Left
 sjekk "farge av tar fargen bort" uten_gronn_glyf 9
 tast Right Down Down Down Down Down Right
@@ -221,7 +221,7 @@ sjekk "orden aktivitet har ingen overskrifter" mangler '^ (aktive|ledige)'
 tast Right Up Up Up Right Escape
 sjekk "Esc lukker menyen" mangler 'farge +│ av'
 sjekk "resten av testen bruker minimal" er 'paner=bokser farge=på plass=minimal orden=nerdr ledig=under tittel=1 ulest=oransje topp=venstre sti=på bredde=vanlig snarveier=av' maal show-options -gqv @nerdr-utseende
-tast C-b b
+tast C-b u
 sjekk "med minimal er oppgave borte fra innstillingene" mangler 'oppgave +│ 1'
 klikk_paa 'vanlig  minimal'
 sjekk "et klikk på vanlig viser oppgave under kortdesign" har '│ oppgave +│ 1  2  3'
@@ -245,7 +245,7 @@ sjekk "beta har ingen Claude og vises ikke" mangler beta
 sjekk "alfa får størrelsen til boksen" er 70x16 dimensjon alfa
 
 # Ramme står to over farge, der innstillingene åpner.
-tast C-b b Up Up Right Right Escape
+tast C-b u Up Up Right Right Escape
 sjekk "paner i et vindu har agentlista og panen i hver sin ramme, inntil hverandre" linje_har 1 '^╭─+╮╭─+╮$'
 sjekk "med versjonen og hjelp inne i rammen" linje_har 2 '^│  nerdr [0-9].* \? hjelp ││'
 sjekk "streken under fanene treffer kantene" linje_har 3 '│├─+┤$'
@@ -260,7 +260,7 @@ klikk_paa 'hjelp'
 sjekk "klikk på hjelp viser hjelpen" har 'trykk en tast for å lukke'
 tast q
 sjekk "og en tast lukker den" mangler 'trykk en tast for å lukke'
-tast C-b b Up Up Right Escape
+tast C-b u Up Up Right Escape
 sjekk "og tilbake til bokser" linje_har 3 '^─+┤├'
 sjekk "der alfa har samme størrelse som før" er 70x16 dimensjon alfa
 
@@ -328,13 +328,13 @@ sjekk "tilbake i agentlista" i_lista
 
 sjekk "nederst i agentlista er det ingen knapper" linje_har 20 '^ +│'
 # Snarveier står nederst i innstillingene.
-tast C-b b Down Down Down Down Down Down Down Down Down Down Down Down Right Escape
+tast C-b u Down Down Down Down Down Down Down Down Down Down Down Down Right Escape
 sjekk "snarveiene nederst viser hent samtale med tasten" har 'hent samtale +C-b r'
 klikk_paa 'handlinger'
 sjekk "klikk på «handlinger» åpner handlingene" har 'del side om side'
 tast Escape
 sjekk "Esc lukker handlingene" mangler 'del side om side'
-tast C-b b Down Down Down Down Down Down Down Down Down Down Down Down Left Escape
+tast C-b u Down Down Down Down Down Down Down Down Down Down Down Down Left Escape
 sjekk "og snarveiene kan slås av igjen" mangler 'hent samtale'
 klikk_paa '? hjelp'
 sjekk "klikk på «? hjelp» viser hjelpen" har 'trykk en tast for å lukke'
@@ -549,10 +549,10 @@ sjekk "panen kommer tilbake når tmux slutter å svare" har "etter frys"
 tast C-b w
 
 # Ramme står over bredde, som står over farge, der menyen åpner.
-tast C-b b Up Up Right Escape
+tast C-b u Up Up Right Escape
 sjekk "linjer rundt panene i menyen gjør alfa større" er 74x18 dimensjon alfa
 sjekk "med linjer er det ingen bokser" mangler '╰'
-tast C-b b Up Up Left Escape
+tast C-b u Up Up Left Escape
 sjekk "og bokser igjen" er 70x16 dimensjon alfa
 sjekk "boksen er tilbake" har '╰'
 
@@ -677,6 +677,10 @@ sjekk "også i tmux" er '46 stripe' maal show-options -gqv @nerdr-liste
 klikk 4 8
 klikk 4 8
 sjekk "dobbeltklikk igjen gir bredden tilbake" er 60x16 dimensjon alfa
+tast C-b b
+sjekk "C-b b gjør også agentlista til en stripe" linje_har 7 '^▎● ││'
+tast C-b b
+sjekk "og C-b b igjen gir bredden tilbake" er 60x16 dimensjon alfa
 dra 46 8 2 8
 sjekk "å dra streken helt inn gir stripa" linje_har 7 '^▎● ││'
 tast C-b

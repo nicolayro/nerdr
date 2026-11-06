@@ -11,7 +11,7 @@ use nerdr_kjerne::bindinger::{Binding, kommandoer};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Det bare nerdr har. Her vinner nerdr over oppsettet.
-const NERDR: [char; 11] = ['f', 'r', 'w', 's', 'b', 'B', 'd', '?', ':', '(', ')'];
+const NERDR: [char; 11] = ['f', 'r', 'w', 's', 'b', 'u', 'd', '?', ':', '(', ')'];
 
 /// Virker fra en klient uten terminal, mot panen nerdr viser.
 const SENDES: [&str; 39] = [

@@ -93,8 +93,8 @@ også, som «minimal liste» og «bred agentliste».
 
 Dra i streken mellom agentlista og panen for å gjøre agentlista bredere eller
 smalere, eller velg bredden i innstillingene. Drar du den helt inn, blir
-agentlista en stripe med bare tegnene, og et dobbeltklikk på streken bytter
-mellom stripa og bredden du hadde. Bredden står i den globale tmux-optionen
+agentlista en stripe med bare tegnene, og et dobbeltklikk på streken eller
+prefikset og `b` bytter mellom stripa og bredden du hadde. Bredden står i den globale tmux-optionen
 `@nerdr-liste`, så den er den samme neste gang.
 
 Når du sist var inne i en Claude, skriver nerdr i pane-optionen `@nerdr-sett`
@@ -164,7 +164,8 @@ virker både fra agentlista og fra panen:
 | `PgUp` | Rull en side opp |
 | `[` | Kopimodus |
 | `(` `)` | Forrige og neste sesjon |
-| `b` | Innstillinger |
+| `b` | Agentlista som stripe, og tilbake |
+| `u` | Innstillinger |
 | `w` `s` | Tilbake til agentlista |
 | `d` | Avslutt |
 | `?` | Hjelp |
@@ -174,7 +175,7 @@ Bindingene etter prefikset i `.tmux.conf` gjelder også i nerdr, som
 `bind | split-window -h`, og tastene med `-r` kan trykkes igjen uten
 prefikset. Kommandoer som trenger et skjermbilde fra tmux, som `display-popup`,
 `command-prompt` og `copy-mode`, virker ikke, og da gjør tasten det den gjør i
-nerdr. `f`, `r`, `w`, `s`, `b`, `d`, `?`, `:`, `(` og `)` er alltid nerdr sine.
+nerdr. `f`, `r`, `w`, `s`, `b`, `u`, `d`, `?`, `:`, `(` og `)` er alltid nerdr sine.
 Hjelpen og handlingene viser tastene du har bundet. nerdr leser bindingene når
 den starter.
 
@@ -229,7 +230,7 @@ og `ferdig` for `sett`.
 
 ## Innstillinger
 
-Prefikset og `b` åpner innstillingene. Et klikk på en verdi velger den, og
+Prefikset og `u` åpner innstillingene. Et klikk på en verdi velger den, og
 valget gjelder med en gang. tmux husker det i `@nerdr-utseende`. Et valg som
 bare gjelder for valget over, står rett under det, og er borte når det
 ikke gjelder.
