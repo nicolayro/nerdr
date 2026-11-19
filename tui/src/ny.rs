@@ -10,6 +10,7 @@ use std::{env, fs, mem};
 
 use nerdr_kjerne::samtaler;
 
+use crate::popup::Søkefelt;
 use crate::tekst::{mappenavn, med_tilde, varighet};
 
 /// Mappene det søkes under, kolonseparert som `PATH`.
@@ -53,13 +54,10 @@ pub struct Velger {
     lest: HashSet<PathBuf>,
     røtter: Vec<PathBuf>,
     samtaler: Vec<Kandidat>,
-    søk: String,
+    pub felt: Søkefelt,
     /// Poengene, plassen i kandidatene og tegnene søket traff, best først.
     /// Det er mange tusen mapper, så treffene regnes bare ut når søket endres.
     treff: Vec<(i32, usize, Vec<usize>)>,
-    pub valgt: usize,
-    /// Første treff som vises.
-    pub rull: usize,
     /// Mappene under røttene er ikke lest ferdig.
     pub søker: bool,
     /// Tidligere samtaler vises i stedet for mappene.
@@ -90,10 +88,8 @@ impl Velger {
             lest: HashSet::new(),
             røtter: røtter(&mapper(), &hjem),
             samtaler,
-            søk: String::new(),
+            felt: Søkefelt::default(),
             treff: Vec::new(),
-            valgt: 0,
-            rull: 0,
             søker: true,
             fortsett,
             stopp: Arc::new(AtomicBool::new(false)),
@@ -128,14 +124,14 @@ impl Velger {
             }
         }
         self.søker &= !ferdig;
-        if self.fortsett || self.søk.is_empty() {
+        if self.fortsett || self.felt.søk.is_empty() {
             return;
         }
         let nye = self.poeng_fra(fra);
         self.treff.extend(nye);
         self.treff.sort_by_key(|(poeng, i, _)| (-poeng, *i));
         if let Some(i) = valgt.and_then(|v| self.treff().iter().position(|t| t.kandidat.mappe == v)) {
-            self.valgt = i;
+            self.felt.valgt = i;
         }
     }
 
@@ -148,19 +144,19 @@ impl Velger {
     }
 
     pub fn søk(&self) -> &str {
-        &self.søk
+        &self.felt.søk
     }
 
     pub fn bytt(&mut self) {
         self.fortsett = !self.fortsett;
-        self.valgt = 0;
+        self.felt.valgt = 0;
         self.finn_treff();
     }
 
     /// Mappene vises ikke før du skriver noe, for uten søk er det bare en lang
     /// liste i alfabetisk rekkefølge.
-    fn finn_treff(&mut self) {
-        self.treff = if self.søk.is_empty() && !self.fortsett { Vec::new() } else { self.poeng_fra(0) };
+    pub fn finn_treff(&mut self) {
+        self.treff = if self.felt.søk.is_empty() && !self.fortsett { Vec::new() } else { self.poeng_fra(0) };
         self.treff.sort_by_key(|(poeng, i, _)| (-poeng, *i));
     }
 
@@ -168,7 +164,7 @@ impl Velger {
         self.kandidater()[fra..]
             .iter()
             .enumerate()
-            .filter_map(|(i, k)| poeng_for(k, &self.søk).map(|(poeng, tegn)| (poeng, fra + i, tegn)))
+            .filter_map(|(i, k)| poeng_for(k, &self.felt.søk).map(|(poeng, tegn)| (poeng, fra + i, tegn)))
             .collect()
     }
 
@@ -182,31 +178,8 @@ impl Velger {
         self.treff.len()
     }
 
-    pub fn skriv(&mut self, tekst: &str) {
-        self.søk.extend(tekst.chars().filter(|c| !c.is_control()));
-        self.valgt = 0;
-        self.finn_treff();
-    }
-
-    pub fn slett(&mut self) {
-        self.søk.pop();
-        self.valgt = 0;
-        self.finn_treff();
-    }
-
-    pub fn tøm(&mut self) {
-        self.søk.clear();
-        self.valgt = 0;
-        self.finn_treff();
-    }
-
-    pub fn flytt(&mut self, steg: isize) {
-        let siste = self.treff.len().saturating_sub(1) as isize;
-        self.valgt = (self.valgt as isize + steg).clamp(0, siste) as usize;
-    }
-
     pub fn valgt(&self) -> Option<&Kandidat> {
-        self.treff.get(self.valgt).map(|(_, i, _)| &self.kandidater()[*i])
+        self.treff.get(self.felt.valgt).map(|(_, i, _)| &self.kandidater()[*i])
     }
 }
 

@@ -5,6 +5,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::bindinger::Bindinger;
 use crate::ny;
+use crate::popup::Søkefelt;
 use crate::utseende::{Akse, Utseende};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,10 +54,7 @@ const PREFIKSTASTER: [(KeyCode, bool, &str); 26] = [
 
 pub struct Handlinger {
     alle: Vec<Oppføring>,
-    pub søk: String,
-    pub valgt: usize,
-    /// Første treff som vises.
-    pub rull: usize,
+    pub felt: Søkefelt,
 }
 
 impl Handlinger {
@@ -82,7 +80,7 @@ impl Handlinger {
                 });
             }
         }
-        Handlinger { alle, søk: String::new(), valgt: 0, rull: 0 }
+        Handlinger { alle, felt: Søkefelt::default() }
     }
 
     pub fn antall(&self) -> usize {
@@ -96,7 +94,7 @@ impl Handlinger {
             .alle
             .iter()
             .filter_map(|k| {
-                let (poeng, tegn) = ny::poeng(&self.søk, &k.navn)?;
+                let (poeng, tegn) = ny::poeng(&self.felt.søk, &k.navn)?;
                 Some((poeng, k, tegn))
             })
             .collect();
@@ -105,27 +103,7 @@ impl Handlinger {
     }
 
     pub fn valgt(&self) -> Option<Handling> {
-        self.treff().get(self.valgt).map(|(k, _)| k.handling)
-    }
-
-    pub fn skriv(&mut self, tekst: &str) {
-        self.søk.extend(tekst.chars().filter(|c| !c.is_control()));
-        self.valgt = 0;
-    }
-
-    pub fn slett(&mut self) {
-        self.søk.pop();
-        self.valgt = 0;
-    }
-
-    pub fn tøm(&mut self) {
-        self.søk.clear();
-        self.valgt = 0;
-    }
-
-    pub fn flytt(&mut self, steg: isize) {
-        let siste = self.treff().len().saturating_sub(1) as isize;
-        self.valgt = (self.valgt as isize + steg).clamp(0, siste) as usize;
+        self.treff().get(self.felt.valgt).map(|(k, _)| k.handling)
     }
 }
 
@@ -137,11 +115,11 @@ mod tester {
     #[test]
     fn søket_finner_handlingen_med_tasten() {
         let mut h = Handlinger::ny("C-b", &Bindinger::default(), &Utseende::ny(Rammer::Linjer));
-        h.skriv("zoom");
+        h.felt.skriv("zoom");
         let (k, _) = &h.treff()[0];
         assert_eq!((k.navn.as_str(), k.tast.as_str()), ("zoom pane", "C-b z"));
-        h.tøm();
-        h.skriv("sesjon");
+        h.felt.søk.clear();
+        h.felt.skriv("sesjon");
         assert_eq!(h.valgt(), Some(Handling::Prefiks(KeyCode::Char('f'), false)));
     }
 
