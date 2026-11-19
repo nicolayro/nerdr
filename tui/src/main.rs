@@ -8,15 +8,17 @@ mod kommandoer;
 mod kopimodus;
 mod markering;
 mod ny;
+mod omverden;
 mod palett;
 mod taster;
+#[cfg(test)]
+mod tester;
 mod tegn;
 mod tekst;
 mod utseende;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::process::Child;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
@@ -28,10 +30,11 @@ use grupper::{Del, Plass, Rad};
 use handlinger::{Handling, Handlinger};
 use kopimodus::{Innhold, Kopimodus, Utfall};
 use nerdr_kjerne::kontroll::{self, Kontroll, Melding, dobbelt_sitat, sitat, synkronisert_etter};
+use omverden::{Omverden, Tmux};
 use nerdr_kjerne::paner::{self, FELT, Pane};
 use nerdr_kjerne::{git, konfigkatalog, oppsett, start, tmux};
 use nerdr_kjerne::merke::Merke;
-use nerdr_kjerne::register::{self, Claude};
+use nerdr_kjerne::register::Claude;
 use nerdr_kjerne::sgr::{self, Linje};
 use markering::{Markering, Punkt};
 use utseende::{Orden, Utseende};
@@ -43,7 +46,7 @@ use ratatui::crossterm::event::{
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 
 const LISTE_INTERVALL: Duration = Duration::from_secs(2);
 /// Øvre grense for hvor ofte panen hentes på nytt, omtrent 60 bilder i sekundet.
@@ -161,18 +164,12 @@ enum Knapp {
 }
 
 struct App {
-    kontroll: Kontroll,
-    /// tmux kobler fra klienten når sesjonen den står i, forsvinner, som når
-    /// det siste vinduet i den lukkes. Da kobler nerdr til igjen.
-    koble_igjen: Box<dyn FnMut() -> io::Result<(Kontroll, u64)>>,
+    ut: Box<dyn Omverden>,
     koblet_igjen: Option<Instant>,
     /// Nummeret til tilkoblingen. Meldinger fra en nerdr har gitt opp, hoppes over.
     tilkobling: u64,
     /// Siden da nerdr sist fikk et svar, så lenge noen mangler.
     venter_siden: Option<Instant>,
-    socket: Option<String>,
-    /// Klientene bindingene fra tmux-oppsettet kjører i, se `kontroll::for_seg`.
-    for_seg: Vec<Child>,
     /// For det som leses i egne tråder.
     tx: Sender<Hendelse>,
     kø: VecDeque<Svar>,
@@ -424,12 +421,10 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 
     let mut terminal = ratatui::init();
     execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange)?;
-    let mut app = App::ny(kontroll, Box::new(koble_igjen), app_socket, prosjekter_tx);
+    let (kontroll, tilkobling) = kontroll;
+    let ut = Tmux::ny(kontroll, Box::new(koble_igjen), app_socket, konfigkatalog());
+    let mut app = App::ny(Box::new(ut), tilkobling, prosjekter_tx);
     let res = app.løkke(&mut terminal, &rx);
-    for barn in &mut app.for_seg {
-        let _ = barn.kill();
-        let _ = barn.wait();
-    }
     let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste, DisableFocusChange);
     ratatui::restore();
 
@@ -441,21 +436,13 @@ fn kjør(socket: Option<&str>) -> io::Result<()> {
 }
 
 impl App {
-    fn ny(
-        (kontroll, tilkobling): (Kontroll, u64),
-        koble_igjen: Box<dyn FnMut() -> io::Result<(Kontroll, u64)>>,
-        socket: Option<String>,
-        tx: Sender<Hendelse>,
-    ) -> App {
+    fn ny(ut: Box<dyn Omverden>, tilkobling: u64, tx: Sender<Hendelse>) -> App {
         App {
-            kontroll,
+            ut,
             tx,
-            koble_igjen,
             koblet_igjen: None,
             tilkobling,
             venter_siden: None,
-            socket,
-            for_seg: Vec::new(),
             kø: VecDeque::new(),
             claude_paner: Vec::new(),
             rester: HashMap::new(),
@@ -537,23 +524,7 @@ impl App {
         let mut tegne = true;
         while self.ferdig.is_none() {
             if tegne {
-                self.utseende.bredde = utseende::Bredde::nærmest(self.liste_bredde);
-                let liste = if self.liste_stripe { tegn::stripebredde(self.utseende.paner) } else { self.liste_bredde };
-                let størrelse = terminal.size()?;
-                self.skjerm = Rect::new(0, 0, størrelse.width, størrelse.height);
-                self.visning = tegn::visning(størrelse, liste, self.utseende.paner);
-                let rader = tegn::menyrader(self);
-                if let Some(h) = &mut self.handlinger {
-                    h.rull = tegn::følg(h.valgt, h.rull, rader, h.treff().len());
-                }
-                if let Some(v) = &mut self.velger {
-                    v.rull = tegn::følg(v.valgt, v.rull, rader, v.antall_treff());
-                }
-                let (utsnitt, valgt) = tegn::utsnitt(self);
-                self.liste_rull = match valgt.filter(|_| self.liste_følger) {
-                    Some(valgt) => utsnitt.følg(valgt).rull,
-                    None => utsnitt.rull,
-                };
+                self.forbered_tegning(terminal.size()?);
                 // Når teksten i panen ruller, skrives nesten hver celle på nytt.
                 // Uten synkronisert oppdatering kan terminalen vise den halvveis.
                 execute!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
@@ -574,28 +545,56 @@ impl App {
             for h in første.into_iter().chain(rx.try_iter()) {
                 tegne |= self.håndter(h);
             }
-            if self.kopiert.is_some_and(|t| t.elapsed() >= KOPIERT_VISES) {
-                self.kopiert = None;
-                tegne = true;
-            }
-            if self.beskjed.as_ref().is_some_and(|(_, t)| t.elapsed() >= BESKJED_VISES) {
-                self.beskjed = None;
-                tegne = true;
-            }
-            if self.venter_siden.is_some_and(|t| t.elapsed() >= SVAR_MAKS) {
-                // Går det ikke, prøves det igjen like lenge etter.
-                self.venter_siden = Some(Instant::now());
-                tegne |= self.koble_til_igjen();
-            }
-
-            if self.sist_listet.is_some_and(|t| t.elapsed() >= LISTE_INTERVALL) {
-                self.list_paner();
-            }
-            if self.tid_til_henting() == Some(Duration::ZERO) {
-                self.hent();
-            }
+            tegne |= self.tikk();
         }
         Ok(())
+    }
+
+    /// Regner ut det tegningen og museklikkene bygger på, fra størrelsen på
+    /// terminalen.
+    fn forbered_tegning(&mut self, størrelse: Size) {
+        self.utseende.bredde = utseende::Bredde::nærmest(self.liste_bredde);
+        let liste = if self.liste_stripe { tegn::stripebredde(self.utseende.paner) } else { self.liste_bredde };
+        self.skjerm = Rect::new(0, 0, størrelse.width, størrelse.height);
+        self.visning = tegn::visning(størrelse, liste, self.utseende.paner);
+        let rader = tegn::menyrader(self);
+        if let Some(h) = &mut self.handlinger {
+            h.rull = tegn::følg(h.valgt, h.rull, rader, h.treff().len());
+        }
+        if let Some(v) = &mut self.velger {
+            v.rull = tegn::følg(v.valgt, v.rull, rader, v.antall_treff());
+        }
+        let (utsnitt, valgt) = tegn::utsnitt(self);
+        self.liste_rull = match valgt.filter(|_| self.liste_følger) {
+            Some(valgt) => utsnitt.følg(valgt).rull,
+            None => utsnitt.rull,
+        };
+    }
+
+    /// Det som skjer i hver runde etter at hendelsene er håndtert, og som
+    /// bare avhenger av tiden. Sier om det må tegnes på nytt.
+    fn tikk(&mut self) -> bool {
+        let mut tegne = false;
+        if self.kopiert.is_some_and(|t| t.elapsed() >= KOPIERT_VISES) {
+            self.kopiert = None;
+            tegne = true;
+        }
+        if self.beskjed.as_ref().is_some_and(|(_, t)| t.elapsed() >= BESKJED_VISES) {
+            self.beskjed = None;
+            tegne = true;
+        }
+        if self.venter_siden.is_some_and(|t| t.elapsed() >= SVAR_MAKS) {
+            // Går det ikke, prøves det igjen like lenge etter.
+            self.venter_siden = Some(Instant::now());
+            tegne |= self.koble_til_igjen();
+        }
+        if self.sist_listet.is_some_and(|t| t.elapsed() >= LISTE_INTERVALL) {
+            self.list_paner();
+        }
+        if self.tid_til_henting() == Some(Duration::ZERO) {
+            self.hent();
+        }
+        tegne
     }
 
     /// Hvor lenge det er til panen kan hentes på nytt, eller `None` når det
@@ -615,8 +614,7 @@ impl App {
         if self.koblet_igjen.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
             return false;
         }
-        let Ok((kontroll, nr)) = (self.koble_igjen)() else { return false };
-        self.kontroll = kontroll;
+        let Ok(nr) = self.ut.koble_igjen() else { return false };
         self.tilkobling = nr;
         self.koblet_igjen = Some(Instant::now());
         self.kø.clear();
@@ -646,7 +644,7 @@ impl App {
     }
 
     fn send(&mut self, kommando: &str, svar: Svar) {
-        match self.kontroll.send(kommando) {
+        match self.ut.send(kommando) {
             Ok(()) => {
                 self.kø.push_back(svar);
                 self.venter_siden.get_or_insert_with(Instant::now);
@@ -741,11 +739,11 @@ impl App {
                 self.lister = false;
                 let aktivert = self.aktivert.take();
                 self.sist_listet = Some(Instant::now());
-                self.claude = register::les(&self.konfig.join("sessions"));
+                self.claude = self.ut.register();
                 self.forlatt = None;
                 let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
                 let tom = !alle.iter().any(|p| self.claude.contains_key(&p.id));
-                self.utenfor_tmux = if tom { register::utenfor_tmux(&self.konfig.join("sessions")) } else { 0 };
+                self.utenfor_tmux = if tom { self.ut.utenfor_tmux() } else { 0 };
                 self.husk_sett(&alle);
                 if ok {
                     let inne = |id: &String| self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| &v.id == id);
@@ -823,7 +821,7 @@ impl App {
             }
             Svar::Kopi { markering, fra, bredde } => {
                 let tekst = markering.tekst(&sgr::tolk(&linjer), fra, bredde);
-                if ok && !tekst.is_empty() && markering::kopier(&tekst) {
+                if ok && !tekst.is_empty() && self.ut.kopier(&tekst) {
                     self.kopiert = Some(Instant::now());
                 }
                 true
@@ -942,12 +940,9 @@ impl App {
         match hva {
             bindinger::Hva::Som(nerdr) => self.prefikstast(nerdr),
             bindinger::Hva::Send(kommandoer) => {
-                self.for_seg.retain_mut(|barn| matches!(barn.try_wait(), Ok(None)));
                 // Vinduet, så tmux velger panen, som i `prefikstast`.
                 let mål = self.vist.clone().or_else(|| self.aktiv().map(|p| p.id.clone()));
-                if let Ok(barn) = kontroll::for_seg(self.socket.as_deref(), mål.as_deref(), &kommandoer) {
-                    self.for_seg.push(barn);
-                }
+                self.ut.for_seg(mål.as_deref(), &kommandoer);
             }
             bindinger::Hva::Trenger { tast, hva } => {
                 let tekst = format!("{foran}{tast} åpner {hva} i tmux, som nerdr ikke kan vise");
@@ -1985,7 +1980,7 @@ impl App {
         }
         let topp = self.punkt(0, 0).0;
         if let (Some(markering), Some(bilde)) = (&self.markering, self.bilder.get(&boks.pane))
-            && markering::kopier(&markering.tekst(bilde, topp, i.width))
+            && self.ut.kopier(&markering.tekst(bilde, topp, i.width))
         {
             self.kopiert = Some(Instant::now());
         }
