@@ -173,7 +173,7 @@ fn bryt(tekst: &str, første: usize, bredde: usize, maks: usize) -> Vec<String> 
 #[cfg(test)]
 mod tester {
     use super::*;
-    use crate::bindinger::Bindinger;
+    use crate::tmuxtaster::Bindinger;
 
     #[test]
     fn rammetegn_etter_naboene() {

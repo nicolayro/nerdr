@@ -36,7 +36,7 @@ fn en_som_starter_har_kort_til_registeret_har_den() {
 fn en_som_starter_og_aldri_kommer_i_registeret_forsvinner() {
     let p = starter(for_lenge_siden(STARTER_MAKS + Duration::from_secs(1)));
     assert_eq!(merke(&p), None);
-    assert!(p.app.claude_paner.is_empty());
+    assert!(p.app.agent_paner.is_empty());
 }
 
 #[test]

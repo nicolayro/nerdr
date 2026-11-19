@@ -76,16 +76,16 @@ pub fn tittel(del: Del) -> &'static str {
 
 /// Hvor en pane står i lista.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Plass {
+pub struct Plassering {
     pub del: Del,
     pub merke: Merke,
     /// Da panen kom inn i delen, i millisekunder siden 1970.
     pub siden: Option<u64>,
 }
 
-impl Plass {
-    pub fn fra(merke: Merke, siden: Option<u64>) -> Plass {
-        Plass { del: Del::fra(merke), merke, siden }
+impl Plassering {
+    pub fn fra(merke: Merke, siden: Option<u64>) -> Plassering {
+        Plassering { del: Del::fra(merke), merke, siden }
     }
 }
 
@@ -93,8 +93,8 @@ impl Plass {
 /// gruppe står den som kom sist inn, øverst. En som ikke har meldt noe ennå,
 /// har nettopp startet. Plassen gis for seg, fordi panen du er inne i, blir
 /// stående der den var selv om merket endres.
-pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> Vec<Rad<'a>> {
-    let mut plassert: Vec<(&Pane, Plass)> = paner.iter().filter_map(|p| Some((p, plass(p)?))).collect();
+pub fn rader<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plassering>) -> Vec<Rad<'a>> {
+    let mut plassert: Vec<(&Pane, Plassering)> = paner.iter().filter_map(|p| Some((p, plass(p)?))).collect();
     // Stabil, så like tider beholder rekkefølgen fra tmux.
     plassert.sort_by(|(_, a), (_, b)| {
         a.del.cmp(&b.del).then_with(|| b.siden.unwrap_or(u64::MAX).cmp(&a.siden.unwrap_or(u64::MAX)))
@@ -142,8 +142,8 @@ fn nummer(pane: &Pane) -> u64 {
 
 /// Én gruppe, med den som sist endret tilstand, øverst. En som ikke har
 /// meldt noe ennå, har nettopp startet.
-pub fn etter_aktivitet<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plass>) -> Vec<Rad<'a>> {
-    let mut plassert: Vec<(&Pane, Plass)> = paner.iter().filter_map(|p| Some((p, plass(p)?))).collect();
+pub fn etter_aktivitet<'a>(paner: &'a [Pane], plass: impl Fn(&Pane) -> Option<Plassering>) -> Vec<Rad<'a>> {
+    let mut plassert: Vec<(&Pane, Plassering)> = paner.iter().filter_map(|p| Some((p, plass(p)?))).collect();
     plassert.sort_by_key(|(_, pl)| std::cmp::Reverse(pl.siden.unwrap_or(u64::MAX)));
     med_overskrifter(plassert.into_iter().map(|(p, pl)| (p, pl.merke, Some(Overskrift::Alle))))
 }
@@ -175,8 +175,8 @@ mod tester {
         Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\t\t\t\t\t\t")).unwrap()
     }
 
-    fn plass(merke: Merke, siden: u64) -> Option<Plass> {
-        Some(Plass::fra(merke, Some(siden)))
+    fn plass(merke: Merke, siden: u64) -> Option<Plassering> {
+        Some(Plassering::fra(merke, Some(siden)))
     }
 
     fn rekkefølge<'a>(rader: &'a [Rad]) -> Vec<&'a str> {
@@ -225,7 +225,7 @@ mod tester {
     #[test]
     fn delen_kan_avvike_fra_merket() {
         let paner = [pane("%1")];
-        let rader = rader(&paner, |_| Some(Plass { del: Del::Aktive, merke: Merke::Sett, siden: None }));
+        let rader = rader(&paner, |_| Some(Plassering { del: Del::Aktive, merke: Merke::Sett, siden: None }));
         assert_eq!(rader, [Rad::Overskrift(Overskrift::Del(Del::Aktive)), Rad::Pane(&paner[0], Merke::Sett)]);
     }
 
@@ -285,7 +285,7 @@ mod tester {
         let rader = etter_aktivitet(&paner, |p| match p.id.as_str() {
             "%1" => plass(Merke::Spør, 10),
             "%2" => plass(Merke::Sett, 30),
-            _ => Some(Plass::fra(Merke::Starter, None)),
+            _ => Some(Plassering::fra(Merke::Starter, None)),
         });
         assert_eq!(rekkefølge(&rader), ["%3", "%2", "%1"]);
         assert_eq!(rader[0], Rad::Overskrift(Overskrift::Alle));

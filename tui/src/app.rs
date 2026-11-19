@@ -14,9 +14,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
-use crate::{AktivPane, Fokus, Hendelse, Svar, bindinger, bokser, taster, tegn, utseende};
+use crate::{AktivPane, Fokus, Hendelse, Svar, bokser, taster, tegn, tmuxtaster, utseende};
 use crate::agent::Agent;
-use crate::grupper::Plass;
+use crate::grupper::Plassering;
 use crate::omverden::Omverden;
 use crate::popup::Popup;
 use crate::tegn::Mål;
@@ -56,7 +56,7 @@ pub(crate) struct App {
     pub(crate) kø: VecDeque<Svar>,
 
     /// Panene som har en agent, i lista.
-    pub(crate) claude_paner: Vec<Pane>,
+    pub(crate) agent_paner: Vec<Pane>,
     /// Pane-id → det kortet i lista står for.
     pub(crate) agenter: HashMap<String, Agent>,
     /// Sesjonene nerdr har laget, og siden når de har vært uten Claude.
@@ -82,11 +82,11 @@ pub(crate) struct App {
     pub(crate) sett: HashMap<String, u64>,
     /// Panen du er inne i, og plassen den hadde da du gikk inn. Den blir stående
     /// der i delen til du går ut, så kortet ikke flytter seg for hver melding.
-    pub(crate) låst: Option<(String, Plass)>,
+    pub(crate) låst: Option<(String, Plassering)>,
     /// Panen du sist gikk ut av, med plassen fra `låst`. Den holdes til
     /// registeret er lest på nytt, fordi tilstanden nerdr har, kan være eldre
     /// enn prompten du nettopp sendte.
-    pub(crate) forlatt: Option<(String, Plass)>,
+    pub(crate) forlatt: Option<(String, Plassering)>,
     /// Prosjektene som er brettet sammen, når lista er ordnet etter mappe.
     pub(crate) brettet: HashSet<String>,
 
@@ -132,9 +132,9 @@ pub(crate) struct App {
     pub(crate) popup: Option<Popup>,
     /// Prefikset er trykket, og neste tast er en kommando.
     pub(crate) etter_prefiks: bool,
-    pub(crate) bindinger: bindinger::Bindinger,
+    pub(crate) bindinger: tmuxtaster::Bindinger,
     /// Tastene uten prefiks fra `bind -n`, som gjelder i panen.
-    pub(crate) root: bindinger::Bindinger,
+    pub(crate) root: tmuxtaster::Bindinger,
     /// Til da går en tast med `-r` til tmux-kommandoen uten prefikset.
     pub(crate) gjentar: Option<Instant>,
     pub(crate) visning: Rect,
@@ -169,7 +169,7 @@ impl App {
             tilkobling,
             venter_siden: None,
             kø: VecDeque::new(),
-            claude_paner: Vec::new(),
+            agent_paner: Vec::new(),
             agenter: HashMap::new(),
             uten_claude: HashMap::new(),
             alle: Vec::new(),
@@ -207,8 +207,8 @@ impl App {
             utseende: Utseende::ny(bokser::Rammer::Linjer),
             popup: None,
             etter_prefiks: false,
-            bindinger: bindinger::Bindinger::default(),
-            root: bindinger::Bindinger::default(),
+            bindinger: tmuxtaster::Bindinger::default(),
+            root: tmuxtaster::Bindinger::default(),
             gjentar: None,
             visning: Rect::default(),
             skjerm: Rect::default(),

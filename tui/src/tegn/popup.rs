@@ -6,7 +6,7 @@ use ratatui::layout::{Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use std::ops::Range;
 use crate::{App, hjelp};
-use crate::bindinger::Bindinger;
+use crate::tmuxtaster::Bindinger;
 use crate::grupper::glyf;
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
@@ -76,7 +76,7 @@ pub(super) fn tegn_lukke(buf: &mut Buffer, område: Rect, app: &App, lukke: &cra
         buf.set_stringn(ramme.x + 2, ramme.y + 1 + i as u16, linje, indre, VANLIG);
     }
     for ((lukk, x, y), (_, navn, tast)) in svar(app).into_iter().zip(SVAR) {
-        let bakgrunn = if mus == Some(&Mål::Svar(lukk)) { under_musen() } else { markert() };
+        let bakgrunn = if mus == Some(&Mål::Svar(lukk)) { musestil() } else { markert() };
         let stil = if lukk { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { VANLIG };
         let etter = buf.set_stringn(x.start, y, format!("{navn}  "), x.len(), stil.patch(bakgrunn)).0;
         buf.set_string(etter, y, tast, SVAK.patch(bakgrunn));
@@ -254,7 +254,7 @@ pub(super) fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt
         for (i, (r, verdi)) in kolonner.into_iter().zip(akse.verdier()).enumerate() {
             let stil = match () {
                 _ if i == u.indeks(akse) => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),
-                _ if mus == Some(&Mål::Verdi(akse, i)) => under_musen().patch(VANLIG),
+                _ if mus == Some(&Mål::Verdi(akse, i)) => musestil().patch(VANLIG),
                 _ => VANLIG,
             };
             buf.set_stringn(r.start, y, verdi.meny, ramme.right().saturating_sub(r.start + 1) as usize, stil);
@@ -336,7 +336,7 @@ pub(super) fn menyrad(buf: &mut Buffer, boks: Rect, y: u16, valgt: bool, pekt: b
         buf.set_style(rad, markert());
         buf.set_string(boks.x + 1, y, "▎", VANLIG);
     } else if pekt {
-        buf.set_style(rad, under_musen());
+        buf.set_style(rad, musestil());
     }
 }
 

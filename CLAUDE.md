@@ -18,7 +18,7 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
   rekkefølgen i lista og `handling.rs` handlingene og nye Claude-er.
   `agent.rs` er hva et kort i agentlista er, `kommandoer.rs`
   `liste`, `samtaler` og `ny`, `ny.rs` mappevelgeren, `handlinger.rs`
-  handlingene bak `:`, `bindinger.rs` hva tastene fra tmux-oppsettet gjør i
+  handlingene bak `:`, `tmuxtaster.rs` hva tastene fra tmux-oppsettet gjør i
   nerdr, `utseende.rs` valgene i innstillingene, og `palett.rs`
   fargene til terminalen, som markeringen og tonene blandes av.
 - `tegn.rs` er tegningen, delt etter flate: `tegn/liste.rs` agentlista,

@@ -11,7 +11,7 @@ use crate::{App, Fokus, hjelp};
 use crate::agent::Agent;
 use crate::grupper::{Overskrift, Rad};
 use crate::tekst::varighet;
-use crate::utseende::{Akse, Orden, Plass};
+use crate::utseende::{Akse, Orden, Kortdesign};
 use super::*;
 
 pub(super) fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
@@ -55,7 +55,7 @@ pub(super) fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option
                 let bakgrunn = match () {
                     _ if pekt => Some(self::pekt()),
                     _ if er_valgt(app, pane) => Some(inne()),
-                    _ if matches!(mus, Some(Mål::Kort(id) | Mål::Lukk(id)) if *id == pane.id) => Some(under_musen()),
+                    _ if matches!(mus, Some(Mål::Kort(id) | Mål::Lukk(id)) if *id == pane.id) => Some(musestil()),
                     _ => None,
                 };
                 tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, bakgrunn);
@@ -81,7 +81,7 @@ pub(super) fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option
         overskrifter.push(y);
     }
     for (knapp, x, y) in knapper(app) {
-        let stil = if mus == Some(&Mål::Knapp(knapp)) { under_musen() } else { Style::new() };
+        let stil = if mus == Some(&Mål::Knapp(knapp)) { musestil() } else { Style::new() };
         if stripe(app) {
             buf.set_string(0, y, " + ", pluss.patch(stil));
             continue;
@@ -116,7 +116,7 @@ pub(super) fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option
     }
 
     if let Some((x, tekst)) = sortering(app) {
-        let stil = if mus == Some(&Mål::Sortering) { under_musen().patch(VANLIG) } else { SVAK };
+        let stil = if mus == Some(&Mål::Sortering) { musestil().patch(VANLIG) } else { SVAK };
         buf.set_string(x.start, NY_RAD, tekst, stil);
     }
 
@@ -180,7 +180,7 @@ pub(super) fn er_valgt(app: &App, pane: &Pane) -> bool {
 /// En Claude i lista: oppgaven som tittel, med hvor lenge den har ventet,
 /// jobbet eller vært ferdig, og repoet og branchen. Uten oppgave er repoet
 /// tittelen.
-pub(super) fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
+pub(super) fn kort_for_pane(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Kortlinje> {
     let repo = app.repoer.get(&pane.id);
     // En som starter, er ikke i registeret ennå, og har ingen tid.
     let agent = app.agenter.get(&pane.id);
@@ -203,7 +203,7 @@ pub(super) fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
 
 /// Kortet med første linje på rad `topp`, som kan være over skjermen når
 /// lista ruller. Bare linjene på radene i `vis` tegnes.
-pub(super) fn tegn_kort(buf: &mut Buffer, topp: i32, vis: &Range<u16>, bredde: u16, kort: &[kort::Linje], bakgrunn: Option<Style>) {
+pub(super) fn tegn_kort(buf: &mut Buffer, topp: i32, vis: &Range<u16>, bredde: u16, kort: &[kort::Kortlinje], bakgrunn: Option<Style>) {
     for (i, linje) in kort.iter().enumerate() {
         let Some(y) = u16::try_from(topp + i as i32).ok().filter(|y| vis.contains(y)) else { continue };
         if let Some(bakgrunn) = bakgrunn {
@@ -220,7 +220,7 @@ pub(super) struct Plassert<'a> {
     pub(super) y: u16,
     pub(super) høyde: u16,
     pub(super) rad: Rad<'a>,
-    pub(super) kort: Option<Vec<kort::Linje>>,
+    pub(super) kort: Option<Vec<kort::Kortlinje>>,
 }
 
 /// Radene i lista, etter hverandre fra toppen.
@@ -233,7 +233,7 @@ pub(super) fn plasser(app: &App) -> Vec<Plassert<'_>> {
         .map(|rad| {
             let overskrift = matches!(rad, Rad::Overskrift(Overskrift::Del(_)));
             let kort = match &rad {
-                Rad::Pane(pane, merke) => Some(kort(app, pane, *merke)),
+                Rad::Pane(pane, merke) => Some(kort_for_pane(app, pane, *merke)),
                 Rad::Overskrift(Overskrift::Mappe(navn)) if på_rad => Some(vec![kort::prosjektrad(navn, &[], bredde, false, false)]),
                 Rad::Brettet(navn, paner) => {
                     let merker: Vec<Merke> = paner.iter().map(|(_, m)| *m).collect();
@@ -345,9 +345,9 @@ pub fn utsnitt(app: &App) -> (Utsnitt, Option<Range<u16>>) {
 /// oftest er tre tegn, som `<1m`.
 pub(super) fn lukk_x(app: &App) -> Option<u16> {
     let bredde = liste_bredde(app) - 1;
-    match app.utseende.plass {
+    match app.utseende.kortdesign {
         _ if stripe(app) => None,
-        Plass::Minimal => bredde.checked_sub(3),
+        Kortdesign::Minimal => bredde.checked_sub(3),
         _ => bredde.checked_sub(6),
     }
 }
@@ -356,7 +356,7 @@ pub(super) fn lukk_x(app: &App) -> Option<u16> {
 /// seg når musen kommer. I boksen tas luften rundt tiden med.
 pub(super) fn tegn_lukk(buf: &mut Buffer, app: &App, x: u16, y: u16, pekt: bool) {
     let stil = if pekt { Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD) } else { STERK };
-    let luft = if app.utseende.plass == Plass::Minimal { "   " } else { "     " };
+    let luft = if app.utseende.kortdesign == Kortdesign::Minimal { "   " } else { "     " };
     let bredde = luft.len() as u16;
     buf.set_string(x.saturating_sub(bredde / 2), y, luft, Style::new());
     buf.set_string(x, y, "×", stil);

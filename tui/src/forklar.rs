@@ -5,7 +5,7 @@
 
 use nerdr_kjerne::{bindinger, tmux};
 
-use crate::bindinger::{Bindinger, tast};
+use crate::tmuxtaster::{Bindinger, tast};
 use crate::grupper::glyf;
 use crate::hjelp::MERKER;
 use crate::ny;

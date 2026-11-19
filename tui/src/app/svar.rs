@@ -6,7 +6,7 @@ use nerdr_kjerne::kontroll::{sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{self, Pane};
 use nerdr_kjerne::sgr;
 use std::time::{Duration, Instant};
-use crate::{Fokus, STARTER_MAKS, Svar, UTEN_CLAUDE_MAKS, bindinger, nå_ms, taster, tegn};
+use crate::{Fokus, STARTER_MAKS, Svar, UTEN_CLAUDE_MAKS, nå_ms, taster, tegn, tmuxtaster};
 use crate::agent::Agent;
 
 impl App {
@@ -54,10 +54,10 @@ impl App {
                     .iter()
                     .filter_map(|(id, a)| Some((id.clone(), git::les(a.mappe()?)?)))
                     .collect();
-                self.claude_paner = alle.iter().filter(|p| ok && self.agenter.contains_key(&p.id)).cloned().collect();
+                self.agent_paner = alle.iter().filter(|p| ok && self.agenter.contains_key(&p.id)).cloned().collect();
                 self.størrelser.retain(|vindu, _| alle.iter().any(|p| &p.vindu_id == vindu));
                 self.alle = alle;
-                let valgt = self.valgt.as_ref().and_then(|v| self.claude_paner.iter().find(|p| p.id == v.id));
+                let valgt = self.valgt.as_ref().and_then(|v| self.agent_paner.iter().find(|p| p.id == v.id));
                 match valgt.cloned() {
                     // Oppdatert, så størrelsen regnes fra det tmux sier nå.
                     Some(pane) => {
@@ -75,10 +75,10 @@ impl App {
                         }
                     }
                 }
-                if !self.peker.as_ref().is_some_and(|id| self.claude_paner.iter().any(|p| &p.id == id)) {
+                if !self.peker.as_ref().is_some_and(|id| self.agent_paner.iter().any(|p| &p.id == id)) {
                     self.peker = self.valgt.as_ref().map(|p| p.id.clone());
                 }
-                let ny = self.gå_inn_i.as_ref().and_then(|id| self.claude_paner.iter().find(|p| &p.id == id));
+                let ny = self.gå_inn_i.as_ref().and_then(|id| self.agent_paner.iter().find(|p| &p.id == id));
                 if let Some(pane) = ny.cloned() {
                     self.gå_inn_i = None;
                     // Er du inne i en annen Claude, skal ikke tastene dine gå et
@@ -175,14 +175,14 @@ impl App {
             Svar::Bindinger => {
                 if ok {
                     let gjentatid = self.bindinger.gjentatid;
-                    self.bindinger = bindinger::Bindinger::ny(&nerdr_kjerne::bindinger::les(&linjer));
+                    self.bindinger = tmuxtaster::Bindinger::ny(&nerdr_kjerne::bindinger::les(&linjer));
                     self.bindinger.gjentatid = gjentatid;
                 }
                 false
             }
             Svar::Root => {
                 if ok {
-                    self.root = bindinger::Bindinger::root(&nerdr_kjerne::bindinger::les(&linjer));
+                    self.root = tmuxtaster::Bindinger::root(&nerdr_kjerne::bindinger::les(&linjer));
                 }
                 false
             }

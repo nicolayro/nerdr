@@ -82,7 +82,7 @@ fn fanen_viser_vinduet_og_midtknappen_lukker_det() {
 #[test]
 fn et_klikk_inni_en_popup_lar_den_stå_og_utenfor_lukker_den() {
     let mut p = to_claude();
-    p.app.popup = Some(Popup::Utseende(Akse::Plass));
+    p.app.popup = Some(Popup::Utseende(Akse::Kortdesign));
     let (x, y) = p.finn("innstillinger");
     p.klikk(x, y);
     assert!(p.app.popup.is_some());

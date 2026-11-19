@@ -5,14 +5,14 @@ use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::paner::Pane;
 use crate::{Fokus, grupper, tekst};
 use crate::agent::Agent;
-use crate::grupper::{Del, Plass, Rad};
+use crate::grupper::{Del, Plassering, Rad};
 use crate::utseende::Orden;
 
 impl App {
     /// Prosjektet til kortet som er markert, når lista er ordnet etter mappe.
     pub(crate) fn valgt_prosjekt(&self) -> Option<String> {
         let id = self.markert().filter(|_| self.utseende.orden == Orden::Mappe)?;
-        self.claude_paner.iter().find(|p| p.id == id).map(|p| self.prosjekt(p))
+        self.agent_paner.iter().find(|p| p.id == id).map(|p| self.prosjekt(p))
     }
 
     pub(crate) fn brett(&mut self, sammen: bool) -> bool {
@@ -52,7 +52,7 @@ impl App {
     /// Velger kortet pekeren står på, og går inn i det, også når et annet
     /// vindu i sesjonen vises, som `choose-tree` i tmux.
     pub(crate) fn gå_inn(&mut self) {
-        let pekt = self.peker.as_ref().and_then(|id| self.claude_paner.iter().find(|p| &p.id == id)).cloned();
+        let pekt = self.peker.as_ref().and_then(|id| self.agent_paner.iter().find(|p| &p.id == id)).cloned();
         if let Some(pane) = pekt {
             let vises = self.valgt.as_ref().is_some_and(|v| v.id == pane.id) && Some(&pane.vindu_id) == self.vist.as_ref();
             if !vises {
@@ -67,7 +67,7 @@ impl App {
         Some(agent.merke(self.sett.get(&pane.id).copied().unwrap_or(0)))
     }
 
-    pub(crate) fn plass(&self, pane: &Pane) -> Option<Plass> {
+    pub(crate) fn plass(&self, pane: &Pane) -> Option<Plassering> {
         let merke = self.merke(pane)?;
         let del = Del::fra(merke);
         // Som tiden på kortet, så de ledige ikke flytter seg når du har vært inne i en.
@@ -79,14 +79,14 @@ impl App {
             // aktive.
             Some((_, låst)) => {
                 let del = del.min(låst.del);
-                Plass { del, merke, siden: if del == låst.del { låst.siden } else { None } }
+                Plassering { del, merke, siden: if del == låst.del { låst.siden } else { None } }
             }
-            _ => Plass { del, merke, siden },
+            _ => Plassering { del, merke, siden },
         })
     }
 
     pub(crate) fn rader(&self) -> Vec<Rad<'_>> {
-        let paner = &self.claude_paner;
+        let paner = &self.agent_paner;
         match self.utseende.orden {
             Orden::Nerdr => grupper::rader(paner, |p| self.plass(p)),
             Orden::Mappe => {

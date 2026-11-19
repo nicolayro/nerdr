@@ -52,7 +52,7 @@ impl App {
         let inne = self.fokus == Fokus::Pane;
         // Via lista, så Claude-en du forlater, merkes som sett.
         self.bytt_fokus(Fokus::Liste);
-        if let Some(claude) = self.claude_paner.iter().find(|p| p.vindu_id == vindu).cloned() {
+        if let Some(claude) = self.agent_paner.iter().find(|p| p.vindu_id == vindu).cloned() {
             self.velg(claude);
         } else {
             let sesjon = self.alle.iter().find(|p| p.vindu_id == vindu).map(|p| p.sesjon_id.clone());
