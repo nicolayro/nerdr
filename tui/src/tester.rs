@@ -31,7 +31,6 @@ use crate::{App, Hendelse, Svar, taster, tegn};
 #[derive(Default)]
 struct Logg {
     sendt: Vec<String>,
-    kopiert: Vec<String>,
     register: HashMap<String, Claude>,
     /// Nummeret `koble_igjen` gir, eller `None` når tilkoblingen feiler.
     ny_tilkobling: Option<u64>,
@@ -51,8 +50,7 @@ impl Omverden for Falsk {
 
     fn for_seg(&mut self, _: Option<&str>, _: &[String]) {}
 
-    fn kopier(&mut self, tekst: &str) -> bool {
-        self.0.borrow_mut().kopiert.push(tekst.to_string());
+    fn kopier(&mut self, _: &str) -> bool {
         true
     }
 
@@ -74,7 +72,6 @@ pub struct Prøve {
     pub markør: String,
 }
 
-/// Det motsatte av `Pane::fra_linje`.
 fn linje(p: &Pane) -> String {
     let flagg = |b: bool| if b { "1" } else { "0" };
     [
@@ -109,6 +106,7 @@ impl Prøve {
         let (tx, _) = std::sync::mpsc::channel();
         let mut app = App::ny(Box::new(Falsk(logg.clone())), 1, tx);
         app.prefiks = taster::Prefiks::default();
+        app.konfig = PathBuf::from("/finnes/ikke");
         let mut p = Prøve { app, logg, paner: Vec::new(), markør: "0\t0\t1\t0\t0\t0\t0".into() };
         p.endret();
         p
@@ -151,7 +149,6 @@ impl Prøve {
         self.logg.borrow_mut().register.remove(pane);
     }
 
-    /// Svarer på alt som venter, i rekkefølge.
     pub fn svar(&mut self) {
         while let Some(neste) = self.app.kø.front() {
             let linjer = match neste {
@@ -163,7 +160,6 @@ impl Prøve {
         }
     }
 
-    /// Som når tmux melder en endring: ny liste, besvart.
     pub fn endret(&mut self) {
         self.melding(Melding::Endret);
         self.svar();
@@ -213,12 +209,10 @@ impl Prøve {
         ((start + tekst.chars().count() / 2) as u16, y as u16)
     }
 
-    /// Kommandoene sendt siden sist.
     pub fn sendt(&mut self) -> Vec<String> {
         std::mem::take(&mut self.logg.borrow_mut().sendt)
     }
 
-    /// Tegner som `løkke` og gir linjene som tekst.
     pub fn skjerm(&mut self) -> Vec<String> {
         let mut terminal = Terminal::new(TestBackend::new(120, 40)).expect("testbackend");
         self.app.forbered_tegning(Size::new(120, 40));
@@ -230,7 +224,6 @@ impl Prøve {
     }
 }
 
-/// `Instant` så mye tilbake i tid.
 pub fn for_lenge_siden(tid: Duration) -> Instant {
     Instant::now().checked_sub(tid).expect("maskinen har gått lenge nok")
 }

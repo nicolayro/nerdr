@@ -9,9 +9,7 @@ use crate::ny::Velger;
 use crate::utseende::Akse;
 
 pub enum Popup {
-    /// Hvor langt hjelpen er rullet.
     Hjelp(u16),
-    /// Aksen som er valgt i innstillingene.
     Utseende(Akse),
     Lukke(Lukke),
     Handlinger(Handlinger),
@@ -28,7 +26,6 @@ pub struct Søkefelt {
     pub rull: usize,
 }
 
-/// Hva en tast gjorde i en søkemeny, for det eieren av feltet må svare på.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Søketast {
     Lukk,
@@ -120,7 +117,6 @@ impl Popup {
         match (tast, &mut *self) {
             (Søketast::Endret, _) => self.søket_endret(),
             (Søketast::Bytt, Popup::Velger(v)) => v.bytt(),
-            // Bare velgeren har noe å bytte.
             (Søketast::Bytt, _) => return Søketast::Ubrukt,
             _ => {}
         }

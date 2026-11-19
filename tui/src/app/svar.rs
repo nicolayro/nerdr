@@ -6,7 +6,7 @@ use nerdr_kjerne::kontroll::{sitat, synkronisert_etter};
 use nerdr_kjerne::paner::{self, Pane};
 use nerdr_kjerne::sgr;
 use std::time::{Duration, Instant};
-use crate::{Fokus, STARTER_MAKS, Svar, UTEN_CLAUDE_MAKS, nå_ms, taster, tegn, tmuxtaster};
+use crate::{Fokus, Svar, UTEN_CLAUDE_MAKS, nå_ms, taster, tegn, tmuxtaster};
 use crate::agent::Agent;
 
 impl App {
@@ -240,7 +240,7 @@ impl App {
         for (id, agent) in forrige {
             let behold = match &agent {
                 Agent::Starter { startet, .. } => {
-                    !ok || (alle.iter().any(|p| p.id == id) && (startet.elapsed() < STARTER_MAKS || inne(&id)))
+                    !ok || (alle.iter().any(|p| p.id == id) && (startet.elapsed() < self.starter_maks || inne(&id)))
                 }
                 Agent::Rest { .. } => !ok,
                 Agent::Claude(_) => false,

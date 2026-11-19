@@ -77,7 +77,7 @@ tastene og hvilket prefiks og hvilke mapper som gjelder.
 | ha en mappe i velgeren | Mapper under `~` er med, utenom skjulte mapper og det som er bygget. Står `NERDR_MAPPER` satt, sett mappa over den der. Eller start en Claude der med `nerdr ny <mappe>` og skriv noe til den, så står mappa i velgeren etter det. |
 | et annet prefiks | nerdr bruker prefikset fra `~/.tmux.conf`, ellers `C-b`. `NERDR_PREFIKS=C-a` endrer bare nerdr. |
 | endre utseendet | Prefikset og `b`. |
-| beholde utseendet og bredden etter at tmux er stoppet | Valgene står i `@nerdr-utseende` og `@nerdr-liste`, som forsvinner med tmux-serveren. Les verdiene med `tmux show-options -gqv @nerdr-utseende`, og legg dem i `~/.tmux.conf`, som `set -g @nerdr-utseende "farge=av plass=minimal"` og `set -g @nerdr-liste 46`. |
+| beholde utseendet og bredden etter at tmux er stoppet | Valgene står i `@nerdr-utseende` og `@nerdr-liste`, som forsvinner med tmux-serveren. Les verdiene med `tmux show-options -gqv @nerdr-utseende`, og legg dem i `~/.tmux.conf`, som `set -g @nerdr-utseende "plass=minimal bredde=bred"` og `set -g @nerdr-liste 46`. |
 | tilbake til standardutseendet | `tmux set-option -gu @nerdr-utseende`, og fjern linja i `~/.tmux.conf` hvis den finnes. |
 
 ## Oppdatere og fjerne
