@@ -226,7 +226,7 @@ pub fn alt(f: &mut Frame, app: &App) {
             f.set_cursor_position(markør);
         }
         None => {
-            if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app, &bokser)) {
+            if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.aktiv_pane.markør, app.aktiv_pane.rull, aktiv_boks(app, &bokser)) {
                 let i = boks.innhold;
                 if x < i.width && y < i.height {
                     f.set_cursor_position((i.x + x, i.y + y));
@@ -395,7 +395,7 @@ pub fn sortering_på(app: &App, x: u16, y: u16) -> bool {
 fn hint(app: &App) -> Option<String> {
     match () {
         _ if app.etter_prefiks => Some(format!(" {} … f ny · w agentlista · ? mer", app.prefiks.navn())),
-        _ if app.kopimodus.is_some() => Some(" v marker · y kopier · q ut".to_string()),
+        _ if app.aktiv_pane.kopimodus.is_some() => Some(" v marker · y kopier · q ut".to_string()),
         _ => None,
     }
 }
@@ -1475,7 +1475,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
             tegn_bilde(buf, boks.innhold, bilde);
         }
         let i = boks.innhold;
-        let topp = app.historie as i64 - app.rull as i64;
+        let topp = app.aktiv_pane.historie as i64 - app.aktiv_pane.rull as i64;
         if let (Some(markering), Some(bilde)) =
             (app.vist_markering().filter(|m| m.pane == boks.pane), app.bilder.get(&boks.pane))
         {
@@ -1487,7 +1487,7 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
                 }
             }
         }
-        if let Some(kopi) = app.kopimodus.as_ref().filter(|k| k.pane == boks.pane) {
+        if let Some(kopi) = app.aktiv_pane.kopimodus.as_ref().filter(|k| k.pane == boks.pane) {
             let (linje, x) = kopi.markør;
             if let Ok(y) = u16::try_from(linje - topp)
                 && y < i.height
@@ -1507,9 +1507,9 @@ fn tegn_pane(buf: &mut Buffer, app: &App, bokser: &[Boks], mus: Option<&Mål>) {
     let merkelapp = match () {
         _ if app.beskjed.is_some() => app.beskjed.as_ref().map(|(tekst, _)| format!(" {tekst} ")),
         _ if app.kopiert.is_some() => Some(" kopiert ".to_string()),
-        _ if app.kopimodus.is_some() && app.rull > 0 => Some(format!(" kopi {}/{} ", app.rull, app.historie)),
-        _ if app.kopimodus.is_some() => Some(" kopi ".to_string()),
-        _ if app.rull > 0 => Some(format!(" {}/{} ", app.rull, app.historie)),
+        _ if app.aktiv_pane.kopimodus.is_some() && app.aktiv_pane.rull > 0 => Some(format!(" kopi {}/{} ", app.aktiv_pane.rull, app.aktiv_pane.historie)),
+        _ if app.aktiv_pane.kopimodus.is_some() => Some(" kopi ".to_string()),
+        _ if app.aktiv_pane.rull > 0 => Some(format!(" {}/{} ", app.aktiv_pane.rull, app.aktiv_pane.historie)),
         _ => None,
     };
     if let (Some(hvor), Some(boks)) = (merkelapp, aktiv_boks(app, bokser)) {
