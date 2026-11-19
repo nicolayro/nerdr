@@ -7,7 +7,8 @@ use ratatui::crossterm::event::{MouseButton, MouseEventKind};
 use super::Prøve;
 use crate::popup::Popup;
 use crate::utseende::Akse;
-use crate::{Fokus, Mål, tegn};
+use crate::Fokus;
+use crate::tegn::{self, Mål};
 
 /// `%1` er klar og `%2` jobber, hver i sitt vindu.
 fn to_claude() -> Prøve {
