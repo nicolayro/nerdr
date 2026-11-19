@@ -28,6 +28,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
 use agent::Agent;
+use tegn::Mål;
 use bokser::Boks;
 use grupper::{Del, Plass, Rad};
 use handlinger::{Handling, Handlinger};
@@ -125,55 +126,6 @@ struct Lukke {
 enum Fokus {
     Liste,
     Pane,
-}
-
-/// Det et klikk der musen står, ville truffet.
-#[derive(PartialEq)]
-enum Mål {
-    /// Pane-id-en til Claude-en i lista.
-    Kort(String),
-    /// `×` på kortet, med pane-id-en.
-    Lukk(String),
-    /// «lukk» eller «avbryt» i popupen som spør.
-    Svar(bool),
-    /// Et treff i handlingene eller velgeren.
-    Rad(usize),
-    /// En verdi i innstillingene, som aksen og indeksen.
-    Verdi(Akse, usize),
-    /// Id-en til vinduet.
-    Fane(String),
-    /// `×` på fanen, med id-en til vinduet.
-    LukkFane(String),
-    /// En pane i vinduet, også den tastene går til.
-    Pane(String),
-    Knapp(Knapp),
-    /// Knappen øverst i lista som bytter sortering.
-    Sortering,
-    /// `+` etter fanene.
-    NyFane,
-    /// Streken mellom lista og panen, som kan dras.
-    Skille,
-    /// Pilen som viser at lista ruller, `true` for opp.
-    Pil(bool),
-    /// Overskriften til et prosjekt, eller prosjektet brettet sammen.
-    Prosjekt(String),
-    /// Lista der verken knapp eller kort står.
-    Liste,
-    /// Visningen der ingen pane står.
-    Visning,
-    /// Inni en popup, men ikke på noe som kan klikkes.
-    Popup,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Knapp {
-    Ny,
-    Hjelp,
-    Avslutt,
-    Samtale,
-    Terminal,
-    Innstillinger,
-    Handlinger,
 }
 
 /// Det nerdr vet om den aktive panen. Byttes panen, er alt her gammelt, så
