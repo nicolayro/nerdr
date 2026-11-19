@@ -2,13 +2,52 @@
 //! under musen, er det klikket treffer.
 
 use super::{
-    fane_på, fanerad, i_lista, i_menyboks, i_popupen, i_valgmenyen, knapp_på, liste, lukk_fane_på, lukk_nerdr_på, lukk_x,
+    Knapp,    fane_på, fanerad, i_lista, i_menyboks, i_popupen, i_valgmenyen, knapp_på, liste, lukk_fane_på, lukk_nerdr_på, lukk_x,
     meny_rad_på, ny_fane_på, sortering_på, svar_på, verdi_på,
 };
 use crate::grupper::{Overskrift, Rad};
 use crate::popup::Popup;
-use crate::{App, Knapp, Mål};
+use crate::utseende::Akse;
+use crate::App;
 use ratatui::layout::Rect;
+
+/// Det et klikk der musen står, ville truffet.
+#[derive(PartialEq)]
+pub enum Mål {
+    /// Pane-id-en til Claude-en i lista.
+    Kort(String),
+    /// `×` på kortet, med pane-id-en.
+    Lukk(String),
+    /// «lukk» eller «avbryt» i popupen som spør.
+    Svar(bool),
+    /// Et treff i handlingene eller velgeren.
+    Rad(usize),
+    /// En verdi i innstillingene, som aksen og indeksen.
+    Verdi(Akse, usize),
+    /// Id-en til vinduet.
+    Fane(String),
+    /// `×` på fanen, med id-en til vinduet.
+    LukkFane(String),
+    /// En pane i vinduet, også den tastene går til.
+    Pane(String),
+    Knapp(Knapp),
+    /// Knappen øverst i lista som bytter sortering.
+    Sortering,
+    /// `+` etter fanene.
+    NyFane,
+    /// Streken mellom lista og panen, som kan dras.
+    Skille,
+    /// Pilen som viser at lista ruller, `true` for opp.
+    Pil(bool),
+    /// Overskriften til et prosjekt, eller prosjektet brettet sammen.
+    Prosjekt(String),
+    /// Lista der verken knapp eller kort står.
+    Liste,
+    /// Visningen der ingen pane står.
+    Visning,
+    /// Inni en popup, men ikke på noe som kan klikkes.
+    Popup,
+}
 
 pub fn mål(app: &App, x: u16, y: u16) -> Option<Mål> {
     match &app.popup {
