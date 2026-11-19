@@ -16,11 +16,11 @@ use crate::bindinger::Bindinger;
 use crate::bokser::{Boks, Rammer};
 use crate::markering;
 use crate::palett::{Rgb, bland};
-use crate::grupper::{Del, Overskrift, Rad, glyf};
+use crate::grupper::{Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
 use crate::ny::Velger;
 use crate::tekst::varighet;
-use crate::utseende::{self, Ledig, Orden, Plass, Sti, Topp, Utseende};
+use crate::utseende::{self, Akse, Orden, Plass, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
@@ -48,9 +48,6 @@ const ORANSJE: Color = Color::Rgb(ORANSJE_RGB.0, ORANSJE_RGB.1, ORANSJE_RGB.2);
 const GRØNN: Color = Color::Indexed(108);
 /// Fargen 108 i 256-paletten, til å blande toner av.
 const GRØNN_RGB: Rgb = (135, 175, 135);
-const BLÅ: Color = Color::Indexed(110);
-/// Fargen 110 i 256-paletten.
-const BLÅ_RGB: Rgb = (135, 175, 215);
 // Gråtonene i 256-paletten er faste og følger ikke fargetemaet, så teksten har
 // standardfargen til terminalen og skiller seg bare med fet og svak.
 const STERK: Style = Style::new().add_modifier(Modifier::BOLD);
@@ -68,7 +65,6 @@ const AKTIV_RAMME_ANDEL: f32 = 0.6;
 const SKILLE_ANDEL: f32 = 0.2;
 const INNE_ANDEL: f32 = 0.05;
 const UNDER_MUSEN_ANDEL: f32 = 0.06;
-const OVERSKRIFT_ANDEL: f32 = 0.08;
 
 /// Forgrunns- og bakgrunnsfargen til terminalen.
 static FARGER: OnceLock<Option<(Rgb, Rgb)>> = OnceLock::new();
@@ -114,10 +110,6 @@ fn rammestil(aktiv: bool) -> Style {
 
 fn skillestil() -> Style {
     tonet(None, SKILLE_ANDEL).map_or(SVAK, |c| Style::new().fg(c))
-}
-
-fn overskrift_bakgrunn() -> Style {
-    tonet(None, OVERSKRIFT_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
 
 fn under_musen() -> Style {
@@ -246,14 +238,13 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
     let (rader, utsnitt) = liste(app);
     let vis = utsnitt.rader();
     let på_skjermen = |y: u16| u16::try_from(utsnitt.skjerm(y)).ok().filter(|y| vis.contains(y));
-    let rad_bakgrunn = (på_egen_rad(app) && app.utseende.topp == Topp::Rad).then(overskrift_bakgrunn);
-    let med_strek = på_egen_rad(app) && app.utseende.topp != Topp::Rad;
+    let med_strek = på_egen_rad(app);
     for Plassert { y, rad, kort, .. } in &rader {
         match rad {
             Rad::Tom => {}
             Rad::Overskrift(_) if kort.is_some() => {
                 let kort = kort.as_deref().unwrap_or_default();
-                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, rad_bakgrunn);
+                tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, None);
                 if med_strek && let Some(y) = på_skjermen(*y) {
                     overskrifter.push(y);
                 }
@@ -270,7 +261,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                         Some(pekt())
                     }
                     _ if paner.iter().any(|(p, _)| er_valgt(app, p)) => Some(inne()),
-                    _ => rad_bakgrunn,
+                    _ => None,
                 };
                 tegn_kort(buf, utsnitt.skjerm(*y), &vis, bredde, kort, bakgrunn);
             }
@@ -358,11 +349,7 @@ fn tegn_liste(buf: &mut Buffer, område: Rect, app: &App, mus: Option<&Mål>) {
                 Rad::Brettet(_, paner) => paner.iter().any(|(_, m)| m.gruppe() == Gruppe::Venter),
                 _ => false,
             });
-            let stil = match (venter, app.utseende.farge) {
-                (false, _) => SVAK,
-                (true, utseende::Farge::På) => Style::new().fg(ORANSJE),
-                (true, utseende::Farge::Av) => STERK,
-            };
+            let stil = if venter { Style::new().fg(ORANSJE) } else { SVAK };
             buf.set_stringn(1, vis.start - 1, " ↑ ", bredde as usize, stil);
         }
         if under {
@@ -386,8 +373,9 @@ fn sortering(app: &App) -> Option<(Range<u16>, String)> {
     if stripe(app) {
         return None;
     }
-    let bredde = utseende::SORTERINGER.iter().map(|s| s.chars().count()).max().unwrap_or(0);
-    let tekst = format!(" {:>bredde$} ", utseende::SORTERINGER[app.utseende.indeks(utseende::ORDEN)]);
+    let sorteringer = Akse::Orden.verdier();
+    let bredde = sorteringer.iter().map(|s| s.meny.chars().count()).max().unwrap_or(0);
+    let tekst = format!(" {:>bredde$} ", sorteringer[app.utseende.indeks(Akse::Orden)].meny);
     let slutt = liste_bredde(app) - 1;
     let start = slutt.checked_sub(tekst.chars().count() as u16).filter(|&x| x >= NY_BREDDE)?;
     Some((start..slutt, tekst))
@@ -492,8 +480,7 @@ fn skjøt_strekene(buf: &mut Buffer, app: &App, bokser: &[Boks]) {
 
 /// Prosjektet står på en rad for seg over kortene.
 fn på_egen_rad(app: &App) -> bool {
-    let u = app.utseende;
-    u.orden == Orden::Mappe && !stripe(app)
+    app.utseende.orden == Orden::Mappe && !stripe(app)
 }
 
 fn er_valgt(app: &App, pane: &Pane) -> bool {
@@ -515,7 +502,7 @@ fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
         tid,
         starter: app.nye.contains_key(&pane.id),
         sted_over: app.utseende.orden == Orden::Mappe,
-        undermappe: if app.utseende.sti == Sti::På { app.undermappe(pane) } else { None },
+        undermappe: app.undermappe(pane),
     };
     kort::kort(app.utseende, &info, liste_bredde(app) - 1, er_valgt(app, pane), stripe(app))
 }
@@ -545,26 +532,21 @@ struct Plassert<'a> {
 /// Radene i lista, etter hverandre fra toppen.
 fn plasser(app: &App) -> Vec<Plassert<'_>> {
     let mut y = 0;
-    let midten = app.utseende.ledig == Ledig::Midten && app.utseende.orden == Orden::Nerdr;
-    let u = app.utseende;
     let bredde = liste_bredde(app) - 1;
     let på_rad = på_egen_rad(app);
     kort::ordne(app.rader())
         .into_iter()
         .map(|rad| {
-            if midten && rad == Rad::Overskrift(Overskrift::Del(Del::Ledige)) {
-                y = y.max(plass(app) / 2);
-            }
             let overskrift = matches!(rad, Rad::Overskrift(Overskrift::Del(_)));
             let kort = match &rad {
                 Rad::Pane(pane, merke) => Some(kort(app, pane, *merke)),
-                Rad::Overskrift(Overskrift::Mappe(navn)) if på_rad => Some(vec![kort::prosjektrad(u, navn, &[], bredde, false, false)]),
+                Rad::Overskrift(Overskrift::Mappe(navn)) if på_rad => Some(vec![kort::prosjektrad(navn, &[], bredde, false, false)]),
                 Rad::Brettet(navn, paner) => {
                     let merker: Vec<Merke> = paner.iter().map(|(_, m)| *m).collect();
                     let valgt = paner.iter().any(|(p, _)| er_valgt(app, p));
                     Some(vec![match på_rad {
-                        true => kort::prosjektrad(u, navn, &merker, bredde, true, valgt),
-                        false => kort::brettet_stripe(u, &merker, valgt),
+                        true => kort::prosjektrad(navn, &merker, bredde, true, valgt),
+                        false => kort::brettet_stripe(&merker, valgt),
                     }])
                 }
                 _ => None,
@@ -764,7 +746,7 @@ fn ikon(app: &App, p: &Pane) -> Ikon {
         .filter_map(|q| app.merke(q))
         .min_by_key(|m| (m.gruppe(), *m != Merke::Spør));
     let (tegn, stil) = match haster {
-        Some(m) => (glyf(m).to_string(), kort::glyfstil(app.utseende, m)),
+        Some(m) => (glyf(m).to_string(), kort::glyfstil(m)),
         None => (p.vindu.clone(), SVAK),
     };
     let bredde = tegn.chars().count() as u16 + 1 + haster.is_some() as u16;
@@ -1129,7 +1111,7 @@ struct Valgmeny {
     boks: Rect,
     overskrifter: Vec<(u16, &'static str)>,
     /// Aksen, raden og kolonnene til verdiene.
-    rader: Vec<(usize, u16, Vec<Range<u16>>)>,
+    rader: Vec<(Akse, u16, Vec<Range<u16>>)>,
     forklaring: u16,
 }
 
@@ -1152,11 +1134,11 @@ fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
         .into_iter()
         .map(|(akse, y)| {
             let mut vx = x + NØKKEL_BREDDE + 2;
-            let kolonner = Utseende::i_menyen(akse)
-                .1
+            let kolonner = akse
+                .verdier()
                 .iter()
                 .map(|verdi| {
-                    let r = vx..vx + verdi.chars().count() as u16;
+                    let r = vx..vx + verdi.meny.chars().count() as u16;
                     vx = r.end + 2;
                     r
                 })
@@ -1169,7 +1151,7 @@ fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
 }
 
 /// Verdien under musen i innstillingene, som aksen og indeksen.
-pub fn verdi_på(app: &App, x: u16, y: u16) -> Option<(usize, usize)> {
+pub fn verdi_på(app: &App, x: u16, y: u16) -> Option<(Akse, usize)> {
     let meny = valgmeny(app.skjerm, &app.utseende)?;
     let (akse, _, kolonner) = meny.rader.into_iter().find(|r| r.1 == y)?;
     kolonner.iter().position(|r| r.contains(&x)).map(|i| (akse, i))
@@ -1181,7 +1163,7 @@ pub fn i_valgmenyen(app: &App, x: u16, y: u16) -> bool {
 
 /// Konfigurasjonen midt på skjermen, med aksen `valgt` markert. Valgene som
 /// ikke gjelder, er borte.
-fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize, mus: Option<&Mål>) {
+fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: Akse, mus: Option<&Mål>) {
     let Some(meny) = valgmeny(område, u) else { return };
     let (b, h) = (meny.boks.width, meny.boks.height);
     let Some(ramme) = boks(buf, område, b, h, "innstillinger", "↑↓ velg · ←→ endre · klikk · esc lukk") else { return };
@@ -1191,23 +1173,22 @@ fn tegn_utseende(buf: &mut Buffer, område: Rect, u: &Utseende, valgt: usize, mu
         buf.set_string(x, y, tittel, STERK);
     }
     for (akse, y, kolonner) in meny.rader.into_iter().filter(|r| r.1 < bunn) {
-        let (navn, verdier) = Utseende::i_menyen(akse);
         if akse == valgt {
             buf.set_style(Rect::new(ramme.x + 1, y, ramme.width - 2, 1), markert());
             buf.set_string(ramme.x + 1, y, "▎", VANLIG);
         }
-        buf.set_string(x, y, navn, if akse == valgt { STERK } else { SVAK });
+        buf.set_string(x, y, akse.i_menyen(), if akse == valgt { STERK } else { SVAK });
         buf.set_string(x + NØKKEL_BREDDE, y, "│", SVAK);
-        for (i, (r, verdi)) in kolonner.into_iter().zip(verdier).enumerate() {
+        for (i, (r, verdi)) in kolonner.into_iter().zip(akse.verdier()).enumerate() {
             let stil = match () {
                 _ if i == u.indeks(akse) => Style::new().fg(ORANSJE).add_modifier(Modifier::BOLD),
                 _ if mus == Some(&Mål::Verdi(akse, i)) => under_musen().patch(VANLIG),
                 _ => VANLIG,
             };
-            buf.set_stringn(r.start, y, *verdi, ramme.right().saturating_sub(r.start + 1) as usize, stil);
+            buf.set_stringn(r.start, y, verdi.meny, ramme.right().saturating_sub(r.start + 1) as usize, stil);
         }
     }
-    let forklaring = bryt(utseende::FORKLARING[valgt], indre, indre, FORKLARING_LINJER);
+    let forklaring = bryt(valgt.forklaring(), indre, indre, FORKLARING_LINJER);
     for (linje, y) in forklaring.into_iter().zip(meny.forklaring..bunn) {
         buf.set_string(x, y, linje, SVAK);
     }

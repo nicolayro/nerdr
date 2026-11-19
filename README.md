@@ -69,7 +69,6 @@ inni og branchen under. Et worktree står med navnet til repoet det er laget fra
 | | |
 | --- | --- |
 | **aktive** | `●` spør om noe, `◆` er ferdig og venter på deg, `◐` jobber, `◌` starter |
-| **ledige** | `○` er ferdig, og du har gått ut av den uten å sette den i gang igjen |
 
 Den du er inne i, er aldri ledig. Kortet til den som vises, har en svak
 bakgrunn, og i agentlista har kortet du står på, sterk bakgrunn og fet tekst.
@@ -252,22 +251,19 @@ ikke gjelder.
 | --- | --- |
 | **ramme** | `bokser` gir hver pane en boks med avrundede hjørner, også når vinduet har én pane, og boksene ved siden av hverandre deler kanten. `linjer` lar panene fylle visningen med streker mellom, som i tmux. `vindu` har streker mellom panene, og agentlista og vinduet i hver sin ramme inntil hverandre. |
 | **bredde** | Hvor bred agentlista er: `smal`, `vanlig` eller `bred`. Har du dratt i streken, står nivået som er nærmest. |
-| **farge** | `på` gir tegnene og tiden fargen til gruppen, og rammene en tone av den. `av` har ingen farge. |
-| **ulest** | Fargen til det som er ferdig og ikke sett. `oransje` er som det som spør, og `blå` skiller dem. Bare med farge. |
 | **kortdesign** | `vanlig` har en boks for hver Claude. `minimal` har én linje for hver, med tegnet, oppgaven og tiden. |
 | **oppgave** | Hvor mange linjer oppgaven får i boksen, fra `1` til `3`. Bare med `vanlig`. |
-| **mappe** | `på` viser mappa under branchen når Claude-en ikke jobber i mappa til repoet: hele stien til et worktree, eller undermappa i repoet. Bare med `vanlig`. |
 | **sortering** | `prioritert` deler agentlista i aktive og ledige. `prosjekt` har en gruppe for hvert repo, og både repoene og Claude-ene i dem står i den rekkefølgen de ble startet. `←` og `→`, eller `h` og `l`, bretter repoet sammen og ut. `aktivitet` har ingen grupper, og den som sist endret tilstand, står øverst. Et klikk på sorteringen øverst til høyre i agentlista bytter til neste. |
-| **overskrift** | Navnet på repoet over Claude-ene, uten stien, så det stemmer også for et worktree: på en `rad` med bakgrunn, med en `strek` bort til skillelinja, eller med strek på begge sider, `venstre`. Pilen foran navnet viser at et klikk bretter repoet sammen og ut. Bare med `prosjekt`. |
-| **ledige** | Om de ledige står rett `under` de aktive, eller begynner på `midten` av agentlista, så de ikke flytter seg når en blir aktiv. Bare med `prioritert`. |
 | **snarveier** | `på` gir knapper nederst i agentlista for ny sesjon, hent samtale, ny terminal, innstillinger og handlinger, med tasten etter prefikset som gjør det samme. Når agentlista er lav, er de borte. |
 
-Standard er linjer mellom panene, vanlig bredde, farge på med ulest i oransje,
-vanlig kortdesign, én linje til oppgaven, mappa i kortet, og sortert prioritert
-med de ledige under, uten snarveier nederst. Sortert etter prosjekt har repoet strek på begge sider. `nerdr liste` er alltid sortert
-prioritert. I `@nerdr-utseende` står valgene med navnene de hadde først:
-`paner`, `farge`, `plass`, `tittel`, `orden` med `nerdr`, `mappe` og
-`aktivitet`, `ledig`, `topp` for overskriften, `sti` for mappa, `bredde` og `snarveier`.
+Standard er linjer mellom panene, vanlig bredde, vanlig kortdesign, én linje
+til oppgaven, sortert prioritert og uten snarveier nederst. Fargen til
+gruppen, mappa under branchen og navnet på repoet med strek på begge sider
+over Claude-ene når lista er sortert etter prosjekt, har ingen innstilling. De
+ledige står under de aktive. `nerdr liste` er alltid sortert prioritert.
+I `@nerdr-utseende` står valgene med navnene `paner`, `plass`, `tittel`,
+`orden` med `nerdr`, `mappe` og `aktivitet`, `bredde` og `snarveier`. Nøkler og
+verdier nerdr ikke kjenner, hoppes over.
 
 ## Miljøvariabler
 

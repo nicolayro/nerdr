@@ -6,10 +6,10 @@ use nerdr_kjerne::merke::{Gruppe, Merke};
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Style};
 
-use super::{BLÅ, BLÅ_RGB, GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVAK, VANLIG, bryt, kutt, kutt_foran, tonet};
+use super::{GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVAK, VANLIG, bryt, kutt, kutt_foran, tonet};
 use crate::palett::Rgb;
 use crate::grupper::{self, Overskrift, Rad, glyf};
-use crate::utseende::{Farge, Plass, Topp, Ulestfarge, Utseende};
+use crate::utseende::{Plass, Utseende};
 use std::ops::Range;
 
 /// Uten glyf foran starter teksten etter pekeren og et mellomrom.
@@ -89,87 +89,72 @@ pub fn overskrift(buf: &mut Buffer, topp: i32, vis: &Range<u16>, bredde: u16, o:
 
 /// Prosjektet på en rad for seg. Tegnet til hver Claude i `merker` står til
 /// høyre, som når prosjektet er brettet sammen.
-pub fn prosjektrad(u: Utseende, navn: &str, merker: &[Merke], bredde: u16, brettet: bool, valgt: bool) -> Linje {
+pub fn prosjektrad(navn: &str, merker: &[Merke], bredde: u16, brettet: bool, valgt: bool) -> Linje {
     let slutt = bredde.saturating_sub(2);
     let start = slutt.saturating_sub(merker.len() as u16 * 3);
     let pil = if brettet { "▸" } else { "▾" };
-    let venstre = u.topp == Topp::Venstre;
-    let pil_x = 1 + venstre as u16;
-    let navn_x = ETTER_PIL + venstre as u16;
+    let pil_x = 2;
+    let navn_x = ETTER_PIL + 1;
     let plass = start.saturating_sub(navn_x + 1) as usize;
     let navn = kutt(grupper::navn(navn), plass);
     let etter_navn = navn_x + self::bredde(&navn) + 1;
     let til = if merker.is_empty() { bredde } else { start };
-    let foran = if venstre && !valgt { bit(0, "─", SVAK) } else { peker(valgt) };
+    let foran = if valgt { peker(true) } else { bit(0, "─", SVAK) };
     let mut l = vec![foran, bit(pil_x, pil, SVAK), bit(navn_x, navn, STERK)];
-    if u.topp != Topp::Rad {
-        l.push(bit(etter_navn, "─".repeat(til.saturating_sub(etter_navn) as usize), SVAK));
-    }
+    l.push(bit(etter_navn, "─".repeat(til.saturating_sub(etter_navn) as usize), SVAK));
     for (n, merke) in merker.iter().enumerate() {
-        l.push(bit(start + 1 + n as u16 * 3, glyf(*merke), glyfstil(u, *merke)));
+        l.push(bit(start + 1 + n as u16 * 3, glyf(*merke), glyfstil(*merke)));
     }
     l
 }
 
 /// Et brettet prosjekt på stripa: tegnet til den som haster mest.
-pub fn brettet_stripe(u: Utseende, merker: &[Merke], valgt: bool) -> Linje {
+pub fn brettet_stripe(merker: &[Merke], valgt: bool) -> Linje {
     let haster = merker.iter().copied().min_by_key(|m| (m.gruppe(), *m != Merke::Spør)).unwrap_or(Merke::Sett);
-    vec![peker(valgt), bit(1, glyf(haster), stripestil(u, haster))]
+    vec![peker(valgt), bit(1, glyf(haster), stripestil(haster))]
 }
 
 /// Linjene i kortet, der `bredde` er lista uten skillelinja. Minimal er én
 /// linje uten boks.
 pub fn kort(u: Utseende, i: &Info, bredde: u16, valgt: bool, stripe: bool) -> Vec<Linje> {
     if stripe {
-        return vec![vec![peker(valgt), bit(1, glyf(i.merke), stripestil(u, i.merke))]];
+        return vec![vec![peker(valgt), bit(1, glyf(i.merke), stripestil(i.merke))]];
     }
     // Teksten går fram til en kolonne før skillelinja.
     let slutt = bredde.saturating_sub(1);
     match u.plass {
-        Plass::Minimal => linje(u, i, slutt, valgt),
+        Plass::Minimal => linje(i, slutt, valgt),
         Plass::Vanlig => boks(u, i, slutt, valgt),
     }
 }
 
 /// Fargen til tilstanden, og den samme i RGB til tonene. De ledige har ingen.
-fn rgb(u: Utseende, merke: Merke) -> Option<(Color, Rgb)> {
+fn rgb(merke: Merke) -> Option<(Color, Rgb)> {
     match merke.gruppe() {
-        Gruppe::Venter if merke == Merke::Ulest && u.ulest == Ulestfarge::Blå => Some((BLÅ, BLÅ_RGB)),
         Gruppe::Venter => Some((ORANSJE, ORANSJE_RGB)),
         Gruppe::Jobber => Some((GRØNN, GRØNN_RGB)),
         Gruppe::Ferdig => None,
     }
 }
 
-fn farge(u: Utseende, merke: Merke) -> Color {
-    rgb(u, merke).map_or(Color::Reset, |(c, _)| c)
+fn farge(merke: Merke) -> Color {
+    rgb(merke).map_or(Color::Reset, |(c, _)| c)
 }
 
-fn tone(u: Utseende, merke: Merke) -> Option<Color> {
-    rgb(u, merke).and_then(|(_, r)| tonet(Some(r), TONE))
+fn tone(merke: Merke) -> Option<Color> {
+    rgb(merke).and_then(|(_, r)| tonet(Some(r), TONE))
 }
 
-pub fn glyfstil(u: Utseende, merke: Merke) -> Style {
-    match (u.farge, merke.gruppe()) {
-        (_, Gruppe::Ferdig) => SVAK,
-        (Farge::Av, _) => VANLIG,
-        (Farge::På, _) => Style::new().fg(farge(u, merke)),
+pub fn glyfstil(merke: Merke) -> Style {
+    match merke.gruppe() {
+        Gruppe::Ferdig => SVAK,
+        _ => Style::new().fg(farge(merke)),
     }
 }
 
 /// På stripa er tegnene alt som står, så de ledige er ikke dempet.
-fn stripestil(u: Utseende, merke: Merke) -> Style {
-    match u.farge {
-        Farge::Av => VANLIG,
-        Farge::På => Style::new().fg(farge(u, merke)),
-    }
-}
-
-fn tidstil(u: Utseende, merke: Merke) -> Style {
-    match (u.farge, merke.gruppe()) {
-        (Farge::Av, _) | (_, Gruppe::Ferdig) => SVAK,
-        (Farge::På, _) => Style::new().fg(farge(u, merke)),
-    }
+fn stripestil(merke: Merke) -> Style {
+    Style::new().fg(farge(merke))
 }
 
 /// Prosjektet i toppkanten. Uten oppgave er prosjektet tittelen, og gruppert
@@ -183,24 +168,24 @@ fn tittel_på(i: &Info) -> &str {
 }
 
 /// Glyfen, tittelen og tiden på én linje.
-fn linje(u: Utseende, i: &Info, slutt: u16, valgt: bool) -> Vec<Linje> {
+fn linje(i: &Info, slutt: u16, valgt: bool) -> Vec<Linje> {
     let tid = i.tid.as_deref();
     let plass = (slutt.saturating_sub(ETTER_GLYF) as usize).saturating_sub(tid.map_or(0, |t| t.chars().count() + 2));
     // På én linje vises mest av tittelen når den kuttes midt i et ord.
-    let mut ut = vec![peker(valgt), bit(INNRYKK, glyf(i.merke), glyfstil(u, i.merke)), bit(ETTER_GLYF, kutt(tittel_på(i), plass), VANLIG)];
+    let mut ut = vec![peker(valgt), bit(INNRYKK, glyf(i.merke), glyfstil(i.merke)), bit(ETTER_GLYF, kutt(tittel_på(i), plass), VANLIG)];
     if let Some(tid) = tid {
-        ut.push(bit(slutt.saturating_sub(bredde(tid)), tid, tidstil(u, i.merke)));
+        ut.push(bit(slutt.saturating_sub(bredde(tid)), tid, glyfstil(i.merke)));
     }
     vec![ut]
 }
 
-/// Med farge har rammen en tone av køens farge, og den valgte får hele
+/// Rammen har en tone av køens farge, og den valgte får hele
 /// fargen.
-fn rammestil(u: Utseende, merke: Merke, valgt: bool) -> Style {
-    match (u.farge, valgt, tone(u, merke)) {
-        (Farge::På, true, Some(_)) => Style::new().fg(farge(u, merke)),
-        (Farge::På, false, Some(tone)) => Style::new().fg(tone),
-        (_, true, _) => VANLIG,
+fn rammestil(merke: Merke, valgt: bool) -> Style {
+    match (valgt, tone(merke)) {
+        (true, Some(_)) => Style::new().fg(farge(merke)),
+        (false, Some(tone)) => Style::new().fg(tone),
+        (true, _) => VANLIG,
         _ => SVAK,
     }
 }
@@ -208,10 +193,10 @@ fn rammestil(u: Utseende, merke: Merke, valgt: bool) -> Style {
 /// Prosjektet og glyfen i toppkanten med tiden til høyre, tittelen inni og
 /// branchen under.
 fn boks(u: Utseende, i: &Info, b: u16, valgt: bool) -> Vec<Linje> {
-    let ramme = rammestil(u, i.merke, valgt);
+    let ramme = rammestil(i.merke, valgt);
     let indre = b.saturating_sub(2 * INNRYKK) as usize;
-    let glyf = (glyf(i.merke).to_string(), glyfstil(u, i.merke));
-    let tid = i.tid.clone().map(|t| (t, tidstil(u, i.merke)));
+    let glyf = (glyf(i.merke).to_string(), glyfstil(i.merke));
+    let tid = i.tid.clone().map(|t| (t, glyfstil(i.merke)));
     // To mellomrom, så glyfen ikke treffer prosjektet når fonten tegner den
     // over to kolonner.
     let venstre: Kanttekst = [glyf].into_iter().chain(prosjekt(i).map(|p| (format!("  {p}"), STERK))).collect();
