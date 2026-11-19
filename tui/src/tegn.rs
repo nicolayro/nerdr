@@ -19,6 +19,7 @@ use crate::markering;
 use crate::palett::{Rgb, bland};
 use crate::grupper::{Overskrift, Rad, glyf};
 use crate::handlinger::Handlinger;
+use crate::popup::Popup;
 use crate::ny::Velger;
 use crate::tekst::varighet;
 use crate::utseende::{self, Akse, Orden, Plass, Utseende};
@@ -212,22 +213,25 @@ pub fn alt(f: &mut Frame, app: &App) {
     }
     tegn_hint(buf, område, app);
 
-    if let Some(rull) = app.hjelp {
-        tegn_hjelp(buf, område, &app.prefiks.navn(), &app.bindinger, rull);
-    } else if let Some(lukke) = &app.lukke {
-        tegn_lukke(buf, område, app, lukke, mus.as_ref());
-    } else if let Some(akse) = app.utseende_meny {
-        tegn_utseende(buf, område, &app.utseende, akse, mus.as_ref());
-    } else if let Some(handlinger) = &app.handlinger {
-        let markør = tegn_handlinger(buf, område, handlinger, mus.as_ref());
-        f.set_cursor_position(markør);
-    } else if let Some(velger) = &app.velger {
-        let markør = tegn_velger(buf, område, velger, mus.as_ref());
-        f.set_cursor_position(markør);
-    } else if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app, &bokser)) {
-        let i = boks.innhold;
-        if x < i.width && y < i.height {
-            f.set_cursor_position((i.x + x, i.y + y));
+    match &app.popup {
+        Some(Popup::Hjelp(rull)) => tegn_hjelp(buf, område, &app.prefiks.navn(), &app.bindinger, *rull),
+        Some(Popup::Lukke(lukke)) => tegn_lukke(buf, område, app, lukke, mus.as_ref()),
+        Some(Popup::Utseende(akse)) => tegn_utseende(buf, område, &app.utseende, *akse, mus.as_ref()),
+        Some(Popup::Handlinger(handlinger)) => {
+            let markør = tegn_handlinger(buf, område, handlinger, mus.as_ref());
+            f.set_cursor_position(markør);
+        }
+        Some(Popup::Velger(velger)) => {
+            let markør = tegn_velger(buf, område, velger, mus.as_ref());
+            f.set_cursor_position(markør);
+        }
+        None => {
+            if let (Fokus::Pane, Some((x, y)), 0, Some(boks)) = (app.fokus, app.markør, app.rull, aktiv_boks(app, &bokser)) {
+                let i = boks.innhold;
+                if x < i.width && y < i.height {
+                    f.set_cursor_position((i.x + x, i.y + y));
+                }
+            }
         }
     }
 }
@@ -973,7 +977,7 @@ fn lukke_tekst(lukke: &crate::Lukke) -> Vec<String> {
 }
 
 fn lukke_boks(app: &App, område: Rect) -> Option<Rect> {
-    let lukke = app.lukke.as_ref()?;
+    let lukke = app.lukke()?;
     midt_på(område, LUKKE_BREDDE, lukke_tekst(lukke).len() as u16 + 4)
 }
 
@@ -1227,9 +1231,9 @@ pub fn følg(valgt: usize, rull: usize, rader: usize, antall: usize) -> usize {
 /// Boksen og treffene til handlingene eller velgeren, den som er åpen, med
 /// hvor langt de er rullet og hvor mange det er.
 fn åpen_meny(app: &App) -> Option<(Rect, usize, usize, usize)> {
-    let (bredde, rull, antall) = match (&app.handlinger, &app.velger) {
-        (Some(h), _) => (HANDLINGER_BREDDE, h.rull, h.treff().len()),
-        (None, Some(v)) => (VELGER_BREDDE, v.rull, v.antall_treff()),
+    let (bredde, rull, antall) = match &app.popup {
+        Some(Popup::Handlinger(h)) => (HANDLINGER_BREDDE, h.felt.rull, h.treff().len()),
+        Some(Popup::Velger(v)) => (VELGER_BREDDE, v.felt.rull, v.antall_treff()),
         _ => return None,
     };
     let (boks, rader) = menyboks(app.skjerm, bredde)?;
@@ -1285,14 +1289,14 @@ fn tegn_handlinger(buf: &mut Buffer, område: Rect, handlinger: &Handlinger, mus
     let treff = handlinger.treff();
     let (x, y) = (boks.x + 2, boks.y + 1);
     let etter = buf.set_stringn(x, y, "› ", indre, Style::new().fg(ORANSJE)).0;
-    let markør = buf.set_stringn(etter, y, kutt(&handlinger.søk, indre.saturating_sub(10)), indre, VANLIG).0;
+    let markør = buf.set_stringn(etter, y, kutt(&handlinger.felt.søk, indre.saturating_sub(10)), indre, VANLIG).0;
     let antall = format!("{}/{}", treff.len(), handlinger.antall());
     buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
 
-    let fra = handlinger.rull;
+    let fra = handlinger.felt.rull;
     for (i, (k, tegn)) in treff.iter().enumerate().skip(fra).take(linjer) {
         let y = boks.y + OVER_TREFFENE + (i - fra) as u16;
-        let valgt = i == handlinger.valgt;
+        let valgt = i == handlinger.felt.valgt;
         menyrad(buf, boks, y, valgt, mus == Some(&Mål::Rad(i)));
         let bredde = k.tast.chars().count();
         buf.set_string(boks.right() - 2 - bredde as u16, y, &k.tast, SVAK);
@@ -1334,10 +1338,10 @@ fn tegn_velger(buf: &mut Buffer, område: Rect, velger: &Velger, mus: Option<&M�
     };
     buf.set_string(boks.right() - 2 - antall.chars().count() as u16, y, antall, SVAK);
 
-    let fra = velger.rull;
+    let fra = velger.felt.rull;
     for (i, t) in treff.iter().enumerate().skip(fra).take(linjer) {
         let y = boks.y + OVER_TREFFENE + (i - fra) as u16;
-        let valgt = i == velger.valgt;
+        let valgt = i == velger.felt.valgt;
         menyrad(buf, boks, y, valgt, mus == Some(&Mål::Rad(i)));
         let stil = if valgt { STERK } else { VANLIG };
         let k = t.kandidat;

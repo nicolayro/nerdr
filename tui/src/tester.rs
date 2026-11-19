@@ -4,6 +4,7 @@
 mod agenter;
 mod lukke;
 mod plass;
+mod popup;
 mod rydd;
 mod svar;
 mod tilkobling;
