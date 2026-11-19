@@ -1,6 +1,7 @@
 //! Tester av `App` uten tmux: `Falsk` tar imot kommandoene og gir registeret
 //! testen har bestemt.
 
+mod agenter;
 mod lukke;
 mod plass;
 mod rydd;

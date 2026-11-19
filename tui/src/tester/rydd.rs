@@ -5,6 +5,7 @@ use nerdr_kjerne::register::Tilstand;
 
 use super::{Prøve, for_lenge_siden};
 use crate::UTEN_CLAUDE_MAKS;
+use crate::agent::Agent;
 
 /// En sesjon fra nerdr som har mistet Claude-en for en stund siden.
 fn uten_claude(andre_paner: Vec<Pane>) -> Prøve {
@@ -44,6 +45,7 @@ fn et_program_igjen_blir_et_kort() {
     let mut p = uten_claude(vec![nvim]);
     lenge_nok(&mut p);
     assert!(!p.sendt().iter().any(|k| k.starts_with("kill-session")));
-    assert_eq!(p.app.rester.get("%2").map(String::as_str), Some("nvim"));
+    assert!(matches!(p.app.agenter.get("%2"), Some(Agent::Rest { programmer, .. }) if programmer == "nvim"));
     assert!(p.app.claude_paner.iter().any(|x| x.id == "%2"));
+    assert!(p.skjerm().iter().any(|l| l.contains("uten Claude: nvim")));
 }

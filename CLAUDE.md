@@ -11,7 +11,8 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
   tidligere samtaler (`samtaler`), repoet og branchen (`git`), farger fra
   `capture-pane -e` (`sgr`), prefiks- og root-tabellen fra `list-keys` (`bindinger`)
   og å starte en Claude (`start`).
-- `tui/` er binæren. `main.rs` har TUI-et og argumentene, `kommandoer.rs`
+- `tui/` er binæren. `main.rs` har TUI-et og argumentene, `agent.rs` hva et kort
+  i agentlista er, `kommandoer.rs`
   `liste`, `samtaler` og `ny`, `ny.rs` mappevelgeren, `handlinger.rs`
   handlingene bak `:`, `bindinger.rs` hva tastene fra tmux-oppsettet gjør i
   nerdr, `utseende.rs` valgene i innstillingene, `tegn.rs`
@@ -24,6 +25,8 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
 - **Claude** er en Claude Code som kjører i en pane (`register::Claude`), og
   **samtale** er den Claude Code kaller `sessionId`.
 - **Tilstand** er det Claude melder selv: spør, jobber eller klar.
+- **Agent** er et kort i agentlista: en Claude, en nerdr nettopp har startet,
+  eller et program som står igjen i en sesjon der Claude-en er borte.
 - **Merke** er det kortet viser, og **gruppe** gir fargen og står i JSON.
   Det som venter på deg, er en Claude som spør, eller som er ferdig med noe
   du ikke har sett. Lista er delt i **aktive** og **ledige** (`grupper::Del`).
