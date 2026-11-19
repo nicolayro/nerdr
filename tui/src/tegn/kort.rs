@@ -30,8 +30,6 @@ pub struct Info {
     pub branch: Option<String>,
     /// Hvor lenge den har ventet eller jobbet.
     pub tid: Option<String>,
-    /// Startet av nerdr og ikke i registeret ennå.
-    pub starter: bool,
     /// Lista er gruppert etter mappe, så repoet står i overskriften.
     pub sted_over: bool,
     /// Under branchen, når Claude-en ikke jobber i mappa til prosjektet.
@@ -160,11 +158,11 @@ fn stripestil(merke: Merke) -> Style {
 /// Prosjektet i toppkanten. Uten oppgave er prosjektet tittelen, og gruppert
 /// etter mappe står det i overskriften.
 fn prosjekt(i: &Info) -> Option<String> {
-    (!i.sted_over && !i.starter && i.oppgave.is_some()).then_some(i.sted.clone())
+    (!i.sted_over && i.merke != Merke::Starter && i.oppgave.is_some()).then_some(i.sted.clone())
 }
 
 fn tittel_på(i: &Info) -> &str {
-    i.oppgave.as_deref().filter(|_| !i.starter).unwrap_or(&i.sted)
+    i.oppgave.as_deref().filter(|_| i.merke != Merke::Starter).unwrap_or(&i.sted)
 }
 
 /// Glyfen, tittelen og tiden på én linje.
@@ -209,7 +207,7 @@ fn boks(u: Utseende, i: &Info, b: u16, valgt: bool) -> Vec<Linje> {
     .into_iter()
     .map(|l| (l, if valgt { STERK } else { VANLIG }))
     .collect();
-    match (i.starter, &i.branch) {
+    match (i.merke == Merke::Starter, &i.branch) {
         (true, _) => inni.push(("starter …".to_string(), SVAK)),
         (false, Some(b)) => inni.push((kutt(b, indre), SVAK)),
         (false, None) => {}
@@ -273,7 +271,6 @@ mod tester {
             sted: "nerdr".into(),
             branch: branch.map(str::to_string),
             tid: Some("3m".into()),
-            starter: false,
             sted_over: false,
             undermappe: None,
         }

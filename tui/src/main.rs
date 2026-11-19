@@ -1,3 +1,4 @@
+mod agent;
 mod bindinger;
 mod bokser;
 mod forklar;
@@ -25,6 +26,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io, thread};
 
+use agent::Agent;
 use bokser::Boks;
 use grupper::{Del, Plass, Rad};
 use handlinger::{Handling, Handlinger};
@@ -34,7 +36,6 @@ use omverden::{Omverden, Tmux};
 use nerdr_kjerne::paner::{self, FELT, Pane};
 use nerdr_kjerne::{git, konfigkatalog, oppsett, start, tmux};
 use nerdr_kjerne::merke::Merke;
-use nerdr_kjerne::register::Claude;
 use nerdr_kjerne::sgr::{self, Linje};
 use markering::{Markering, Punkt};
 use utseende::{Akse, Orden, Utseende};
@@ -174,12 +175,10 @@ struct App {
     tx: Sender<Hendelse>,
     kø: VecDeque<Svar>,
 
-    /// Panene der en Claude kjører eller starter, i lista, og ett program for
-    /// hver sesjon i `rester`.
+    /// Panene som har en agent, i lista.
     claude_paner: Vec<Pane>,
-    /// Et program som kjører i en sesjon nerdr har laget, der Claude-en er
-    /// borte, med navnene på alle programmene i sesjonen.
-    rester: HashMap<String, String>,
+    /// Pane-id → det kortet i lista står for.
+    agenter: HashMap<String, Agent>,
     /// Sesjonene nerdr har laget, og siden når de har vært uten Claude.
     uten_claude: HashMap<String, Instant>,
     /// Alle panene på serveren.
@@ -193,8 +192,6 @@ struct App {
     /// Konfigurasjonskatalogen til Claude Code, med registeret i `sessions`
     /// og samtalene i `projects`.
     konfig: PathBuf,
-    /// Pane-id → Claude-en som kjører i panen.
-    claude: HashMap<String, Claude>,
     /// Lest bare når lista er tom, for det er da du lurer på hvor de er.
     utenfor_tmux: usize,
     /// Pane-id → repoet og branchen mappa til Claude-en står i.
@@ -294,10 +291,6 @@ struct App {
     handlinger: Option<Handlinger>,
     /// Hjelpen er åpen, rullet så mange linjer ned.
     hjelp: Option<u16>,
-    /// Pane-id → mappe og starttid for Claude-er nerdr har startet, til de
-    /// står i registeret. Oppstarten tar flere sekunder, og så lenge vises de
-    /// likevel.
-    nye: HashMap<String, (PathBuf, Instant)>,
     /// Panene tmux har fått fargene til terminalen for. En control mode-klient
     /// har ingen terminal tmux kan spørre, så uten dem svarer tmux svart når en
     /// pane spør om bakgrunnen, og Claude Code med temaet «auto» blir mørk også
@@ -445,7 +438,7 @@ impl App {
             venter_siden: None,
             kø: VecDeque::new(),
             claude_paner: Vec::new(),
-            rester: HashMap::new(),
+            agenter: HashMap::new(),
             uten_claude: HashMap::new(),
             alle: Vec::new(),
             lister: false,
@@ -453,7 +446,6 @@ impl App {
             aktivert: None,
             sist_listet: None,
             konfig: konfigkatalog(),
-            claude: HashMap::new(),
             utenfor_tmux: 0,
             repoer: HashMap::new(),
             sett: HashMap::new(),
@@ -504,7 +496,6 @@ impl App {
             velger: None,
             handlinger: None,
             hjelp: None,
-            nye: HashMap::new(),
             fargelagt: HashSet::new(),
             gå_inn_i: None,
             ferdig: None,
@@ -739,19 +730,13 @@ impl App {
                 self.lister = false;
                 let aktivert = self.aktivert.take();
                 self.sist_listet = Some(Instant::now());
-                self.claude = self.ut.register();
                 self.forlatt = None;
                 let alle: Vec<Pane> = linjer.iter().filter_map(|l| Pane::fra_linje(l)).collect();
-                let tom = !alle.iter().any(|p| self.claude.contains_key(&p.id));
+                self.les_agenter(&alle, ok);
+                let tom = !alle.iter().any(|p| self.agenter.get(&p.id).and_then(Agent::claude).is_some());
                 self.utenfor_tmux = if tom { self.ut.utenfor_tmux() } else { 0 };
                 self.husk_sett(&alle);
                 if ok {
-                    let inne = |id: &String| self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| &v.id == id);
-                    self.nye.retain(|id, (_, startet)| {
-                        !self.claude.contains_key(id)
-                            && alle.iter().any(|p| &p.id == id)
-                            && (startet.elapsed() < STARTER_MAKS || inne(id))
-                    });
                     self.fargelagt.retain(|id| alle.iter().any(|p| &p.id == id));
                     for pane in &alle {
                         if !self.fargelagt.contains(&pane.id) {
@@ -761,20 +746,11 @@ impl App {
                     self.rydd(&alle);
                 }
                 self.repoer = self
-                    .claude
+                    .agenter
                     .iter()
-                    .filter_map(|(id, s)| Some((id, s.mappe.as_deref()?)))
-                    .chain(self.nye.iter().map(|(id, (m, _))| (id, m.as_path())))
-                    .chain(alle.iter().filter(|p| self.rester.contains_key(&p.id)).map(|p| (&p.id, p.mappe.as_path())))
-                    .filter_map(|(id, mappe)| Some((id.clone(), git::les(mappe)?)))
+                    .filter_map(|(id, a)| Some((id.clone(), git::les(a.mappe()?)?)))
                     .collect();
-                self.claude_paner = alle
-                    .iter()
-                    .filter(|p| {
-                        ok && (self.claude.contains_key(&p.id) || self.nye.contains_key(&p.id) || self.rester.contains_key(&p.id))
-                    })
-                    .cloned()
-                    .collect();
+                self.claude_paner = alle.iter().filter(|p| ok && self.agenter.contains_key(&p.id)).cloned().collect();
                 self.størrelser.retain(|vindu, _| alle.iter().any(|p| &p.vindu_id == vindu));
                 self.alle = alle;
                 let valgt = self.valgt.as_ref().and_then(|v| self.claude_paner.iter().find(|p| p.id == v.id));
@@ -865,7 +841,7 @@ impl App {
                 for kommando in start::skriv_inn(&id, &claude_kommando) {
                     self.send(&tmux::linje(&kommando), Svar::Ingenting);
                 }
-                self.nye.insert(id.clone(), (mappe, Instant::now()));
+                self.agenter.insert(id.clone(), Agent::Starter { mappe, startet: Instant::now() });
                 self.gå_inn_i = Some(id);
                 self.list_paner();
                 false
@@ -1494,20 +1470,19 @@ impl App {
     /// spørsmålet. I en sesjon du har laget selv, lukkes bare vinduet, og
     /// deler flere Claude-er vinduet, bare panen.
     fn lukk_sesjon(&mut self, pane: &Pane) {
-        let claude = |id: &String| self.claude.contains_key(id) || self.nye.contains_key(id);
-        let andre = |p: &&Pane| p.id != pane.id && claude(&p.id);
+        let andre = |p: &&Pane| p.id != pane.id && self.er_claude(&p.id);
         let flere_i_vinduet = self.alle.iter().filter(|p| p.vindu_id == pane.vindu_id).any(|p| andre(&p));
         let flere_i_sesjonen = self.alle.iter().filter(|p| p.sesjon_id == pane.sesjon_id).any(|p| andre(&p));
         let tittel = pane.oppgave().map_or_else(|| self.sted(pane), str::to_string);
         let programmer: Vec<&Pane> =
-            self.alle.iter().filter(|p| p.sesjon_id == pane.sesjon_id && !claude(&p.id) && !p.bare_skall()).collect();
+            self.alle.iter().filter(|p| p.sesjon_id == pane.sesjon_id && !self.er_claude(&p.id) && !p.bare_skall()).collect();
         let kjører: Vec<String> = programmer.iter().map(|p| format!("{} i vindu {}", p.kommando, p.vindu)).collect();
         let kjører = if kjører.is_empty() { String::new() } else { format!(", der {} fortsatt kjører", kjører.join(", ")) };
         let (hva, kommando) = match () {
             _ if flere_i_vinduet => {
                 (format!("«{tittel}». De andre Claude-ene i vinduet står igjen."), format!("kill-pane -t {}", sitat(&pane.id)))
             }
-            _ if self.rester.contains_key(&pane.id) => {
+            _ if matches!(self.agenter.get(&pane.id), Some(Agent::Rest { .. })) => {
                 (format!("Sesjonen {}{kjører}.", pane.sesjon), format!("kill-session -t {}", sitat(&pane.sesjon_id)))
             }
             _ if pane.fra_nerdr && !flere_i_sesjonen => {
@@ -1518,17 +1493,40 @@ impl App {
         self.lukke = Some(Lukke { spørsmål: "lukke sesjonen?", hva, kommando });
     }
 
+    /// Registeret vinner, så en Claude som er kommet dit, ikke lenger starter.
+    /// Uten en liste vet vi ikke om panene er borte, så de som starter, og
+    /// restene blir stående.
+    fn les_agenter(&mut self, alle: &[Pane], ok: bool) {
+        let forrige = std::mem::take(&mut self.agenter);
+        self.agenter = self.ut.register().into_iter().map(|(id, c)| (id, Agent::Claude(c))).collect();
+        let inne = |id: &str| self.fokus == Fokus::Pane && self.valgt.as_ref().is_some_and(|v| v.id == id);
+        for (id, agent) in forrige {
+            let behold = match &agent {
+                Agent::Starter { startet, .. } => {
+                    !ok || (alle.iter().any(|p| p.id == id) && (startet.elapsed() < STARTER_MAKS || inne(&id)))
+                }
+                Agent::Rest { .. } => !ok,
+                Agent::Claude(_) => false,
+            };
+            if behold && !self.agenter.contains_key(&id) {
+                self.agenter.insert(id, agent);
+            }
+        }
+    }
+
+    fn er_claude(&self, id: &str) -> bool {
+        self.agenter.get(id).is_some_and(Agent::er_claude)
+    }
+
     /// Sesjonene nerdr har laget, der Claude-en har vært borte en stund. Står
     /// det bare skall igjen, lukkes sesjonen. Ellers blir et av programmene
     /// et kort, så det du har åpnet, ikke blir borte for deg.
     fn rydd(&mut self, alle: &[Pane]) {
-        let claude = |p: &Pane| self.claude.contains_key(&p.id) || self.nye.contains_key(&p.id);
         let mut uten: Vec<String> = alle.iter().filter(|p| p.fra_nerdr).map(|p| p.sesjon_id.clone()).collect();
         uten.sort();
         uten.dedup();
-        uten.retain(|s| !alle.iter().any(|p| &p.sesjon_id == s && claude(p)));
+        uten.retain(|s| !alle.iter().any(|p| &p.sesjon_id == s && self.er_claude(&p.id)));
         self.uten_claude.retain(|s, _| uten.contains(s));
-        self.rester.clear();
         for sesjon in uten {
             let siden = *self.uten_claude.entry(sesjon.clone()).or_insert_with(Instant::now);
             if siden.elapsed() < UTEN_CLAUDE_MAKS {
@@ -1541,7 +1539,8 @@ impl App {
             };
             let mut navn: Vec<&str> = programmer.iter().map(|p| p.kommando.as_str()).collect();
             navn.dedup();
-            self.rester.insert(første.id.clone(), navn.join(", "));
+            let rest = Agent::Rest { mappe: første.mappe.clone(), programmer: navn.join(", ") };
+            self.agenter.insert(første.id.clone(), rest);
         }
     }
 
@@ -1566,7 +1565,7 @@ impl App {
     /// en gang og får mappene mens de leses. De leses på nytt hver gang, så en
     /// mappe du nettopp har laget, er med.
     fn åpne_velger(&mut self, fortsett: bool) {
-        let kjører: HashSet<String> = self.claude.values().filter_map(|s| s.samtale.clone()).collect();
+        let kjører: HashSet<String> = self.agenter.values().filter_map(|a| a.claude()?.samtale.clone()).collect();
         let velger = ny::Velger::ny(fortsett, &self.konfig.join("projects"), &kjører);
         let (røtter, stopp, tx) = (velger.røtter(), velger.stopp(), self.tx.clone());
         let hjem = PathBuf::from(env::var("HOME").unwrap_or_default());
@@ -2094,21 +2093,15 @@ impl App {
     }
 
     fn merke(&self, pane: &Pane) -> Option<Merke> {
-        let Some(claude) = self.claude.get(&pane.id) else {
-            return match () {
-                _ if self.nye.contains_key(&pane.id) => Some(Merke::Starter),
-                _ if self.rester.contains_key(&pane.id) => Some(Merke::Sett),
-                _ => None,
-            };
-        };
-        Some(Merke::fra(claude, self.sett.get(&pane.id).copied().unwrap_or(0)))
+        let agent = self.agenter.get(&pane.id)?;
+        Some(agent.merke(self.sett.get(&pane.id).copied().unwrap_or(0)))
     }
 
     fn plass(&self, pane: &Pane) -> Option<Plass> {
         let merke = self.merke(pane)?;
         let del = Del::fra(merke);
         // Som tiden på kortet, så de ledige ikke flytter seg når du har vært inne i en.
-        let siden = self.claude.get(&pane.id).map(|c| c.endret);
+        let siden = self.agenter.get(&pane.id).and_then(Agent::endret);
         Some(match self.låst.iter().chain(&self.forlatt).find(|(id, _)| *id == pane.id) {
             // Den du er inne i, blir ikke ledig før du er ute og registeret
             // er lest. En ny Claude regnes som sett fra den dukker opp i
@@ -2126,10 +2119,10 @@ impl App {
     /// ingen nerdr har sett før, får tiden nå, også i tmux, så det den blir
     /// ferdig med mens nerdr er lukket, venter på deg neste gang.
     fn husk_sett(&mut self, alle: &[Pane]) {
-        self.sett.retain(|id, _| self.claude.contains_key(id));
+        self.sett.retain(|id, _| self.agenter.get(id).and_then(Agent::claude).is_some());
         let nå = nå_ms();
         for pane in alle {
-            if !self.claude.contains_key(&pane.id) {
+            if self.agenter.get(&pane.id).and_then(Agent::claude).is_none() {
                 continue;
             }
             match (self.sett.get(&pane.id).copied(), pane.sett) {
@@ -2162,10 +2155,8 @@ impl App {
         tekst::sted(pane, self.mappe(pane), self.repoer.get(&pane.id))
     }
 
-    fn mappe<'a>(&'a self, pane: &'a Pane) -> Option<&'a std::path::Path> {
-        let ny = self.nye.get(&pane.id).map(|(mappe, _)| mappe.as_path());
-        let rest = self.rester.contains_key(&pane.id).then_some(pane.mappe.as_path());
-        self.claude.get(&pane.id).and_then(|c| c.mappe.as_deref()).or(ny).or(rest)
+    fn mappe<'a>(&'a self, pane: &Pane) -> Option<&'a std::path::Path> {
+        self.agenter.get(&pane.id)?.mappe()
     }
 
     /// Stien til repoet panen jobber i, så et worktree hører til repoet det

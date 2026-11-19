@@ -12,6 +12,7 @@ use ratatui::layout::{Margin, Rect, Size};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::agent::Agent;
 use crate::bindinger::Bindinger;
 use crate::bokser::{Boks, Rammer};
 use crate::markering;
@@ -493,14 +494,18 @@ fn er_valgt(app: &App, pane: &Pane) -> bool {
 fn kort(app: &App, pane: &Pane, merke: Merke) -> Vec<kort::Linje> {
     let repo = app.repoer.get(&pane.id);
     // En som starter, er ikke i registeret ennå, og har ingen tid.
-    let tid = app.claude.get(&pane.id).map(|c| varighet(crate::nå_ms().saturating_sub(c.endret)));
+    let agent = app.agenter.get(&pane.id);
+    let tid = agent.and_then(Agent::endret).map(|endret| varighet(crate::nå_ms().saturating_sub(endret)));
     let info = kort::Info {
         merke,
-        oppgave: app.rester.get(&pane.id).map(|p| format!("uten Claude: {p}")).or_else(|| pane.oppgave().map(str::to_string)),
+        oppgave: match agent {
+            Some(Agent::Rest { programmer, .. }) => Some(format!("uten Claude: {programmer}")),
+            _ => None,
+        }
+        .or_else(|| pane.oppgave().map(str::to_string)),
         sted: app.sted(pane),
         branch: repo.and_then(|r| r.branch.clone()),
         tid,
-        starter: app.nye.contains_key(&pane.id),
         sted_over: app.utseende.orden == Orden::Mappe,
         undermappe: app.undermappe(pane),
     };
