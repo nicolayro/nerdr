@@ -7,14 +7,15 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::paner::{FELT, Pane};
 use nerdr_kjerne::register::{self, Claude, Tilstand};
+use nerdr_kjerne::samtaler::Samtale;
 use nerdr_kjerne::{git, konfigkatalog, samtaler, start, tmux};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::grupper::{self, Plass, Rad, glyf};
 use crate::ny;
@@ -36,32 +37,7 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
     let rader = grupper::rader(&paner, |p| Some(Plass::fra(merke(p)?, claude.get(&p.id).map(|c| c.endret))));
 
     if som_json {
-        let sesjoner: Vec<_> = rader
-            .iter()
-            .filter_map(|r| match r {
-                Rad::Pane(p, m) => Some((p, m, claude.get(&p.id)?)),
-                _ => None,
-            })
-            .map(|(p, m, c)| {
-                let repo = c.mappe.as_deref().and_then(git::les);
-                json!({
-                    "pane": p.id,
-                    "sesjon": p.sesjon,
-                    "vindu": p.vindu,
-                    "tilstand": c.tilstand.map(tilstand),
-                    "merke": m.navn(),
-                    "gruppe": m.gruppe().navn(),
-                    "endret": c.endret,
-                    "mappe": c.mappe,
-                    "repo": repo.as_ref().map(|r| &r.navn),
-                    "branch": repo.and_then(|r| r.branch),
-                    "oppgave": p.oppgave(),
-                    "samtale": c.samtale,
-                    "sett": p.sett,
-                })
-            })
-            .collect();
-        return skriv(&format!("{}\n", json!({ "versjon": VERSJON, "sesjoner": sesjoner })));
+        return skriv(&format!("{}\n", liste_json(&rader, &claude)));
     }
     let mut ut = String::new();
     if rader.is_empty() {
@@ -89,11 +65,7 @@ pub fn samtaler(som_json: bool) -> io::Result<()> {
     let samtaler = samtaler::siste(&konfigkatalog().join("projects"), ny::SAMTALER, &kjører);
 
     if som_json {
-        let samtaler: Vec<_> = samtaler
-            .iter()
-            .map(|s| json!({ "id": s.id, "mappe": s.mappe, "tittel": s.tittel, "endret": ms(s.endret) }))
-            .collect();
-        return skriv(&format!("{}\n", json!({ "versjon": VERSJON, "samtaler": samtaler })));
+        return skriv(&format!("{}\n", samtaler_json(&samtaler)));
     }
     let mut ut = String::new();
     if samtaler.is_empty() {
@@ -133,7 +105,7 @@ pub fn ny(socket: Option<&str>, mappe: Option<&str>, valg: start::Valg, som_json
 
     let (sesjon, pane) = start::start(socket, &mappe, valg)?;
     skriv(&if som_json {
-        format!("{}\n", json!({ "versjon": VERSJON, "sesjon": sesjon, "pane": pane, "mappe": mappe, "navn": valg.navn }))
+        format!("{}\n", ny_json(&sesjon, &pane, &mappe, valg.navn))
     } else {
         format!("Startet Claude i {} ({pane}, tmux-sesjonen {sesjon}).\n", mappe.display())
     })
@@ -152,6 +124,49 @@ pub fn skriv(tekst: &str) -> io::Result<()> {
     }
 }
 
+/// Det `liste --json` skriver. Feltnavnene er kontrakten med script og agenter,
+/// så de endres ikke, og tester låser dem.
+fn liste_json(rader: &[Rad], claude: &HashMap<String, Claude>) -> Value {
+    let sesjoner: Vec<_> = rader
+        .iter()
+        .filter_map(|r| match r {
+            Rad::Pane(p, m) => Some((p, m, claude.get(&p.id)?)),
+            _ => None,
+        })
+        .map(|(p, m, c)| {
+            let repo = c.mappe.as_deref().and_then(git::les);
+            json!({
+                "pane": p.id,
+                "sesjon": p.sesjon,
+                "vindu": p.vindu,
+                "tilstand": c.tilstand.map(tilstand),
+                "merke": m.navn(),
+                "gruppe": m.gruppe().navn(),
+                "endret": c.endret,
+                "mappe": c.mappe,
+                "repo": repo.as_ref().map(|r| &r.navn),
+                "branch": repo.and_then(|r| r.branch),
+                "oppgave": p.oppgave(),
+                "samtale": c.samtale,
+                "sett": p.sett,
+            })
+        })
+        .collect();
+    json!({ "versjon": VERSJON, "sesjoner": sesjoner })
+}
+
+fn samtaler_json(samtaler: &[Samtale]) -> Value {
+    let samtaler: Vec<_> = samtaler
+        .iter()
+        .map(|s| json!({ "id": s.id, "mappe": s.mappe, "tittel": s.tittel, "endret": ms(s.endret) }))
+        .collect();
+    json!({ "versjon": VERSJON, "samtaler": samtaler })
+}
+
+fn ny_json(sesjon: &str, pane: &str, mappe: &Path, navn: Option<&str>) -> Value {
+    json!({ "versjon": VERSJON, "sesjon": sesjon, "pane": pane, "mappe": mappe, "navn": navn })
+}
+
 fn kjører(claude: &HashMap<String, Claude>) -> HashSet<String> {
     claude.values().filter_map(|c| c.samtale.clone()).collect()
 }
@@ -167,4 +182,105 @@ fn tilstand(t: Tilstand) -> &'static str {
 
 fn ms(tid: SystemTime) -> u64 {
     tid.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
+}
+
+#[cfg(test)]
+mod tester {
+    use std::time::Duration;
+
+    use super::*;
+
+    fn pane(id: &str) -> Pane {
+        // Feltrekkefølgen er `FELT`. Mappa er ikke i et git-repo, så `repo` blir `null`.
+        Pane::fra_linje(&format!("$0\ts\t@0\t0\t{id}\tt\t80\t20\t80\t20\t0\t0\t1\t\t1\tvindu\t1700000000000\tzsh\t\t0\t/nonexistent/nerdr")).unwrap()
+    }
+
+    fn claude() -> Claude {
+        Claude {
+            tilstand: Some(Tilstand::Spør),
+            endret: 1_700_000_000_000,
+            mappe: Some(PathBuf::from("/nonexistent/nerdr")),
+            samtale: Some("00000000-0000-0000-0000-000000000000".to_string()),
+        }
+    }
+
+    fn nøkler(v: &Value) -> Vec<&str> {
+        let mut nøkler: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
+        nøkler.sort();
+        nøkler
+    }
+
+    #[test]
+    fn liste_json_har_kontraktens_felt() {
+        let p = pane("%1");
+        let claude = HashMap::from([("%1".to_string(), claude())]);
+        let rader = [Rad::Pane(&p, Merke::Spør)];
+
+        let v = liste_json(&rader, &claude);
+
+        assert_eq!(nøkler(&v), ["sesjoner", "versjon"]);
+        assert_eq!(v["versjon"], 1);
+        let s = &v["sesjoner"][0];
+        assert_eq!(
+            nøkler(s),
+            [
+                "branch", "endret", "gruppe", "mappe", "merke", "oppgave", "pane", "repo", "samtale", "sesjon", "sett", "tilstand", "vindu",
+            ]
+        );
+        assert_eq!(s["pane"], "%1");
+        assert_eq!(s["tilstand"], "venter");
+        assert_eq!(s["endret"], 1_700_000_000_000u64);
+        assert_eq!(s["sett"], 1_700_000_000_000u64);
+        assert!(s["repo"].is_null());
+        assert!(s["branch"].is_null());
+    }
+
+    #[test]
+    fn liste_json_hopper_over_rader_uten_claude() {
+        let p = pane("%2");
+        let rader = [Rad::Pane(&p, Merke::Spør)];
+
+        let v = liste_json(&rader, &HashMap::new());
+
+        assert_eq!(v["sesjoner"], json!([]));
+    }
+
+    #[test]
+    fn samtaler_json_har_kontraktens_felt() {
+        let s = Samtale {
+            id: "00000000-0000-0000-0000-000000000000".to_string(),
+            mappe: PathBuf::from("/nonexistent/nerdr"),
+            tittel: "Fiks testene".to_string(),
+            endret: UNIX_EPOCH + Duration::from_millis(1_700_000_000_000),
+        };
+
+        let v = samtaler_json(&[s]);
+
+        assert_eq!(nøkler(&v), ["samtaler", "versjon"]);
+        assert_eq!(v["versjon"], 1);
+        let e = &v["samtaler"][0];
+        assert_eq!(nøkler(e), ["endret", "id", "mappe", "tittel"]);
+        assert_eq!(e["endret"], 1_700_000_000_000u64);
+        assert_eq!(e["mappe"], "/nonexistent/nerdr");
+        assert_eq!(e["tittel"], "Fiks testene");
+    }
+
+    #[test]
+    fn ny_json_har_kontraktens_felt() {
+        let v = ny_json("nerdr", "%3", Path::new("/nonexistent/nerdr"), Some("navn"));
+
+        assert_eq!(nøkler(&v), ["mappe", "navn", "pane", "sesjon", "versjon"]);
+        assert_eq!(v["versjon"], 1);
+        assert_eq!(v["sesjon"], "nerdr");
+        assert_eq!(v["pane"], "%3");
+        assert_eq!(v["mappe"], "/nonexistent/nerdr");
+        assert_eq!(v["navn"], "navn");
+    }
+
+    #[test]
+    fn ny_json_navn_kan_være_null() {
+        let v = ny_json("nerdr", "%3", Path::new("/nonexistent/nerdr"), None);
+
+        assert!(v["navn"].is_null());
+    }
 }
