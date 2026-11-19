@@ -166,6 +166,27 @@ enum Knapp {
     Handlinger,
 }
 
+/// Det nerdr vet om den aktive panen. Byttes panen, er alt her gammelt, så
+/// hele structen nullstilles samlet.
+#[derive(Default)]
+struct AktivPane {
+    markør: Option<(u16, u16)>,
+    /// Panen har slått på mus med SGR-koding, slik Claude Code gjør i fullskjerm.
+    mus: bool,
+    /// Panen vil også ha musebevegelse uten knapp (modus 1003).
+    bevegelse: bool,
+    /// Panen viser den alternative skjermen, som `less` og `vim`, og den har
+    /// ingen historikk.
+    alternativ: bool,
+    /// Linjer i historikken til panen, og hvor mange av dem visningen er rullet
+    /// opp. 0 er bunnen, slik panen står.
+    historie: u32,
+    rull: u32,
+    /// Når panen ikke har slått på mus selv, markerer nerdr.
+    markering: Option<Markering>,
+    kopimodus: Option<Kopimodus>,
+}
+
 struct App {
     ut: Box<dyn Omverden>,
     koblet_igjen: Option<Instant>,
@@ -234,19 +255,8 @@ struct App {
     vindu: Vec<Pane>,
     /// Pane-id → innholdet.
     bilder: HashMap<String, Vec<Linje>>,
-    /// Resten gjelder den aktive panen i vinduet, den tastene går til.
-    markør: Option<(u16, u16)>,
-    /// Panen har slått på mus med SGR-koding, slik Claude Code gjør i fullskjerm.
-    pane_mus: bool,
-    /// Panen vil også ha musebevegelse uten knapp (modus 1003).
-    pane_bevegelse: bool,
-    /// Panen viser den alternative skjermen, som `less` og `vim`, og den har
-    /// ingen historikk.
-    alternativ: bool,
-    /// Linjer i historikken til panen, og hvor mange av dem visningen er rullet
-    /// opp. 0 er bunnen, slik panen står.
-    historie: u32,
-    rull: u32,
+    /// Tilstanden til den aktive panen i vinduet, den tastene går til.
+    aktiv_pane: AktivPane,
     utdatert: bool,
     henter: bool,
     sist_hentet: Instant,
@@ -279,9 +289,6 @@ struct App {
     sist_klikket: Option<(Mål, Instant)>,
     /// Det forrige klikket gikk ikke til panen, og det gjør ikke slippet heller.
     svelg_slipp: bool,
-    /// I den aktive panen, når den ikke har slått på mus selv.
-    markering: Option<Markering>,
-    kopimodus: Option<Kopimodus>,
     /// Da markeringen sist ble kopiert, så det kan stå en liten stund.
     kopiert: Option<Instant>,
     /// Det nerdr ikke kunne gjøre, og når det skjedde.
@@ -458,12 +465,7 @@ impl App {
             forrige_vindu: None,
             vindu: Vec::new(),
             bilder: HashMap::new(),
-            markør: None,
-            pane_mus: false,
-            pane_bevegelse: false,
-            alternativ: false,
-            historie: 0,
-            rull: 0,
+            aktiv_pane: AktivPane::default(),
             utdatert: false,
             henter: false,
             sist_hentet: Instant::now(),
@@ -483,8 +485,6 @@ impl App {
             musen: None,
             sist_klikket: None,
             svelg_slipp: false,
-            markering: None,
-            kopimodus: None,
             kopiert: None,
             beskjed: None,
             fargelagt: HashSet::new(),
@@ -788,24 +788,24 @@ impl App {
             Svar::Markør => {
                 self.henter = false;
                 let felt: Vec<&str> = linjer.first().map_or("", |l| l.as_str()).split('\t').collect();
-                self.markør = match felt.as_slice() {
+                self.aktiv_pane.markør = match felt.as_slice() {
                     [x, y, "1", ..] => x.parse().ok().zip(y.parse().ok()),
                     _ => None,
                 };
-                self.pane_mus = felt.get(3) == Some(&"1");
-                self.alternativ = felt.get(4) == Some(&"1");
-                self.pane_bevegelse = felt.get(6) == Some(&"1");
+                self.aktiv_pane.mus = felt.get(3) == Some(&"1");
+                self.aktiv_pane.alternativ = felt.get(4) == Some(&"1");
+                self.aktiv_pane.bevegelse = felt.get(6) == Some(&"1");
                 let historie: u32 = felt.get(5).and_then(|h| h.parse().ok()).unwrap_or(0);
                 // Det du leser, blir stående når ny tekst skyver historikken opp,
                 // og i kopimodus også nederst.
-                let rull = match self.rull {
-                    _ if self.alternativ => 0,
-                    0 if self.kopimodus.is_none() => 0,
-                    rull => rull.saturating_add(historie.saturating_sub(self.historie)).min(historie),
+                let rull = match self.aktiv_pane.rull {
+                    _ if self.aktiv_pane.alternativ => 0,
+                    0 if self.aktiv_pane.kopimodus.is_none() => 0,
+                    rull => rull.saturating_add(historie.saturating_sub(self.aktiv_pane.historie)).min(historie),
                 };
-                self.historie = historie;
-                if rull != self.rull {
-                    self.rull = rull;
+                self.aktiv_pane.historie = historie;
+                if rull != self.aktiv_pane.rull {
+                    self.aktiv_pane.rull = rull;
                     self.utdatert = true;
                 }
                 true
@@ -991,7 +991,7 @@ impl App {
             (KeyCode::Char('&'), _) => format!("kill-window -t {}", sitat(&aktiv.vindu_id)),
             (KeyCode::PageUp, _) => {
                 let side = self.bokser().iter().find(|b| b.pane == aktiv.id).map_or(1, |b| b.innhold.height.max(1));
-                return self.rull_til(self.rull.saturating_add(side as u32));
+                return self.rull_til(self.aktiv_pane.rull.saturating_add(side as u32));
             }
             _ => return,
         };
@@ -1168,14 +1168,7 @@ impl App {
     }
 
     fn nullstill_aktiv(&mut self) {
-        self.markering = None;
-        self.kopimodus = None;
-        self.markør = None;
-        self.pane_mus = false;
-        self.pane_bevegelse = false;
-        self.alternativ = false;
-        self.historie = 0;
-        self.rull = 0;
+        self.aktiv_pane = AktivPane::default();
         self.utdatert = true;
     }
 
@@ -1192,7 +1185,7 @@ impl App {
         for id in ider {
             // Fra -S og ned til bunnen er flere linjer enn panen, og tegningen
             // tar de øverste.
-            let fra = if id == aktiv && self.rull > 0 { format!(" -S -{}", self.rull) } else { String::new() };
+            let fra = if id == aktiv && self.aktiv_pane.rull > 0 { format!(" -S -{}", self.aktiv_pane.rull) } else { String::new() };
             self.send(&format!("capture-pane -p -e -N -t {}{fra}", sitat(&id)), Svar::Bilde(id));
         }
         let id = sitat(&aktiv);
@@ -1282,7 +1275,7 @@ impl App {
             self.etter_prefiks = true;
             return true;
         }
-        if self.fokus == Fokus::Pane && self.kopimodus.is_some() {
+        if self.fokus == Fokus::Pane && self.aktiv_pane.kopimodus.is_some() {
             return self.kopitast(k);
         }
         if self.fokus == Fokus::Pane {
@@ -1295,7 +1288,7 @@ impl App {
                 self.send(&kommando, Svar::Ingenting);
                 self.rull_til(0);
             }
-            return self.markering.take().is_some();
+            return self.aktiv_pane.markering.take().is_some();
         }
         // Bokstaver i lista gjør ingenting utenom h, j, k og l, som pilene, så
         // den som ikke er vant til moduser, ikke trykker på noe uten å vite det.
@@ -1570,19 +1563,19 @@ impl App {
     fn start_kopimodus(&mut self) {
         self.bytt_fokus(Fokus::Pane);
         let (Some(innhold), Some(pane)) = (self.innhold(), self.aktiv().map(|p| p.id.clone())) else { return };
-        self.markering = None;
+        self.aktiv_pane.markering = None;
         self.kopiert = None;
-        self.kopimodus = Some(Kopimodus::ny(pane, &innhold, self.markør));
+        self.aktiv_pane.kopimodus = Some(Kopimodus::ny(pane, &innhold, self.aktiv_pane.markør));
     }
 
     fn innhold(&self) -> Option<Innhold> {
         let pane = self.aktiv()?;
         let bilde = self.bilder.get(&pane.id).map_or(&[][..], Vec::as_slice);
-        Some(Innhold::ny(bilde, self.historie, self.rull, pane.bredde, pane.høyde))
+        Some(Innhold::ny(bilde, self.aktiv_pane.historie, self.aktiv_pane.rull, pane.bredde, pane.høyde))
     }
 
     fn kopitast(&mut self, k: KeyEvent) -> bool {
-        let (Some(innhold), Some(modus)) = (self.innhold(), self.kopimodus.as_mut()) else { return false };
+        let (Some(innhold), Some(modus)) = (self.innhold(), self.aktiv_pane.kopimodus.as_mut()) else { return false };
         match modus.tast(k, &innhold) {
             Utfall::Rull(rull) => self.rull_til(rull),
             Utfall::Kopier(markering) => {
@@ -1602,26 +1595,26 @@ impl App {
         let (id, bredde) = (sitat(&pane.id), pane.bredde);
         let (fra, til) = markering.spenn();
         let fra = fra.max(0);
-        let historie = self.historie as i64;
+        let historie = self.aktiv_pane.historie as i64;
         let kommando = format!("capture-pane -p -N -t {id} -S {} -E {}", fra - historie, til - historie);
         self.send(&kommando, Svar::Kopi { markering, fra, bredde });
     }
 
     /// Som i tmux står panen nederst igjen etterpå.
     fn avslutt_kopimodus(&mut self) {
-        self.kopimodus = None;
+        self.aktiv_pane.kopimodus = None;
         self.rull_til(0);
     }
 
     /// Den du lager i kopimodus, eller den du drar med musen.
     fn vist_markering(&self) -> Option<&Markering> {
-        self.kopimodus.as_ref().and_then(|k| k.markering.as_ref()).or(self.markering.as_ref())
+        self.aktiv_pane.kopimodus.as_ref().and_then(|k| k.markering.as_ref()).or(self.aktiv_pane.markering.as_ref())
     }
 
     fn rull_til(&mut self, rull: u32) {
-        let rull = rull.min(self.historie);
-        if rull != self.rull {
-            self.rull = rull;
+        let rull = rull.min(self.aktiv_pane.historie);
+        if rull != self.aktiv_pane.rull {
+            self.aktiv_pane.rull = rull;
             self.utdatert = true;
         }
     }
@@ -1640,7 +1633,7 @@ impl App {
         // Et nytt klikk fjerner markeringen, også når det starter en ny, og
         // avslutter kopimodus.
         let klikk = matches!(m.kind, MouseEventKind::Down(_));
-        let fjernet = klikk && (self.markering.take().is_some() || self.kopimodus.take().is_some());
+        let fjernet = klikk && (self.aktiv_pane.markering.take().is_some() || self.aktiv_pane.kopimodus.take().is_some());
         self.håndter_mus(m) || flyttet || fjernet
     }
 
@@ -1773,7 +1766,7 @@ impl App {
                 return true;
             }
         }
-        if self.markering.as_ref().is_some_and(|m| m.drar)
+        if self.aktiv_pane.markering.as_ref().is_some_and(|m| m.drar)
             && matches!(m.kind, MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left))
         {
             return self.dra_markering(m);
@@ -1901,8 +1894,8 @@ impl App {
         }
         self.svelg_slipp = false;
         let (id, x, y) = (sitat(&pane.id), m.column - boks.innhold.x, m.row - boks.innhold.y);
-        if !self.pane_mus && m.kind == MouseEventKind::Down(MouseButton::Left) {
-            self.markering = Some(Markering::ny(pane.id, self.punkt(x, y)));
+        if !self.aktiv_pane.mus && m.kind == MouseEventKind::Down(MouseButton::Left) {
+            self.aktiv_pane.markering = Some(Markering::ny(pane.id, self.punkt(x, y)));
             return true;
         }
         let opp = match m.kind {
@@ -1911,18 +1904,18 @@ impl App {
             _ => None,
         };
         match opp {
-            _ if m.kind == MouseEventKind::Moved && !self.pane_bevegelse => {}
-            _ if self.pane_mus => {
+            _ if m.kind == MouseEventKind::Moved && !self.aktiv_pane.bevegelse => {}
+            _ if self.aktiv_pane.mus => {
                 if let Some(args) = taster::mus(&m, x, y) {
                     self.send(&format!("send-keys -t {id} {args}"), Svar::Ingenting);
                 }
             }
-            Some(opp) if self.alternativ => {
+            Some(opp) if self.aktiv_pane.alternativ => {
                 let tast = if opp { "Up" } else { "Down" };
                 self.send(&format!("send-keys -t {id} -N {RULL_STEG} {tast}"), Svar::Ingenting);
             }
-            Some(true) => self.rull_til(self.rull.saturating_add(RULL_STEG)),
-            Some(false) => self.rull_til(self.rull.saturating_sub(RULL_STEG)),
+            Some(true) => self.rull_til(self.aktiv_pane.rull.saturating_add(RULL_STEG)),
+            Some(false) => self.rull_til(self.aktiv_pane.rull.saturating_sub(RULL_STEG)),
             None => {}
         }
         byttet
@@ -1930,27 +1923,27 @@ impl App {
 
     /// Markeringen følger musen også utenfor panen, men stopper ved kanten.
     fn dra_markering(&mut self, m: MouseEvent) -> bool {
-        let pane = self.markering.as_ref().map(|m| m.pane.clone());
+        let pane = self.aktiv_pane.markering.as_ref().map(|m| m.pane.clone());
         let Some(boks) = self.bokser().into_iter().find(|b| Some(&b.pane) == pane.as_ref()) else {
-            self.markering = None;
+            self.aktiv_pane.markering = None;
             return true;
         };
         let i = boks.innhold;
         let x = m.column.clamp(i.x, i.right().saturating_sub(1)) - i.x;
         let y = m.row.clamp(i.y, i.bottom().saturating_sub(1)) - i.y;
         let punkt = self.punkt(x, y);
-        let Some(markering) = &mut self.markering else { return false };
+        let Some(markering) = &mut self.aktiv_pane.markering else { return false };
         markering.dra(punkt);
         if m.kind != MouseEventKind::Up(MouseButton::Left) {
             return true;
         }
         markering.drar = false;
         if markering.tom() {
-            self.markering = None;
+            self.aktiv_pane.markering = None;
             return true;
         }
         let topp = self.punkt(0, 0).0;
-        if let (Some(markering), Some(bilde)) = (&self.markering, self.bilder.get(&boks.pane))
+        if let (Some(markering), Some(bilde)) = (&self.aktiv_pane.markering, self.bilder.get(&boks.pane))
             && self.ut.kopier(&markering.tekst(bilde, topp, i.width))
         {
             self.kopiert = Some(Instant::now());
@@ -1985,7 +1978,7 @@ impl App {
     /// Der `x` og `y` i den aktive panen er, med linja regnet fra toppen av
     /// historikken.
     fn punkt(&self, x: u16, y: u16) -> Punkt {
-        (self.historie as i64 - self.rull as i64 + y as i64, x)
+        (self.aktiv_pane.historie as i64 - self.aktiv_pane.rull as i64 + y as i64, x)
     }
 
     /// Flytter pekeren, ikke det som vises.
@@ -2044,7 +2037,7 @@ impl App {
         self.peker = self.valgt.as_ref().map(|p| p.id.clone());
         self.liste_følger = true;
         if fokus == Fokus::Liste {
-            self.kopimodus = None;
+            self.aktiv_pane.kopimodus = None;
         }
         // Det du har sett, er ledig, så det merkes først når du går ut. Ellers
         // ville den du går inn i, blitt ledig med en gang.

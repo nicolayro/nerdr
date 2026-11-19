@@ -23,12 +23,12 @@ fn markør(p: &mut Prøve, felt: &str) {
 fn markøren_tolkes() {
     let mut p = med_claude();
     markør(&mut p, "4\t2\t1\t1\t0\t10\t1");
-    assert_eq!(p.app.markør, Some((4, 2)));
-    assert!(p.app.pane_mus && p.app.pane_bevegelse && !p.app.alternativ);
-    assert_eq!(p.app.historie, 10);
+    assert_eq!(p.app.aktiv_pane.markør, Some((4, 2)));
+    assert!(p.app.aktiv_pane.mus && p.app.aktiv_pane.bevegelse && !p.app.aktiv_pane.alternativ);
+    assert_eq!(p.app.aktiv_pane.historie, 10);
 
     markør(&mut p, "4\t2\t0\t0\t0\t10\t0");
-    assert_eq!(p.app.markør, None);
+    assert_eq!(p.app.aktiv_pane.markør, None);
 }
 
 #[test]
@@ -37,7 +37,7 @@ fn det_du_leser_blir_stående_når_historikken_vokser() {
     markør(&mut p, "0\t0\t1\t0\t0\t10\t0");
     p.app.rull_til(4);
     markør(&mut p, "0\t0\t1\t0\t0\t15\t0");
-    assert_eq!(p.app.rull, 9);
+    assert_eq!(p.app.aktiv_pane.rull, 9);
 }
 
 #[test]
@@ -45,11 +45,11 @@ fn nederst_blir_nederst_og_alternativ_skjerm_har_ingen_historikk() {
     let mut p = med_claude();
     markør(&mut p, "0\t0\t1\t0\t0\t10\t0");
     markør(&mut p, "0\t0\t1\t0\t0\t15\t0");
-    assert_eq!(p.app.rull, 0);
+    assert_eq!(p.app.aktiv_pane.rull, 0);
 
     p.app.rull_til(3);
     markør(&mut p, "0\t0\t1\t0\t1\t15\t0");
-    assert_eq!(p.app.rull, 0);
+    assert_eq!(p.app.aktiv_pane.rull, 0);
 }
 
 #[test]
