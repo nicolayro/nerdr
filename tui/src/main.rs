@@ -37,7 +37,7 @@ use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::register::Claude;
 use nerdr_kjerne::sgr::{self, Linje};
 use markering::{Markering, Punkt};
-use utseende::{Orden, Utseende};
+use utseende::{Akse, Orden, Utseende};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
     self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
@@ -136,7 +136,7 @@ enum Mål {
     /// Et treff i handlingene eller velgeren.
     Rad(usize),
     /// En verdi i innstillingene, som aksen og indeksen.
-    Verdi(usize, usize),
+    Verdi(Akse, usize),
     /// Id-en til vinduet.
     Fane(String),
     /// `×` på fanen, med id-en til vinduet.
@@ -263,7 +263,7 @@ struct App {
     prefiks: taster::Prefiks,
     utseende: Utseende,
     /// Utseende-menyen er åpen, med aksen som er markert.
-    utseende_meny: Option<usize>,
+    utseende_meny: Option<Akse>,
     /// Prefikset er trykket, og neste tast er en kommando.
     etter_prefiks: bool,
     bindinger: bindinger::Bindinger,
@@ -978,7 +978,7 @@ impl App {
             KeyCode::Char('d') if !ctrl => return self.ferdig = Some(String::new()),
             KeyCode::Char('b') if !ctrl => return self.bytt_stripe(),
             KeyCode::Char('u') if !ctrl => {
-                self.utseende_meny = Some(1);
+                self.utseende_meny = Some(Akse::Plass);
                 return;
             }
             KeyCode::Char('?') => return self.hjelp = Some(0),
@@ -1478,8 +1478,8 @@ impl App {
 
     /// Bredden står i en egen option, sammen med stripa, og overstyrer den
     /// du har dratt til.
-    fn lagre_utseende(&mut self, akse: usize) {
-        if akse == utseende::BREDDE {
+    fn lagre_utseende(&mut self, akse: Akse) {
+        if akse == Akse::Bredde {
             self.liste_bredde = self.utseende.bredde.kolonner();
             self.liste_stripe = false;
             self.lagre_liste();
@@ -1859,8 +1859,8 @@ impl App {
             if m.kind != MouseEventKind::Down(MouseButton::Left) {
                 return false;
             }
-            self.utseende.endre(utseende::ORDEN, 1);
-            self.lagre_utseende(utseende::ORDEN);
+            self.utseende.endre(Akse::Orden, 1);
+            self.lagre_utseende(Akse::Orden);
             return true;
         }
         if m.column < v.x {

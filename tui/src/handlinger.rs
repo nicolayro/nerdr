@@ -5,14 +5,14 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::bindinger::Bindinger;
 use crate::ny;
-use crate::utseende::{NAVN, Utseende};
+use crate::utseende::{Akse, Utseende};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Handling {
     /// Som tasten etter prefikset, med `true` for Ctrl.
     Prefiks(KeyCode, bool),
     /// Aksen og verdien i utseende-menyen.
-    Utseende(usize, usize),
+    Utseende(Akse, usize),
 }
 
 pub struct Oppføring {
@@ -72,11 +72,11 @@ impl Handlinger {
                 }
             })
             .collect();
-        for (akse, navn) in NAVN.iter().enumerate() {
-            for (i, navn) in navn.iter().enumerate() {
+        for akse in Akse::ALLE {
+            for (i, verdi) in akse.verdier().iter().enumerate() {
                 let valgt = utseende.gjelder(akse) && utseende.indeks(akse) == i;
                 alle.push(Oppføring {
-                    navn: (*navn).into(),
+                    navn: verdi.navn.into(),
                     tast: if valgt { "✓".into() } else { String::new() },
                     handling: Handling::Utseende(akse, i),
                 });
@@ -151,12 +151,5 @@ mod tester {
         let linjer = h.alle.iter().find(|k| k.navn == "paner med linjer").unwrap();
         assert_eq!(linjer.tast, "✓");
         assert_eq!(h.alle.iter().find(|k| k.navn == "paner i bokser").unwrap().tast, "");
-    }
-
-    #[test]
-    fn hver_verdi_i_utseendet_har_et_navn() {
-        for (akse, navn) in NAVN.iter().enumerate() {
-            assert_eq!(navn.len(), Utseende::i_menyen(akse).1.len(), "{}", crate::utseende::AKSER[akse]);
-        }
     }
 }
