@@ -26,6 +26,7 @@ use crate::utseende::{self, Akse, Orden, Plass, Utseende};
 use crate::{App, Fokus, Knapp, Mål, hjelp};
 
 mod kort;
+pub mod treff;
 
 /// Bredden på lista, med skillelinja, til du drar i den.
 pub const LISTE: u16 = 36;
@@ -123,7 +124,7 @@ fn under_musen() -> Style {
 const FANERADER: u16 = 2;
 
 /// Raden fanene står på.
-pub fn fanerad(app: &App) -> u16 {
+fn fanerad(app: &App) -> u16 {
     (app.utseende.paner != Rammer::Linjer) as u16
 }
 
@@ -169,7 +170,7 @@ fn listeflate(app: &App) -> Rect {
 }
 
 /// Kolonnen og raden i lista, når `x` og `y` er inni den.
-pub fn i_lista(app: &App, x: u16, y: u16) -> Option<(u16, u16)> {
+fn i_lista(app: &App, x: u16, y: u16) -> Option<(u16, u16)> {
     let f = listeflate(app);
     (f.contains((x, y).into())).then(|| (x - f.x, y - f.y))
 }
@@ -386,7 +387,7 @@ fn sortering(app: &App) -> Option<(Range<u16>, String)> {
     Some((start..slutt, tekst))
 }
 
-pub fn sortering_på(app: &App, x: u16, y: u16) -> bool {
+fn sortering_på(app: &App, x: u16, y: u16) -> bool {
     y == NY_RAD && sortering(app).is_some_and(|(r, _)| r.contains(&x))
 }
 
@@ -656,26 +657,6 @@ pub fn utsnitt(app: &App) -> (Utsnitt, Option<Range<u16>>) {
     (utsnitt, valgt)
 }
 
-/// Panen som står på rad `y` i lista.
-pub fn pane_på(app: &App, y: u16) -> Option<Pane> {
-    let (rader, utsnitt) = liste(app);
-    let y = utsnitt.i_lista(y)?;
-    rader.into_iter().find_map(|p| match p.rad {
-        Rad::Pane(pane, _) if (p.y..p.y + p.høyde).contains(&y) => Some(pane.clone()),
-        _ => None,
-    })
-}
-
-/// Prosjektet med overskriften, eller som er brettet sammen, på rad `y`.
-pub fn prosjekt_på(app: &App, y: u16) -> Option<String> {
-    let (rader, utsnitt) = liste(app);
-    let y = utsnitt.i_lista(y)?;
-    rader.into_iter().find_map(|p| match p.rad {
-        Rad::Overskrift(Overskrift::Mappe(navn)) | Rad::Brettet(navn, _) if p.y == y => Some(navn),
-        _ => None,
-    })
-}
-
 /// Kolonnen der `×` står på kortet under musen: midt der tiden står, som
 /// oftest er tre tegn, som `<1m`.
 fn lukk_x(app: &App) -> Option<u16> {
@@ -695,32 +676,6 @@ fn tegn_lukk(buf: &mut Buffer, app: &App, x: u16, y: u16, pekt: bool) {
     let bredde = luft.len() as u16;
     buf.set_string(x.saturating_sub(bredde / 2), y, luft, Style::new());
     buf.set_string(x, y, "×", stil);
-}
-
-/// Panen til kortet der `×` står på `x` og `y`. Ruta på hver side treffer
-/// også, så den er lettere å treffe.
-pub fn lukk_på(app: &App, x: u16, y: u16) -> Option<Pane> {
-    if lukk_x(app).is_none_or(|l| l.abs_diff(x) > 1) {
-        return None;
-    }
-    let (rader, utsnitt) = liste(app);
-    let y = utsnitt.i_lista(y)?;
-    rader.into_iter().find_map(|p| match p.rad {
-        Rad::Pane(pane, _) if p.y == y => Some(pane.clone()),
-        _ => None,
-    })
-}
-
-/// Opp eller ned når rad `y` er en av pilene som viser at lista ruller.
-pub fn pil_på(app: &App, y: u16) -> Option<bool> {
-    let (_, utsnitt) = liste(app);
-    let vis = utsnitt.rader();
-    match () {
-        _ if !utsnitt.ruller => None,
-        _ if y + 1 == vis.start => Some(true),
-        _ if y == vis.end => Some(false),
-        _ => None,
-    }
 }
 
 /// Et vindu i sesjonen, som fane over panene.
@@ -773,6 +728,12 @@ impl Fane {
 /// Etter navnet på fanen, som i statuslinja til tmux.
 const ZOOM: &str = " Z";
 
+/// Fanene som får plass. De andre tegnes ikke, så de kan heller ikke treffes.
+fn synlige_faner(app: &App) -> Vec<Fane> {
+    let slutt = fanerom_til_fanene(app).end;
+    faner(app).into_iter().take_while(|f| f.til < slutt).collect()
+}
+
 fn faner(app: &App) -> Vec<Fane> {
     let mut x = fanerom(app).start;
     let mut ut = Vec::new();
@@ -794,9 +755,9 @@ fn faner(app: &App) -> Vec<Fane> {
 /// panene, fordi streken går inn i toppkanten på boksene.
 fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
     let v = app.visning;
-    let (rom, rad) = (fanerom_til_fanene(app), fanerad(app));
+    let rad = fanerad(app);
     let boks = app.utseende.paner == Rammer::Bokser;
-    let faner: Vec<Fane> = faner(app).into_iter().take_while(|f| f.til < rom.end).collect();
+    let faner = synlige_faner(app);
     let y = v.y - 1 + boks as u16;
     // Rammen over fanene har samme farge som boksen under.
     let ramme = if boks && buf[(v.x, y)].symbol() == "╭" { buf[(v.x, y)].style() } else { SVAK };
@@ -872,14 +833,14 @@ fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
 }
 
 /// Vinduet til fanen i kolonne `x`, med luften etter den.
-pub fn fane_på(app: &App, x: u16) -> Option<String> {
-    faner(app).into_iter().find(|f| (f.fra..=f.til).contains(&x)).map(|f| f.vindu)
+fn fane_på(app: &App, x: u16) -> Option<String> {
+    synlige_faner(app).into_iter().find(|f| (f.fra..=f.til).contains(&x)).map(|f| f.vindu)
 }
 
 /// Vinduet til fanen med `×` i kolonne `x`. Rutene på hver side treffer
 /// også, så den er lettere å treffe.
-pub fn lukk_fane_på(app: &App, x: u16) -> Option<String> {
-    faner(app).into_iter().find(|f| f.lukk().abs_diff(x) <= 1).map(|f| f.vindu)
+fn lukk_fane_på(app: &App, x: u16) -> Option<String> {
+    synlige_faner(app).into_iter().find(|f| f.lukk().abs_diff(x) <= 1).map(|f| f.vindu)
 }
 
 const LUKK_NERDR: &str = "lukk nerdr";
@@ -890,7 +851,7 @@ fn lukk_nerdr(app: &App) -> Range<u16> {
     slutt.saturating_sub(LUKK_NERDR.len() as u16)..slutt
 }
 
-pub fn lukk_nerdr_på(app: &App, x: u16) -> bool {
+fn lukk_nerdr_på(app: &App, x: u16) -> bool {
     lukk_nerdr(app).contains(&x)
 }
 
@@ -907,7 +868,7 @@ fn ny_fane(app: &App) -> Option<Range<u16>> {
     (fra + 3 <= rom.end).then_some(fra..fra + 3)
 }
 
-pub fn ny_fane_på(app: &App, x: u16) -> bool {
+fn ny_fane_på(app: &App, x: u16) -> bool {
     ny_fane(app).is_some_and(|r| r.contains(&x))
 }
 
@@ -964,7 +925,7 @@ fn knapper(app: &App) -> Vec<(Knapp, Range<u16>, u16)> {
     ut
 }
 
-pub fn knapp_på(app: &App, x: u16, y: u16) -> Option<Knapp> {
+fn knapp_på(app: &App, x: u16, y: u16) -> Option<Knapp> {
     knapper(app).into_iter().find(|(_, r, rad)| *rad == y && r.contains(&x)).map(|(k, ..)| k)
 }
 
@@ -997,11 +958,11 @@ fn svar(app: &App) -> Vec<(bool, Range<u16>, u16)> {
     ut
 }
 
-pub fn svar_på(app: &App, x: u16, y: u16) -> Option<bool> {
+fn svar_på(app: &App, x: u16, y: u16) -> Option<bool> {
     svar(app).into_iter().find(|(_, r, rad)| *rad == y && r.contains(&x)).map(|(lukk, ..)| lukk)
 }
 
-pub fn i_popupen(app: &App, x: u16, y: u16) -> bool {
+fn i_popupen(app: &App, x: u16, y: u16) -> bool {
     lukke_boks(app, app.skjerm).is_some_and(|r| r.contains((x, y).into()))
 }
 
@@ -1160,13 +1121,13 @@ fn valgmeny(område: Rect, u: &Utseende) -> Option<Valgmeny> {
 }
 
 /// Verdien under musen i innstillingene, som aksen og indeksen.
-pub fn verdi_på(app: &App, x: u16, y: u16) -> Option<(Akse, usize)> {
+fn verdi_på(app: &App, x: u16, y: u16) -> Option<(Akse, usize)> {
     let meny = valgmeny(app.skjerm, &app.utseende)?;
     let (akse, _, kolonner) = meny.rader.into_iter().find(|r| r.1 == y)?;
     kolonner.iter().position(|r| r.contains(&x)).map(|i| (akse, i))
 }
 
-pub fn i_valgmenyen(app: &App, x: u16, y: u16) -> bool {
+fn i_valgmenyen(app: &App, x: u16, y: u16) -> bool {
     valgmeny(app.skjerm, &app.utseende).is_some_and(|m| m.boks.contains((x, y).into()))
 }
 
@@ -1241,7 +1202,7 @@ fn åpen_meny(app: &App) -> Option<(Rect, usize, usize, usize)> {
 }
 
 /// Treffet under musen i handlingene eller velgeren.
-pub fn meny_rad_på(app: &App, x: u16, y: u16) -> Option<usize> {
+fn meny_rad_på(app: &App, x: u16, y: u16) -> Option<usize> {
     let (boks, rader, rull, antall) = åpen_meny(app)?;
     if !(boks.x + 1..boks.right() - 1).contains(&x) {
         return None;
@@ -1250,7 +1211,7 @@ pub fn meny_rad_på(app: &App, x: u16, y: u16) -> Option<usize> {
     (rad < rader && rull + rad < antall).then_some(rull + rad)
 }
 
-pub fn i_menyboks(app: &App, x: u16, y: u16) -> bool {
+fn i_menyboks(app: &App, x: u16, y: u16) -> bool {
     åpen_meny(app).is_some_and(|(boks, ..)| boks.contains((x, y).into()))
 }
 

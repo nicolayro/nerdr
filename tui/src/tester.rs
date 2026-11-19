@@ -2,6 +2,7 @@
 //! testen har bestemt.
 
 mod agenter;
+mod klikk;
 mod lukke;
 mod plass;
 mod popup;
@@ -21,7 +22,7 @@ use nerdr_kjerne::paner::Pane;
 use nerdr_kjerne::register::{Claude, Tilstand};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Size;
 
 use crate::omverden::Omverden;
@@ -189,6 +190,27 @@ impl Prøve {
             n => KeyCode::Char(n.chars().next().expect("en tast")),
         };
         self.app.håndter(Hendelse::Term(Event::Key(KeyEvent::new(kode, mods))));
+    }
+
+    pub fn mus(&mut self, kind: MouseEventKind, x: u16, y: u16) {
+        let m = MouseEvent { kind, column: x, row: y, modifiers: KeyModifiers::NONE };
+        self.app.håndter(Hendelse::Term(Event::Mouse(m)));
+    }
+
+    /// Ned og opp, som terminalen sender det. Tegner først, så oppsettet er
+    /// det en bruker ser.
+    pub fn klikk(&mut self, x: u16, y: u16) {
+        self.skjerm();
+        self.mus(MouseEventKind::Down(MouseButton::Left), x, y);
+        self.mus(MouseEventKind::Up(MouseButton::Left), x, y);
+    }
+
+    /// Ruta midt i `tekst` der den står første gang på skjermen.
+    pub fn finn(&mut self, tekst: &str) -> (u16, u16) {
+        let skjerm = self.skjerm();
+        let (y, linje) = skjerm.iter().enumerate().find(|(_, l)| l.contains(tekst)).expect("teksten står på skjermen");
+        let start = linje[..linje.find(tekst).unwrap()].chars().count();
+        ((start + tekst.chars().count() / 2) as u16, y as u16)
     }
 
     /// Kommandoene sendt siden sist.

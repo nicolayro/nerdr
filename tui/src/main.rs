@@ -144,7 +144,7 @@ enum Mål {
     Fane(String),
     /// `×` på fanen, med id-en til vinduet.
     LukkFane(String),
-    /// En pane i vinduet som tastene ikke går til.
+    /// En pane i vinduet, også den tastene går til.
     Pane(String),
     Knapp(Knapp),
     /// Knappen øverst i lista som bytter sortering.
@@ -153,6 +153,16 @@ enum Mål {
     NyFane,
     /// Streken mellom lista og panen, som kan dras.
     Skille,
+    /// Pilen som viser at lista ruller, `true` for opp.
+    Pil(bool),
+    /// Overskriften til et prosjekt, eller prosjektet brettet sammen.
+    Prosjekt(String),
+    /// Lista der verken knapp eller kort står.
+    Liste,
+    /// Visningen der ingen pane står.
+    Visning,
+    /// Inni en popup, men ikke på noe som kan klikkes.
+    Popup,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -1641,47 +1651,7 @@ impl App {
     /// under en mus som står stille.
     fn under_musen(&self) -> Option<Mål> {
         let (x, y) = self.musen?;
-        match &self.popup {
-            None => {}
-            Some(Popup::Hjelp(_)) => return None,
-            Some(Popup::Utseende(_)) => return tegn::verdi_på(self, x, y).map(|(akse, i)| Mål::Verdi(akse, i)),
-            Some(Popup::Handlinger(_) | Popup::Velger(_)) => return tegn::meny_rad_på(self, x, y).map(Mål::Rad),
-            Some(Popup::Lukke(_)) => return tegn::svar_på(self, x, y).map(Mål::Svar),
-        }
-        let v = self.visning;
-        if x + 1 == v.x {
-            return Some(Mål::Skille);
-        }
-        let (x, y) = if x < v.x { tegn::i_lista(self, x, y)? } else { (x, y) };
-        if x < v.x && let Some(knapp) = tegn::knapp_på(self, x, y) {
-            return Some(Mål::Knapp(knapp));
-        }
-        if x < v.x && tegn::sortering_på(self, x, y) {
-            return Some(Mål::Sortering);
-        }
-        if x < v.x {
-            if let Some(p) = tegn::lukk_på(self, x, y) {
-                return Some(Mål::Lukk(p.id));
-            }
-            return tegn::pane_på(self, y).map(|p| Mål::Kort(p.id));
-        }
-        if y < v.y {
-            if y != tegn::fanerad(self) {
-                return None;
-            }
-            if tegn::lukk_nerdr_på(self, x) {
-                return Some(Mål::Knapp(Knapp::Avslutt));
-            }
-            if let Some(vindu) = tegn::lukk_fane_på(self, x) {
-                return Some(Mål::LukkFane(vindu));
-            }
-            let ny = tegn::ny_fane_på(self, x).then_some(Mål::NyFane);
-            return tegn::fane_på(self, x).map(Mål::Fane).or(ny);
-        }
-        let inni = |r: Rect| (r.left()..r.right()).contains(&x) && (r.top()..r.bottom()).contains(&y);
-        let boks = self.bokser().into_iter().find(|b| inni(b.ramme.unwrap_or(b.innhold)))?;
-        let aktiv = self.aktiv().is_some_and(|p| p.id == boks.pane);
-        (self.fokus == Fokus::Liste || !aktiv).then_some(Mål::Pane(boks.pane))
+        tegn::treff::mål(self, x, y)
     }
 
     fn håndter_mus(&mut self, m: MouseEvent) -> bool {
@@ -1704,171 +1674,167 @@ impl App {
         if m.kind == MouseEventKind::Down(MouseButton::Left) {
             self.svelg_slipp = true;
         }
-        match &self.popup {
-            None => {}
-            Some(Popup::Hjelp(_)) => {
-                match m.kind {
-                    MouseEventKind::ScrollUp => self.rull_hjelp(-(RULL_STEG as i16)),
-                    MouseEventKind::ScrollDown => self.rull_hjelp(RULL_STEG as i16),
-                    _ => return false,
-                }
-                return true;
-            }
-            Some(Popup::Handlinger(_) | Popup::Velger(_)) => {
-                let (x, y) = (m.column, m.row);
-                match m.kind {
-                    MouseEventKind::ScrollUp => self.flytt_i_menyen(-1),
-                    MouseEventKind::ScrollDown => self.flytt_i_menyen(1),
-                    // Et klikk utenfor lukker, som Esc.
-                    MouseEventKind::Down(MouseButton::Left) => match tegn::meny_rad_på(self, x, y) {
-                        Some(i) => {
-                            if let Some(felt) = self.popup.as_mut().and_then(|p| p.felt()) {
-                                felt.valgt = i;
-                            }
-                            self.velg_treff();
-                        }
-                        None if tegn::i_menyboks(self, x, y) => {}
-                        None => self.popup = None,
-                    },
-                    _ => return false,
-                }
-                return true;
-            }
-            Some(Popup::Utseende(_)) => {
-                if m.kind != MouseEventKind::Down(MouseButton::Left) {
-                    return false;
-                }
-                match tegn::verdi_på(self, m.column, m.row) {
-                    Some((akse, i)) => {
-                        self.popup = Some(Popup::Utseende(akse));
-                        self.utseende.sett(akse, i);
-                        self.lagre_utseende(akse);
-                    }
-                    None if tegn::i_valgmenyen(self, m.column, m.row) => {}
-                    None => self.popup = None,
-                }
-                return true;
-            }
-            Some(Popup::Lukke(_)) => {
-                if m.kind != MouseEventKind::Down(MouseButton::Left) {
-                    return false;
-                }
-                // Et klikk utenfor popupen avbryter, som en tast som ikke er y.
-                match tegn::svar_på(self, m.column, m.row) {
-                    Some(true) => {
-                        if let Some(Popup::Lukke(lukke)) = self.popup.take() {
-                            self.send(&lukke.kommando, Svar::Ingenting);
-                        }
-                    }
-                    None if tegn::i_popupen(self, m.column, m.row) => {}
-                    _ => self.popup = None,
-                }
-                return true;
-            }
+        let mål = tegn::treff::mål(self, m.column, m.row);
+        if self.popup.is_some() {
+            return self.mus_i_popupen(m, mål);
         }
         if self.aktiv_pane.markering.as_ref().is_some_and(|m| m.drar)
             && matches!(m.kind, MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left))
         {
             return self.dra_markering(m);
         }
-        let v = self.visning;
-        if m.column + 1 == v.x && m.kind == MouseEventKind::Down(MouseButton::Left) {
-            let dobbelt = self.sist_klikket.take().is_some_and(|(mål, t)| mål == Mål::Skille && t.elapsed() < DOBBELTKLIKK);
-            if dobbelt {
-                self.bytt_stripe();
-            } else {
-                self.sist_klikket = Some((Mål::Skille, Instant::now()));
-                self.drar_skille = true;
+        let Some(mål) = mål else { return false };
+        let venstre = m.kind == MouseEventKind::Down(MouseButton::Left);
+        if self.visning.x > m.column && mål != Mål::Skille {
+            match m.kind {
+                MouseEventKind::ScrollUp => return self.rull_lista(-(RULL_STEG as i32)),
+                MouseEventKind::ScrollDown => return self.rull_lista(RULL_STEG as i32),
+                _ => {}
             }
-            return true;
         }
-        if m.row < v.y && m.column >= v.x {
-            if m.row == tegn::fanerad(self)
-                && m.kind == MouseEventKind::Down(MouseButton::Middle)
-                && let Some(vindu) = tegn::fane_på(self, m.column)
-            {
+        // Målet er funnet før noe endres, så kortene ikke flytter seg under klikket.
+        match mål {
+            Mål::Pane(_) | Mål::Visning => self.mus_i_panen(m),
+            Mål::Fane(vindu) | Mål::LukkFane(vindu) if m.kind == MouseEventKind::Down(MouseButton::Middle) => {
                 self.send(&format!("kill-window -t {}", sitat(&vindu)), Svar::Ingenting);
-                return true;
+                true
             }
-            if m.row != tegn::fanerad(self) || m.kind != MouseEventKind::Down(MouseButton::Left) {
-                return false;
-            }
-            if tegn::lukk_nerdr_på(self, m.column) {
-                self.prefikstast(KeyEvent::new(KeyCode::Char(tegn::tasten_til(Knapp::Avslutt)), KeyModifiers::NONE));
-            } else if let Some(vindu) = tegn::lukk_fane_på(self, m.column) {
-                self.send(&format!("kill-window -t {}", sitat(&vindu)), Svar::Ingenting);
-            } else if let Some(vindu) = tegn::fane_på(self, m.column) {
-                self.vis_vindu(vindu);
-            } else if tegn::ny_fane_på(self, m.column) {
-                self.prefikstast(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
-            }
-            return true;
-        }
-        // Med paner i et vindu står lista inne i en ramme.
-        let m = match tegn::i_lista(self, m.column, m.row) {
-            Some((column, row)) if m.column < v.x => MouseEvent { column, row, ..m },
-            None if m.column < v.x => return false,
-            _ => m,
-        };
-        if m.column < v.x
-            && let Some(knapp) = tegn::knapp_på(self, m.column, m.row)
-        {
-            if m.kind != MouseEventKind::Down(MouseButton::Left) {
-                return false;
-            }
-            self.prefikstast(KeyEvent::new(KeyCode::Char(tegn::tasten_til(knapp)), KeyModifiers::NONE));
-            return true;
-        }
-        if m.column < v.x && tegn::sortering_på(self, m.column, m.row) {
-            if m.kind != MouseEventKind::Down(MouseButton::Left) {
-                return false;
-            }
-            self.utseende.endre(Akse::Orden, 1);
-            self.lagre_utseende(Akse::Orden);
-            return true;
-        }
-        if m.column < v.x {
-            let (utsnitt, _) = tegn::utsnitt(self);
-            let steg = match m.kind {
-                MouseEventKind::ScrollUp => Some(-(RULL_STEG as i32)),
-                MouseEventKind::ScrollDown => Some(RULL_STEG as i32),
-                MouseEventKind::Down(MouseButton::Left) => tegn::pil_på(self, m.row).map(|opp| {
-                    let side = utsnitt.rom.max(1) as i32;
-                    if opp { -side } else { side }
-                }),
-                _ => None,
-            };
-            if let Some(steg) = steg.filter(|_| utsnitt.ruller) {
-                // Tegningen holder rullet innenfor lista.
-                self.liste_rull = (self.liste_rull as i32 + steg).max(0) as u16;
-                self.liste_følger = false;
-                return true;
-            }
-            if m.kind != MouseEventKind::Down(MouseButton::Left) {
-                return false;
-            }
-            if let Some(pane) = tegn::lukk_på(self, m.column, m.row) {
-                self.lukk_sesjon(&pane);
-                return true;
-            }
-            if let Some(prosjekt) = tegn::prosjekt_på(self, m.row) {
-                if !self.brettet.remove(&prosjekt) {
-                    self.brettet.insert(prosjekt);
+            _ if !venstre => false,
+            Mål::Skille => {
+                let dobbelt = self.sist_klikket.take().is_some_and(|(mål, t)| mål == Mål::Skille && t.elapsed() < DOBBELTKLIKK);
+                if dobbelt {
+                    self.bytt_stripe();
+                } else {
+                    self.sist_klikket = Some((Mål::Skille, Instant::now()));
+                    self.drar_skille = true;
                 }
-                return true;
+                true
             }
-            let ute = self.fokus == Fokus::Pane;
-            // Kortet slås opp før låsen tas bort, ellers kan kortene ha flyttet
-            // seg under klikket.
-            let pane = tegn::pane_på(self, m.row);
-            // Via lista, så panen du forlater, merkes som sett før du går inn.
-            self.bytt_fokus(Fokus::Liste);
-            let Some(pane) = pane else { return ute };
-            self.peker = Some(pane.id.clone());
-            self.gå_inn();
-            return true;
+            Mål::Knapp(knapp) => {
+                self.prefikstast(KeyEvent::new(KeyCode::Char(tegn::tasten_til(knapp)), KeyModifiers::NONE));
+                true
+            }
+            Mål::LukkFane(vindu) => {
+                self.send(&format!("kill-window -t {}", sitat(&vindu)), Svar::Ingenting);
+                true
+            }
+            Mål::Fane(vindu) => {
+                self.vis_vindu(vindu);
+                true
+            }
+            Mål::NyFane => {
+                self.prefikstast(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+                true
+            }
+            Mål::Sortering => {
+                self.utseende.endre(Akse::Orden, 1);
+                self.lagre_utseende(Akse::Orden);
+                true
+            }
+            Mål::Pil(opp) => {
+                let side = tegn::utsnitt(self).0.rom.max(1) as i32;
+                self.rull_lista(if opp { -side } else { side })
+            }
+            Mål::Lukk(id) => {
+                if let Some(pane) = self.alle.iter().find(|p| p.id == id).cloned() {
+                    self.lukk_sesjon(&pane);
+                }
+                true
+            }
+            Mål::Prosjekt(navn) => {
+                if !self.brettet.remove(&navn) {
+                    self.brettet.insert(navn);
+                }
+                true
+            }
+            Mål::Kort(id) => {
+                // Via lista, så panen du forlater, merkes som sett før du går inn.
+                self.bytt_fokus(Fokus::Liste);
+                self.peker = Some(id);
+                self.gå_inn();
+                true
+            }
+            Mål::Liste => {
+                let ute = self.fokus == Fokus::Pane;
+                self.bytt_fokus(Fokus::Liste);
+                ute
+            }
+            Mål::Svar(_) | Mål::Rad(_) | Mål::Verdi(..) | Mål::Popup => false,
         }
+    }
 
+    /// Lista ruller bare når kortene ikke får plass.
+    fn rull_lista(&mut self, steg: i32) -> bool {
+        if !tegn::utsnitt(self).0.ruller {
+            return false;
+        }
+        // Tegningen holder rullet innenfor lista.
+        self.liste_rull = (self.liste_rull as i32 + steg).max(0) as u16;
+        self.liste_følger = false;
+        true
+    }
+
+    fn mus_i_popupen(&mut self, m: MouseEvent, mål: Option<Mål>) -> bool {
+        let venstre = m.kind == MouseEventKind::Down(MouseButton::Left);
+        match &self.popup {
+            Some(Popup::Hjelp(_)) => {
+                match m.kind {
+                    MouseEventKind::ScrollUp => self.rull_hjelp(-(RULL_STEG as i16)),
+                    MouseEventKind::ScrollDown => self.rull_hjelp(RULL_STEG as i16),
+                    _ => return false,
+                }
+            }
+            Some(Popup::Handlinger(_) | Popup::Velger(_)) => match m.kind {
+                MouseEventKind::ScrollUp => self.flytt_i_menyen(-1),
+                MouseEventKind::ScrollDown => self.flytt_i_menyen(1),
+                // Et klikk utenfor lukker, som Esc.
+                MouseEventKind::Down(MouseButton::Left) => match mål {
+                    Some(Mål::Rad(i)) => {
+                        if let Some(felt) = self.popup.as_mut().and_then(|p| p.felt()) {
+                            felt.valgt = i;
+                        }
+                        self.velg_treff();
+                    }
+                    Some(_) => {}
+                    None => self.popup = None,
+                },
+                _ => return false,
+            },
+            Some(Popup::Utseende(_)) => {
+                if !venstre {
+                    return false;
+                }
+                match mål {
+                    Some(Mål::Verdi(akse, i)) => {
+                        self.popup = Some(Popup::Utseende(akse));
+                        self.utseende.sett(akse, i);
+                        self.lagre_utseende(akse);
+                    }
+                    Some(_) => {}
+                    None => self.popup = None,
+                }
+            }
+            Some(Popup::Lukke(_)) => {
+                if !venstre {
+                    return false;
+                }
+                // Et klikk utenfor popupen avbryter, som en tast som ikke er y.
+                match mål {
+                    Some(Mål::Svar(true)) => {
+                        if let Some(Popup::Lukke(lukke)) = self.popup.take() {
+                            self.send(&lukke.kommando, Svar::Ingenting);
+                        }
+                    }
+                    Some(Mål::Popup) => {}
+                    _ => self.popup = None,
+                }
+            }
+            None => return false,
+        }
+        true
+    }
+
+    fn mus_i_panen(&mut self, m: MouseEvent) -> bool {
         let byttet = matches!(m.kind, MouseEventKind::Down(_)) && self.fokus != Fokus::Pane;
         if byttet {
             self.bytt_fokus(Fokus::Pane);
