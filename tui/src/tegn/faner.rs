@@ -163,7 +163,7 @@ pub(super) fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
         let pekt = på_kryss || matches!(mus, Some(Mål::Fane(vindu)) if *vindu == f.vindu);
         let (tekst, lapp) = match () {
             _ if f.vist => (STERK, markert()),
-            _ if pekt => (VANLIG, under_musen()),
+            _ if pekt => (VANLIG, musestil()),
             _ => (SVAK, Style::new()),
         };
         buf.set_style(Rect::new(f.fra, rad, f.til - f.fra, 1), lapp);
@@ -186,7 +186,7 @@ pub(super) fn tegn_faner(buf: &mut Buffer, app: &App, mus: Option<&Mål>) {
         buf.set_string(pluss.start, rad, " + ", stil);
     }
     let lukk = lukk_nerdr(app);
-    let stil = if mus == Some(&Mål::Knapp(Knapp::Avslutt)) { under_musen().patch(VANLIG) } else { SVAK };
+    let stil = if mus == Some(&Mål::Knapp(Knapp::Avslutt)) { musestil().patch(VANLIG) } else { SVAK };
     buf.set_string(lukk.start, rad, LUKK_NERDR, stil);
 }
 

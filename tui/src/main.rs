@@ -1,6 +1,6 @@
 mod agent;
 mod app;
-mod bindinger;
+mod tmuxtaster;
 mod bokser;
 mod forklar;
 mod grupper;

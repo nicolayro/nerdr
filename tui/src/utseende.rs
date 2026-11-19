@@ -7,7 +7,7 @@ use crate::bokser::Rammer;
 pub const OPTION: &str = "@nerdr-utseende";
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Plass {
+pub enum Kortdesign {
     Vanlig,
     /// Én linje for hver Claude, uten boks.
     Minimal,
@@ -55,7 +55,7 @@ pub enum Snarveier {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Utseende {
     pub paner: Rammer,
-    pub plass: Plass,
+    pub kortdesign: Kortdesign,
     pub orden: Orden,
     /// Linjer til tittelen i boksene.
     pub tittel: usize,
@@ -69,7 +69,7 @@ pub struct Utseende {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Akse {
     Paner,
-    Plass,
+    Kortdesign,
     Orden,
     Tittel,
     Bredde,
@@ -91,16 +91,16 @@ const fn v(nøkkel: &'static str, navn: &'static str) -> Verdi {
 /// Rekkefølgen i menyen, under overskriften. Et valg som bare gjelder for
 /// valget over, står rett under det.
 pub const MENY: [(&str, &[Akse]); 2] =
-    [("Pane", &[Akse::Paner]), ("Agentliste", &[Akse::Bredde, Akse::Plass, Akse::Tittel, Akse::Orden, Akse::Snarveier])];
+    [("Pane", &[Akse::Paner]), ("Agentliste", &[Akse::Bredde, Akse::Kortdesign, Akse::Tittel, Akse::Orden, Akse::Snarveier])];
 
 impl Akse {
     /// Rekkefølgen i `OPTION`.
-    pub const ALLE: [Akse; 6] = [Akse::Paner, Akse::Plass, Akse::Orden, Akse::Tittel, Akse::Bredde, Akse::Snarveier];
+    pub const ALLE: [Akse; 6] = [Akse::Paner, Akse::Kortdesign, Akse::Orden, Akse::Tittel, Akse::Bredde, Akse::Snarveier];
 
     pub fn nøkkel(self) -> &'static str {
         match self {
             Akse::Paner => "paner",
-            Akse::Plass => "plass",
+            Akse::Kortdesign => "plass",
             Akse::Orden => "orden",
             Akse::Tittel => "tittel",
             Akse::Bredde => "bredde",
@@ -112,7 +112,7 @@ impl Akse {
     pub fn i_menyen(self) -> &'static str {
         match self {
             Akse::Paner => "ramme",
-            Akse::Plass => "kortdesign",
+            Akse::Kortdesign => "kortdesign",
             Akse::Orden => "sortering",
             Akse::Tittel => "oppgave",
             Akse::Bredde => "bredde",
@@ -124,7 +124,7 @@ impl Akse {
     pub fn forklaring(self) -> &'static str {
         match self {
             Akse::Paner => "Bokser rammer inn hver pane, og linjer har streker mellom. Vindu har også ramme rundt agentlista.",
-            Akse::Plass => "Vanlig har en boks for hver sesjon. Minimal har én linje for hver.",
+            Akse::Kortdesign => "Vanlig har en boks for hver sesjon. Minimal har én linje for hver.",
             Akse::Orden => "Prioritert har de aktive øverst. Prosjekt grupperer etter repo. Aktivitet har den som sist endret seg, øverst.",
             Akse::Tittel => "Hvor mange linjer oppgaven får i kortet.",
             Akse::Bredde => "Hvor bred agentlista er. Du kan også dra i streken til høyre for den.",
@@ -136,7 +136,7 @@ impl Akse {
     pub fn verdier(self) -> &'static [Verdi] {
         match self {
             Akse::Paner => &PANER_VERDIER,
-            Akse::Plass => &PLASS_VERDIER,
+            Akse::Kortdesign => &KORTDESIGN_VERDIER,
             Akse::Orden => &ORDEN_VERDIER,
             Akse::Tittel => &TITTEL_VERDIER,
             Akse::Bredde => &BREDDE_VERDIER,
@@ -146,7 +146,7 @@ impl Akse {
 }
 
 const PANER_VERDIER: [Verdi; 3] = [v("bokser", "paner i bokser"), v("linjer", "paner med linjer"), v("vindu", "paner i et vindu")];
-const PLASS_VERDIER: [Verdi; 2] = [v("vanlig", "vanlig liste"), v("minimal", "minimal liste")];
+const KORTDESIGN_VERDIER: [Verdi; 2] = [v("vanlig", "vanlig liste"), v("minimal", "minimal liste")];
 const ORDEN_VERDIER: [Verdi; 3] = [
     Verdi { nøkkel: "nerdr", meny: "prioritert", navn: "sorter prioritert" },
     Verdi { nøkkel: "mappe", meny: "prosjekt", navn: "sorter etter prosjekt" },
@@ -157,7 +157,7 @@ const BREDDE_VERDIER: [Verdi; 3] = [v("smal", "smal agentliste"), v("vanlig", "v
 const SNARVEIER_VERDIER: [Verdi; 2] = [v("av", "uten snarveier nederst"), v("på", "med snarveier nederst")];
 
 const PANER: [Rammer; 3] = [Rammer::Bokser, Rammer::Linjer, Rammer::Vindu];
-const PLASSER: [Plass; 2] = [Plass::Vanlig, Plass::Minimal];
+const KORTDESIGN: [Kortdesign; 2] = [Kortdesign::Vanlig, Kortdesign::Minimal];
 const ORDNER: [Orden; 3] = [Orden::Nerdr, Orden::Mappe, Orden::Aktivitet];
 const BREDDER: [Bredde; 3] = [Bredde::Smal, Bredde::Vanlig, Bredde::Bred];
 const SNARVEIENE: [Snarveier; 2] = [Snarveier::Av, Snarveier::På];
@@ -166,7 +166,7 @@ impl Utseende {
     pub fn ny(paner: Rammer) -> Utseende {
         Utseende {
             paner,
-            plass: Plass::Vanlig,
+            kortdesign: Kortdesign::Vanlig,
             orden: Orden::Nerdr,
             tittel: 1,
             bredde: Bredde::Vanlig,
@@ -190,7 +190,7 @@ impl Utseende {
     pub fn indeks(&self, akse: Akse) -> usize {
         let i = match akse {
             Akse::Paner => PANER.iter().position(|p| *p == self.paner),
-            Akse::Plass => PLASSER.iter().position(|p| *p == self.plass),
+            Akse::Kortdesign => KORTDESIGN.iter().position(|p| *p == self.kortdesign),
             Akse::Orden => ORDNER.iter().position(|o| *o == self.orden),
             Akse::Tittel => Some(self.tittel - 1),
             Akse::Bredde => BREDDER.iter().position(|b| *b == self.bredde),
@@ -202,7 +202,7 @@ impl Utseende {
     pub fn sett(&mut self, akse: Akse, i: usize) {
         match akse {
             Akse::Paner => self.paner = PANER[i],
-            Akse::Plass => self.plass = PLASSER[i],
+            Akse::Kortdesign => self.kortdesign = KORTDESIGN[i],
             Akse::Orden => self.orden = ORDNER[i],
             Akse::Tittel => self.tittel = i + 1,
             Akse::Bredde => self.bredde = BREDDER[i],
@@ -219,8 +219,8 @@ impl Utseende {
     /// Minimal har ingen bokser å velge oppgavelinjer for.
     pub fn gjelder(&self, akse: Akse) -> bool {
         match akse {
-            Akse::Tittel => self.plass != Plass::Minimal,
-            Akse::Paner | Akse::Plass | Akse::Orden | Akse::Bredde | Akse::Snarveier => true,
+            Akse::Tittel => self.kortdesign != Kortdesign::Minimal,
+            Akse::Paner | Akse::Kortdesign | Akse::Orden | Akse::Bredde | Akse::Snarveier => true,
         }
     }
 
@@ -248,7 +248,7 @@ mod tester {
     #[test]
     fn teksten_leses_tilbake_til_det_samme() {
         let mut u = Utseende::ny(Rammer::Bokser);
-        u.endre(Akse::Plass, 1);
+        u.endre(Akse::Kortdesign, 1);
         u.endre(Akse::Orden, -1);
         assert_eq!(u.tekst(), "paner=bokser plass=minimal orden=aktivitet tittel=1 bredde=vanlig snarveier=av");
         let mut lest = Utseende::ny(Rammer::Linjer);
@@ -260,7 +260,7 @@ mod tester {
     fn ukjente_akser_og_verdier_endrer_ingenting() {
         let mut u = Utseende::ny(Rammer::Linjer);
         u.les("lista=original paner=sirkler bokser plass=minimal");
-        assert_eq!((u.paner, u.plass), (Rammer::Linjer, Plass::Minimal));
+        assert_eq!((u.paner, u.kortdesign), (Rammer::Linjer, Kortdesign::Minimal));
     }
 
     #[test]
@@ -269,7 +269,7 @@ mod tester {
         u.les("paner=bokser farge=av plass=minimal orden=aktivitet ledig=midten tittel=2 ulest=blå topp=rad sti=av bredde=bred snarveier=på");
         assert_eq!(
             u,
-            Utseende { paner: Rammer::Bokser, plass: Plass::Minimal, orden: Orden::Aktivitet, tittel: 2, bredde: Bredde::Bred, snarveier: Snarveier::På }
+            Utseende { paner: Rammer::Bokser, kortdesign: Kortdesign::Minimal, orden: Orden::Aktivitet, tittel: 2, bredde: Bredde::Bred, snarveier: Snarveier::På }
         );
     }
 
@@ -287,10 +287,10 @@ mod tester {
     #[test]
     fn menyen_viser_bare_valg_som_gjelder() {
         let mut u = Utseende::ny(Rammer::Linjer);
-        assert_eq!(u.synlige(), [Akse::Paner, Akse::Bredde, Akse::Plass, Akse::Tittel, Akse::Orden, Akse::Snarveier]);
-        u.plass = Plass::Minimal;
-        assert_eq!(u.synlige(), [Akse::Paner, Akse::Bredde, Akse::Plass, Akse::Orden, Akse::Snarveier]);
-        assert_eq!(u.nabo(Akse::Plass, 1), Akse::Orden);
+        assert_eq!(u.synlige(), [Akse::Paner, Akse::Bredde, Akse::Kortdesign, Akse::Tittel, Akse::Orden, Akse::Snarveier]);
+        u.kortdesign = Kortdesign::Minimal;
+        assert_eq!(u.synlige(), [Akse::Paner, Akse::Bredde, Akse::Kortdesign, Akse::Orden, Akse::Snarveier]);
+        assert_eq!(u.nabo(Akse::Kortdesign, 1), Akse::Orden);
         assert_eq!(u.nabo(Akse::Paner, -1), Akse::Paner);
     }
 

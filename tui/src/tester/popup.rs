@@ -22,7 +22,7 @@ fn lukke() -> Popup {
 }
 
 fn alle(p: &Prøve) -> Vec<Popup> {
-    vec![Popup::Hjelp(0), Popup::Utseende(Akse::Plass), lukke(), handlinger(p), velger()]
+    vec![Popup::Hjelp(0), Popup::Utseende(Akse::Kortdesign), lukke(), handlinger(p), velger()]
 }
 
 fn lim_inn(p: &mut Prøve, tekst: &str) {
@@ -44,9 +44,9 @@ fn esc_lukker_hver_popup() {
 #[test]
 fn en_tast_som_ikke_lukker_lar_popupen_stå() {
     let mut p = Prøve::ny();
-    p.app.popup = Some(Popup::Utseende(Akse::Plass));
+    p.app.popup = Some(Popup::Utseende(Akse::Kortdesign));
     p.tast("j");
-    assert!(matches!(p.app.popup, Some(Popup::Utseende(akse)) if akse != Akse::Plass));
+    assert!(matches!(p.app.popup, Some(Popup::Utseende(akse)) if akse != Akse::Kortdesign));
 
     p.app.popup = Some(handlinger(&p));
     p.tast("z");
@@ -115,7 +115,7 @@ fn innliming_går_til_søkefeltet_og_ellers_ikke_til_panen() {
     lim_inn(&mut p, "zoom");
     assert!(matches!(&p.app.popup, Some(Popup::Handlinger(h)) if h.felt.søk == "zoom"));
 
-    for popup in [Popup::Hjelp(0), Popup::Utseende(Akse::Plass), lukke()] {
+    for popup in [Popup::Hjelp(0), Popup::Utseende(Akse::Kortdesign), lukke()] {
         p.app.popup = Some(popup);
         lim_inn(&mut p, "ikke til panen");
     }

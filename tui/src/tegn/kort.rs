@@ -9,7 +9,7 @@ use ratatui::style::{Color, Style};
 use super::{GRØNN, GRØNN_RGB, ORANSJE, ORANSJE_RGB, STERK, SVAK, VANLIG, bryt, kutt, kutt_foran, tonet};
 use crate::palett::Rgb;
 use crate::grupper::{self, Overskrift, Rad, glyf};
-use crate::utseende::{Plass, Utseende};
+use crate::utseende::{Kortdesign, Utseende};
 use std::ops::Range;
 
 /// Uten glyf foran starter teksten etter pekeren og et mellomrom.
@@ -42,7 +42,7 @@ pub struct Bit {
     pub stil: Style,
 }
 
-pub type Linje = Vec<Bit>;
+pub type Kortlinje = Vec<Bit>;
 
 /// Tekstbitene på en side av en kant.
 type Kanttekst = Vec<(String, Style)>;
@@ -87,7 +87,7 @@ pub fn overskrift(buf: &mut Buffer, topp: i32, vis: &Range<u16>, bredde: u16, o:
 
 /// Prosjektet på en rad for seg. Tegnet til hver Claude i `merker` står til
 /// høyre, som når prosjektet er brettet sammen.
-pub fn prosjektrad(navn: &str, merker: &[Merke], bredde: u16, brettet: bool, valgt: bool) -> Linje {
+pub fn prosjektrad(navn: &str, merker: &[Merke], bredde: u16, brettet: bool, valgt: bool) -> Kortlinje {
     let slutt = bredde.saturating_sub(2);
     let start = slutt.saturating_sub(merker.len() as u16 * 3);
     let pil = if brettet { "▸" } else { "▾" };
@@ -107,22 +107,22 @@ pub fn prosjektrad(navn: &str, merker: &[Merke], bredde: u16, brettet: bool, val
 }
 
 /// Et brettet prosjekt på stripa: tegnet til den som haster mest.
-pub fn brettet_stripe(merker: &[Merke], valgt: bool) -> Linje {
+pub fn brettet_stripe(merker: &[Merke], valgt: bool) -> Kortlinje {
     let haster = merker.iter().copied().min_by_key(|m| (m.gruppe(), *m != Merke::Spør)).unwrap_or(Merke::Sett);
     vec![peker(valgt), bit(1, glyf(haster), stripestil(haster))]
 }
 
 /// Linjene i kortet, der `bredde` er lista uten skillelinja. Minimal er én
 /// linje uten boks.
-pub fn kort(u: Utseende, i: &Info, bredde: u16, valgt: bool, stripe: bool) -> Vec<Linje> {
+pub fn kort(u: Utseende, i: &Info, bredde: u16, valgt: bool, stripe: bool) -> Vec<Kortlinje> {
     if stripe {
         return vec![vec![peker(valgt), bit(1, glyf(i.merke), stripestil(i.merke))]];
     }
     // Teksten går fram til en kolonne før skillelinja.
     let slutt = bredde.saturating_sub(1);
-    match u.plass {
-        Plass::Minimal => linje(i, slutt, valgt),
-        Plass::Vanlig => boks(u, i, slutt, valgt),
+    match u.kortdesign {
+        Kortdesign::Minimal => linje(i, slutt, valgt),
+        Kortdesign::Vanlig => boks(u, i, slutt, valgt),
     }
 }
 
@@ -166,7 +166,7 @@ fn tittel_på(i: &Info) -> &str {
 }
 
 /// Glyfen, tittelen og tiden på én linje.
-fn linje(i: &Info, slutt: u16, valgt: bool) -> Vec<Linje> {
+fn linje(i: &Info, slutt: u16, valgt: bool) -> Vec<Kortlinje> {
     let tid = i.tid.as_deref();
     let plass = (slutt.saturating_sub(ETTER_GLYF) as usize).saturating_sub(tid.map_or(0, |t| t.chars().count() + 2));
     // På én linje vises mest av tittelen når den kuttes midt i et ord.
@@ -190,7 +190,7 @@ fn rammestil(merke: Merke, valgt: bool) -> Style {
 
 /// Prosjektet og glyfen i toppkanten med tiden til høyre, tittelen inni og
 /// branchen under.
-fn boks(u: Utseende, i: &Info, b: u16, valgt: bool) -> Vec<Linje> {
+fn boks(u: Utseende, i: &Info, b: u16, valgt: bool) -> Vec<Kortlinje> {
     let ramme = rammestil(i.merke, valgt);
     let indre = b.saturating_sub(2 * INNRYKK) as usize;
     let glyf = (glyf(i.merke).to_string(), glyfstil(i.merke));
@@ -225,12 +225,12 @@ fn boks(u: Utseende, i: &Info, b: u16, valgt: bool) -> Vec<Linje> {
 
 /// Øverste eller nederste kant i en boks `b` bred, med tekst til venstre og
 /// høyre i streken.
-fn kantlinje(b: u16, (v, h): (&str, &str), venstre: Vec<(String, Style)>, høyre: Vec<(String, Style)>, ramme: Style) -> Linje {
+fn kantlinje(b: u16, (v, h): (&str, &str), venstre: Vec<(String, Style)>, høyre: Vec<(String, Style)>, ramme: Style) -> Kortlinje {
     let mut l = vec![bit(0, format!("{v}─"), ramme)];
     let mut x = 2;
     let høyre_bredde = if høyre.is_empty() { 0 } else { høyre.iter().map(|(t, _)| bredde(t)).sum::<u16>() + 2 };
     let slutt = b.saturating_sub(2 + høyre_bredde);
-    let med_luft = |l: &mut Linje, x: &mut u16, biter: Vec<(String, Style)>, plass: Option<u16>| {
+    let med_luft = |l: &mut Kortlinje, x: &mut u16, biter: Vec<(String, Style)>, plass: Option<u16>| {
         l.push(bit(*x, " ", ramme));
         *x += 1;
         for (t, s) in biter {
@@ -277,7 +277,7 @@ mod tester {
     }
 
     /// Bitene lagt over hverandre, slik de tegnes.
-    fn tekst(linje: &Linje) -> String {
+    fn tekst(linje: &Kortlinje) -> String {
         let mut ut: Vec<char> = Vec::new();
         for bit in linje {
             for (i, c) in bit.tekst.chars().enumerate() {
@@ -297,7 +297,7 @@ mod tester {
 
     #[test]
     fn minimal_er_glyfen_tittelen_og_tiden_på_én_linje() {
-        let u = Utseende { plass: Plass::Minimal, ..Utseende::ny(Rammer::Linjer) };
+        let u = Utseende { kortdesign: Kortdesign::Minimal, ..Utseende::ny(Rammer::Linjer) };
         assert_eq!(linjer(u, &info(Some("Fiks testene"), Some("main")), 30), ["  ◐  Fiks testene          3m"]);
     }
 

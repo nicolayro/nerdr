@@ -3,7 +3,7 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::bindinger::Bindinger;
+use crate::tmuxtaster::Bindinger;
 use crate::ny;
 use crate::popup::Søkefelt;
 use crate::utseende::{Akse, Utseende};

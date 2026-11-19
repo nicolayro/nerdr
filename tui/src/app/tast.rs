@@ -4,7 +4,7 @@ use super::App;
 use nerdr_kjerne::kontroll::{dobbelt_sitat, sitat};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::time::Instant;
-use crate::{Fokus, Svar, bindinger, taster, tegn};
+use crate::{Fokus, Svar, tmuxtaster, taster, tegn};
 use crate::kopimodus::{Innhold, Kopimodus, Utfall};
 use crate::markering::Markering;
 use crate::popup::{Popup, Søketast};
@@ -24,15 +24,15 @@ impl App {
     }
 
     /// `foran` står foran tasten i beskjeden, som prefikset.
-    pub(crate) fn kjør_binding(&mut self, hva: bindinger::Hva, foran: &str) {
+    pub(crate) fn kjør_binding(&mut self, hva: tmuxtaster::Hva, foran: &str) {
         match hva {
-            bindinger::Hva::Som(nerdr) => self.prefikstast(nerdr),
-            bindinger::Hva::Send(kommandoer) => {
+            tmuxtaster::Hva::Som(nerdr) => self.prefikstast(nerdr),
+            tmuxtaster::Hva::Send(kommandoer) => {
                 // Vinduet, så tmux velger panen, som i `prefikstast`.
                 let mål = self.vist.clone().or_else(|| self.aktiv().map(|p| p.id.clone()));
                 self.ut.for_seg(mål.as_deref(), &kommandoer);
             }
-            bindinger::Hva::Trenger { tast, hva } => {
+            tmuxtaster::Hva::Trenger { tast, hva } => {
                 let tekst = format!("{foran}{tast} åpner {hva} i tmux, som nerdr ikke kan vise");
                 self.beskjed = Some((tekst, Instant::now()));
             }
@@ -66,7 +66,7 @@ impl App {
             KeyCode::Char('d') if !ctrl => return self.ferdig = Some(String::new()),
             KeyCode::Char('b') if !ctrl => return self.bytt_stripe(),
             KeyCode::Char('u') if !ctrl => {
-                self.popup = Some(Popup::Utseende(Akse::Plass));
+                self.popup = Some(Popup::Utseende(Akse::Kortdesign));
                 return;
             }
             KeyCode::Char('?') => return self.popup = Some(Popup::Hjelp(0)),

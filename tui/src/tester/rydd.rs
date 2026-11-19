@@ -46,6 +46,6 @@ fn et_program_igjen_blir_et_kort() {
     lenge_nok(&mut p);
     assert!(!p.sendt().iter().any(|k| k.starts_with("kill-session")));
     assert!(matches!(p.app.agenter.get("%2"), Some(Agent::Rest { programmer, .. }) if programmer == "nvim"));
-    assert!(p.app.claude_paner.iter().any(|x| x.id == "%2"));
+    assert!(p.app.agent_paner.iter().any(|x| x.id == "%2"));
     assert!(p.skjerm().iter().any(|l| l.contains("uten Claude: nvim")));
 }

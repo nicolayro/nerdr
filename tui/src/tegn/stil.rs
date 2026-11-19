@@ -86,7 +86,7 @@ pub(super) fn skillestil() -> Style {
     tonet(None, SKILLE_ANDEL).map_or(SVAK, |c| Style::new().fg(c))
 }
 
-pub(super) fn under_musen() -> Style {
+pub(super) fn musestil() -> Style {
     tonet(None, UNDER_MUSEN_ANDEL).map_or(Style::new(), |c| Style::new().bg(c))
 }
 

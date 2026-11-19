@@ -17,7 +17,7 @@ use nerdr_kjerne::samtaler::Samtale;
 use nerdr_kjerne::{git, konfigkatalog, samtaler, start, tmux};
 use serde_json::{Value, json};
 
-use crate::grupper::{self, Plass, Rad, glyf};
+use crate::grupper::{self, Plassering, Rad, glyf};
 use crate::ny;
 use crate::tekst::{mappenavn, sted, varighet};
 
@@ -34,7 +34,7 @@ pub fn liste(socket: Option<&str>, som_json: bool) -> io::Result<()> {
     };
     // En Claude ingen nerdr har vært inne i, regnes som sett, som i TUI-et.
     let merke = |p: &Pane| Some(Merke::fra(claude.get(&p.id)?, p.sett.unwrap_or(u64::MAX)));
-    let rader = grupper::rader(&paner, |p| Some(Plass::fra(merke(p)?, claude.get(&p.id).map(|c| c.endret))));
+    let rader = grupper::rader(&paner, |p| Some(Plassering::fra(merke(p)?, claude.get(&p.id).map(|c| c.endret))));
 
     if som_json {
         return skriv(&format!("{}\n", liste_json(&rader, &claude)));
