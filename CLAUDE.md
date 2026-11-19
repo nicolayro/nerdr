@@ -11,13 +11,21 @@ tmux eier terminalene, og nerdr kobler seg til som en klient i control mode.
   tidligere samtaler (`samtaler`), repoet og branchen (`git`), farger fra
   `capture-pane -e` (`sgr`), prefiks- og root-tabellen fra `list-keys` (`bindinger`)
   og å starte en Claude (`start`).
-- `tui/` er binæren. `main.rs` har TUI-et og argumentene, `agent.rs` hva et kort
-  i agentlista er, `kommandoer.rs`
+- `tui/` er binæren. `main.rs` har argumentene, hendelsene og svartypene,
+  `app.rs` `App` med hendelsesløkka, og `app/` resten av metodene på `App`
+  etter hva som utløser dem: `svar.rs` svarene fra tmux, `vindu.rs` vinduet og
+  størrelsen, `tast.rs` tastene og kopimodus, `mus.rs` musen, `liste.rs`
+  rekkefølgen i lista og `handling.rs` handlingene og nye Claude-er.
+  `agent.rs` er hva et kort i agentlista er, `kommandoer.rs`
   `liste`, `samtaler` og `ny`, `ny.rs` mappevelgeren, `handlinger.rs`
   handlingene bak `:`, `bindinger.rs` hva tastene fra tmux-oppsettet gjør i
-  nerdr, `utseende.rs` valgene i innstillingene, `tegn.rs`
-  tegningen, `tegn/kort.rs` kortene og overskriftene i agentlista, `tegn/treff.rs` hva musen står over, og `palett.rs`
+  nerdr, `utseende.rs` valgene i innstillingene, og `palett.rs`
   fargene til terminalen, som markeringen og tonene blandes av.
+- `tegn.rs` er tegningen, delt etter flate: `tegn/liste.rs` agentlista,
+  `tegn/kort.rs` kortene og overskriftene, `tegn/faner.rs` fanene,
+  `tegn/knapper.rs` knappene og hintet, `tegn/pane.rs` panene og rammene,
+  `tegn/popup.rs` popupene og søkemenyene, `tegn/stil.rs` fargene og stilene,
+  og `tegn/treff.rs` hva musen står over (`Mål`).
 
 ## Begreper
 
