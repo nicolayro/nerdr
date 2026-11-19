@@ -3,9 +3,9 @@ use std::time::Duration;
 use nerdr_kjerne::merke::Merke;
 use nerdr_kjerne::register::Tilstand;
 
-use super::{Prøve, for_lenge_siden};
+use super::Prøve;
 use crate::agent::Agent;
-use crate::{STARTER_MAKS, Svar};
+use crate::Svar;
 
 /// `%1` er en Claude nerdr nettopp har startet, og som ikke er i registeret.
 fn starter(startet: std::time::Instant) -> Prøve {
@@ -34,7 +34,11 @@ fn en_som_starter_har_kort_til_registeret_har_den() {
 
 #[test]
 fn en_som_starter_og_aldri_kommer_i_registeret_forsvinner() {
-    let p = starter(for_lenge_siden(STARTER_MAKS + Duration::from_secs(1)));
+    let mut p = Prøve::ny();
+    p.app.starter_maks = Duration::ZERO;
+    p.paner = vec![Prøve::pane("%1", "@1", "$1")];
+    p.app.agenter.insert("%1".into(), Agent::Starter { mappe: "/finnes/ikke".into(), startet: std::time::Instant::now() });
+    p.endret();
     assert_eq!(merke(&p), None);
     assert!(p.app.agent_paner.is_empty());
 }

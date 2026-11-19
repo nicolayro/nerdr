@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
-use crate::{AktivPane, Fokus, Hendelse, Svar, bokser, taster, tegn, tmuxtaster, utseende};
+use crate::{AktivPane, STARTER_MAKS, Fokus, Hendelse, Svar, bokser, taster, tegn, tmuxtaster, utseende};
 use crate::agent::Agent;
 use crate::grupper::Plassering;
 use crate::omverden::Omverden;
@@ -72,6 +72,7 @@ pub(crate) struct App {
     /// Konfigurasjonskatalogen til Claude Code, med registeret i `sessions`
     /// og samtalene i `projects`.
     pub(crate) konfig: PathBuf,
+    pub(crate) starter_maks: Duration,
     /// Lest bare når lista er tom, for det er da du lurer på hvor de er.
     pub(crate) utenfor_tmux: usize,
     /// Pane-id → repoet og branchen mappa til Claude-en står i.
@@ -178,6 +179,7 @@ impl App {
             aktivert: None,
             sist_listet: None,
             konfig: konfigkatalog(),
+            starter_maks: STARTER_MAKS,
             utenfor_tmux: 0,
             repoer: HashMap::new(),
             sett: HashMap::new(),

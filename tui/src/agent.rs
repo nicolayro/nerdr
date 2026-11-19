@@ -16,7 +16,6 @@ pub enum Agent {
 }
 
 impl Agent {
-    /// En rest holder ikke sesjonen åpen.
     pub fn er_claude(&self) -> bool {
         !matches!(self, Agent::Rest { .. })
     }
@@ -28,7 +27,6 @@ impl Agent {
         }
     }
 
-    /// `sett` er da du sist var inne i panen.
     pub fn merke(&self, sett: u64) -> Merke {
         match self {
             Agent::Claude(c) => Merke::fra(c, sett),

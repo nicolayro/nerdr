@@ -94,7 +94,6 @@ pub const MENY: [(&str, &[Akse]); 2] =
     [("Pane", &[Akse::Paner]), ("Agentliste", &[Akse::Bredde, Akse::Kortdesign, Akse::Tittel, Akse::Orden, Akse::Snarveier])];
 
 impl Akse {
-    /// Rekkefølgen i `OPTION`.
     pub const ALLE: [Akse; 6] = [Akse::Paner, Akse::Kortdesign, Akse::Orden, Akse::Tittel, Akse::Bredde, Akse::Snarveier];
 
     pub fn nøkkel(self) -> &'static str {
@@ -108,7 +107,6 @@ impl Akse {
         }
     }
 
-    /// Navnet i menyen.
     pub fn i_menyen(self) -> &'static str {
         match self {
             Akse::Paner => "ramme",

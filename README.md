@@ -69,6 +69,7 @@ inni og branchen under. Et worktree står med navnet til repoet det er laget fra
 | | |
 | --- | --- |
 | **aktive** | `●` spør om noe, `◆` er ferdig og venter på deg, `◐` jobber, `◌` starter |
+| **ledige** | `○` er ferdig, og du har gått ut av den uten å sette den i gang igjen |
 
 Den du er inne i, er aldri ledig. Kortet til den som vises, har en svak
 bakgrunn, og i agentlista har kortet du står på, sterk bakgrunn og fet tekst.
